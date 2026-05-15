@@ -1,0 +1,56 @@
+from __future__ import annotations
+
+import uuid
+from typing import TYPE_CHECKING
+
+from sqlalchemy import ForeignKey, String, Uuid
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.models.base import TimeStampedModel
+
+if TYPE_CHECKING:
+    from app.models.booking import Booking
+    from app.models.client import MasterClient
+    from app.models.invitation import Invitation
+    from app.models.schedule import WeeklyScheduleRule, WorkdayOverride
+    from app.models.service import Service
+    from app.models.user import User
+
+
+class MasterProfile(TimeStampedModel):
+    __tablename__ = "master_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id"), unique=True)
+    display_name: Mapped[str] = mapped_column(String(200))
+    public_slug: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    timezone: Mapped[str] = mapped_column(String(64), default="Europe/Moscow")
+
+    user: Mapped[User] = relationship("User", back_populates="master_profile")
+
+    weekly_rules: Mapped[list[WeeklyScheduleRule]] = relationship(
+        "WeeklyScheduleRule",
+        back_populates="master",
+        cascade="all, delete-orphan",
+    )
+    workday_overrides: Mapped[list[WorkdayOverride]] = relationship(
+        "WorkdayOverride",
+        back_populates="master",
+        cascade="all, delete-orphan",
+    )
+    services: Mapped[list[Service]] = relationship("Service", back_populates="master")
+    master_clients: Mapped[list[MasterClient]] = relationship(
+        "MasterClient",
+        back_populates="master",
+        cascade="all, delete-orphan",
+    )
+    invitations: Mapped[list[Invitation]] = relationship(
+        "Invitation",
+        back_populates="master",
+        cascade="all, delete-orphan",
+    )
+    bookings: Mapped[list[Booking]] = relationship(
+        "Booking",
+        back_populates="master",
+        cascade="all, delete-orphan",
+    )

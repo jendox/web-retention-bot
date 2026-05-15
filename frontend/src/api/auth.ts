@@ -1,0 +1,40 @@
+import { apiFetch } from './client'
+
+export type AuthUser = {
+  id: string
+  email: string
+  email_verified: boolean
+}
+
+export type RegisterAccepted = {
+  id: string
+  email: string
+  email_verified: false
+}
+
+export async function registerApi(body: {
+  email: string
+  password: string
+  master_display_name: string
+}) {
+  return apiFetch<RegisterAccepted>('/api/auth/register', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function verifyEmailApi(body: { token: string }) {
+  return apiFetch<AuthUser>('/api/auth/verify-email', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function loginApi(body: { email: string; password: string }) {
+  return apiFetch<AuthUser>('/api/auth/login', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function meApi() {
+  return apiFetch<AuthUser>('/api/auth/me')
+}
+
+export async function logoutApi() {
+  await apiFetch('/api/auth/logout', { method: 'POST' })
+}

@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: retention-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: retention
+      POSTGRES_PASSWORD: retention
+      POSTGRES_DB: retention
+    ports:
+      - "5432:5432"
+    volumes:
+      - retention_pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: retention-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - retention_redisdata:/data
+
+  smtp4dev:
+    image: rnwood/smtp4dev:v3
+    ports:
+      - "5000:80"   # Веб-интерфейс
+      - "25:25"     # SMTP порт
+      - "143:143"   # IMAP порт (опционально)
+    volumes:
+      - retention_smtp4devdata:/smtp4dev
+    environment:
+      - ServerOptions__HostName=smtp4dev
+      - ServerOptions__Urls=http://*:80
+
+volumes:
+  retention_pgdata:
+  retention_redisdata:
+  retention_smtp4devdata:
