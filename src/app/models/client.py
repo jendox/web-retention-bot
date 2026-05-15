@@ -31,12 +31,12 @@ class Client(TimeStampedModel):
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
 
-    master_links: Mapped[list["MasterClient"]] = relationship(
+    master_links: Mapped[list[MasterClient]] = relationship(
         "MasterClient",
         back_populates="client",
         cascade="all, delete-orphan",
     )
-    bookings: Mapped[list["Booking"]] = relationship("Booking", back_populates="client")
+    bookings: Mapped[list[Booking]] = relationship("Booking", back_populates="client")
 
 
 class MasterClient(Base):
@@ -57,5 +57,5 @@ class MasterClient(Base):
         default=InvitationStatus.LINKED,
     )
 
-    master: Mapped["MasterProfile"] = relationship("MasterProfile", back_populates="master_clients")
-    client: Mapped["Client"] = relationship("Client", back_populates="master_links")
+    master: Mapped[MasterProfile] = relationship("MasterProfile", back_populates="master_clients")
+    client: Mapped[Client] = relationship("Client", back_populates="master_links")

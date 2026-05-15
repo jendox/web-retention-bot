@@ -3,7 +3,9 @@
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.core.currency import Currency
 
 
 class ServiceCreate(BaseModel):
@@ -11,7 +13,7 @@ class ServiceCreate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     duration_min: int = Field(gt=0)
     price: Decimal = Field(ge=Decimal("0"))
-    currency: str = Field(min_length=3, max_length=3)
+    currency: Currency | None = None
     is_active: bool = True
     sort_order: int = 0
 
@@ -21,13 +23,13 @@ class ServiceUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     duration_min: int | None = Field(default=None, gt=0)
     price: Decimal | None = Field(default=None, ge=Decimal("0"))
-    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    currency: Currency | None = None
     is_active: bool | None = None
     sort_order: int | None = None
 
 
 class ServiceOut(BaseModel):
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     master_id: UUID
@@ -35,6 +37,6 @@ class ServiceOut(BaseModel):
     description: str | None
     duration_min: int
     price: Decimal
-    currency: str
+    currency: Currency
     is_active: bool
     sort_order: int

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_master_profile
 from app.core.database import get_db_session
+from app.models.master import MasterProfile
 from app.repositories.schedules import ScheduleRepository
 from app.schemas.master import (
     MasterProfileSchema,
@@ -51,7 +52,7 @@ async def _snapshot_schedule(session: AsyncSession, master_id: UUID) -> MasterSc
 
 
 @router.get("/me", response_model=MasterProfileSchema)
-async def profile_me(master: Annotated[MasterProfileSchema, Depends(require_master_profile)]) -> MasterProfileSchema:
+async def profile_me(master: Annotated[MasterProfile, Depends(require_master_profile)]) -> MasterProfileSchema:
     return MasterProfileSchema.model_validate(master)
 
 
@@ -59,7 +60,7 @@ async def profile_me(master: Annotated[MasterProfileSchema, Depends(require_mast
 async def profile_update(
     payload: MasterProfileUpdate,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    master: Annotated[MasterProfileSchema, Depends(require_master_profile)],
+    master: Annotated[MasterProfile, Depends(require_master_profile)],
 ) -> MasterProfileSchema:
     if payload.display_name:
         master.display_name = payload.display_name
@@ -67,6 +68,8 @@ async def profile_update(
         master.public_slug = payload.public_slug
     if payload.timezone:
         master.timezone = payload.timezone
+    if payload.default_currency is not None:
+        master.default_currency = payload.default_currency
     await session.flush()
     return MasterProfileSchema.model_validate(master)
 
@@ -74,7 +77,7 @@ async def profile_update(
 @router.get("/me/schedule", response_model=MasterScheduleOut)
 async def get_schedule_route(
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    master: Annotated[MasterProfileSchema, Depends(require_master_profile)],
+    master: Annotated[MasterProfile, Depends(require_master_profile)],
 ) -> MasterScheduleOut:
     return await _snapshot_schedule(session, master.id)
 
@@ -83,7 +86,7 @@ async def get_schedule_route(
 async def put_schedule_route(
     payload: MasterScheduleUpsert,
     session: Annotated[AsyncSession, Depends(get_db_session)],
-    master: Annotated[MasterProfileSchema, Depends(require_master_profile)],
+    master: Annotated[MasterProfile, Depends(require_master_profile)],
 ) -> MasterScheduleOut:
     try:
         await replace_master_schedule(

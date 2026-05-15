@@ -14,6 +14,8 @@ const DETAIL_RU: Record<string, string> = {
   'No fields to update.': 'Нечего сохранить: не переданы поля.',
   'Client has bookings and cannot be deleted.': 'Нельзя удалить клиента: есть записи.',
   'Client is linked to an invitation and cannot be deleted.': 'Нельзя удалить клиента: есть привязка по приглашению.',
+  'Service not found.': 'Услуга не найдена.',
+  'Service has bookings and cannot be deleted.': 'Нельзя удалить услугу: есть записи, связанные с ней.',
 }
 
 export class ApiError extends Error {

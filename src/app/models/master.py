@@ -3,9 +3,11 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy import ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.currency import DEFAULT_MASTER_CURRENCY, Currency
 from app.models.base import TimeStampedModel
 
 if TYPE_CHECKING:
@@ -25,6 +27,15 @@ class MasterProfile(TimeStampedModel):
     display_name: Mapped[str] = mapped_column(String(200))
     public_slug: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     timezone: Mapped[str] = mapped_column(String(64), default="Europe/Moscow")
+    default_currency: Mapped[Currency] = mapped_column(
+        SAEnum(
+            Currency,
+            values_callable=lambda obj: [e.value for e in obj],
+            native_enum=False,
+            length=3,
+        ),
+        default=DEFAULT_MASTER_CURRENCY,
+    )
 
     user: Mapped[User] = relationship("User", back_populates="master_profile")
 

@@ -88,7 +88,7 @@ async def create_booking(
         end_at=end_utc,
         duration_min=service.duration_min,
         price_snapshot=service.price,
-        currency_snapshot=service.currency,
+        currency_snapshot=str(service.currency),
         status=BookingStatus.scheduled,
     )
     return await bookings.add(booking)

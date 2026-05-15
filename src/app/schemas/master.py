@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.currency import Currency
 from app.models import MasterProfile as MasterProfileModel
 
 
@@ -13,6 +14,7 @@ class MasterProfileSchema(BaseModel):
     display_name: str
     public_slug: str | None
     timezone: str
+    default_currency: Currency
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -25,6 +27,7 @@ class MasterProfileSchema(BaseModel):
             display_name=master.display_name,
             public_slug=master.public_slug,
             timezone=master.timezone,
+            default_currency=master.default_currency,
         )
 
 
@@ -32,6 +35,7 @@ class MasterProfileUpdate(BaseModel):
     display_name: str | None = Field(default=None, max_length=200)
     public_slug: str | None = Field(default=None, max_length=80)
     timezone: str | None = Field(default=None, max_length=64)
+    default_currency: Currency | None = None
 
 
 class WeeklyScheduleRuleIn(BaseModel):

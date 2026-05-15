@@ -5,6 +5,7 @@ export type MasterProfile = {
   display_name: string
   public_slug: string | null
   timezone: string
+  default_currency: string
 }
 
 export async function masterMeApi() {

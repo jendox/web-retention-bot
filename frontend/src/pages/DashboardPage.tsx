@@ -8,7 +8,7 @@ import { clientsListApi } from '../api/clients'
 import { invitationsCreateApi } from '../api/invitations'
 import { masterMeApi } from '../api/masters'
 import { servicesListApi } from '../api/services'
-import { IconChevronRight } from '../components/layout/navIcons'
+import { IconBriefcase, IconChevronRight, IconClipboard, IconUsers } from '../components/layout/navIcons'
 import { cn } from '../lib/forms'
 import { ALLOWED_PAGE_SIZES } from '../lib/pagination'
 
@@ -56,17 +56,37 @@ type StatProps = {
   sub?: string
   iconBg: string
   iconColor: string
+  iconLinkTo?: string
+  iconLinkLabel?: string
 }
 
-function StatCard({ icon, value, label, sub, iconBg, iconColor }: StatProps) {
+function StatCard({ icon, value, label, sub, iconBg, iconColor, iconLinkTo, iconLinkLabel }: StatProps) {
+  const iconShellClass = cn(
+    'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
+    iconBg,
+    iconColor,
+  )
+
+  const iconShell =
+    iconLinkTo != null && iconLinkTo.length > 0 ? (
+      <Link
+        to={iconLinkTo}
+        className={cn(
+          iconShellClass,
+          'transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 dark:hover:brightness-110',
+        )}
+        aria-label={iconLinkLabel ?? `Перейти: ${label}`}
+      >
+        {icon}
+      </Link>
+    ) : (
+      <div className={iconShellClass}>{icon}</div>
+    )
+
   return (
     <div className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
       <div className="flex items-start gap-3">
-        <div
-          className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', iconBg, iconColor)}
-        >
-          {icon}
-        </div>
+        {iconShell}
         <div className="min-w-0">
           <p className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">{value}</p>
           <p className="text-sm text-stone-600 dark:text-stone-400">{label}</p>
@@ -89,7 +109,11 @@ export function DashboardPage() {
     enabled: me.isSuccess,
   })
   const bookings = useQuery({ queryKey: ['bookings'], queryFn: bookingsListApi, enabled: me.isSuccess })
-  const services = useQuery({ queryKey: ['services'], queryFn: servicesListApi, enabled: me.isSuccess })
+  const servicesActive = useQuery({
+    queryKey: ['services', 'dashboard-summary', 1, CLIENTS_PAGE_SIZE_CAP, 'active'],
+    queryFn: () => servicesListApi({ page: 1, page_size: CLIENTS_PAGE_SIZE_CAP, is_active: true }),
+    enabled: me.isSuccess,
+  })
 
   useEffect(() => {
     if (me.isError) {
@@ -142,13 +166,13 @@ export function DashboardPage() {
 
     return {
       clientCount: clients.data?.total ?? 0,
-      serviceCount: (services.data ?? []).filter((s) => s.is_active).length,
+      serviceCount: servicesActive.data?.total ?? 0,
       todayCount: today.length,
       nextTodayLabel: nextToday ? formatSlotShort(nextToday.start_at) : undefined,
       revenueMonth: revenue,
       upcoming,
     }
-  }, [bookings.data, clients.data, services.data])
+  }, [bookings.data, clients.data, servicesActive.data])
 
   const firstName = useMemo(() => {
     const n = master.data?.display_name?.trim()
@@ -177,30 +201,18 @@ export function DashboardPage() {
           label="Клиентов в базе"
           iconBg="bg-teal-100 dark:bg-teal-950/50"
           iconColor="text-teal-700 dark:text-teal-300"
-          icon={
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197"
-              />
-            </svg>
-          }
+          iconLinkTo="/clients"
+          iconLinkLabel="Открыть раздел «Клиенты»"
+          icon={<IconUsers className="h-5 w-5 shrink-0 overflow-visible" />}
         />
         <StatCard
           value={stats.serviceCount}
           label="Активных услуг"
           iconBg="bg-emerald-100/90 dark:bg-emerald-950/40"
           iconColor="text-emerald-700 dark:text-emerald-300"
-          icon={
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m8 0V8a2 2 0 00-2-2H8a2 2 0 00-2 2v2m12 0H4"
-              />
-            </svg>
-          }
+          iconLinkTo="/services"
+          iconLinkLabel="Открыть раздел «Услуги»"
+          icon={<IconBriefcase className="h-5 w-5 shrink-0 overflow-visible" />}
         />
         <StatCard
           value={stats.todayCount}
@@ -208,15 +220,9 @@ export function DashboardPage() {
           sub={stats.nextTodayLabel ? `Ближайшая · ${stats.nextTodayLabel}` : undefined}
           iconBg="bg-amber-100/90 dark:bg-amber-950/35"
           iconColor="text-amber-800 dark:text-amber-200"
-          icon={
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-          }
+          iconLinkTo="/bookings"
+          iconLinkLabel="Открыть раздел «Записи»"
+          icon={<IconClipboard className="h-5 w-5 shrink-0 overflow-visible" />}
         />
         <StatCard
           value={stats.revenueMonth > 0 ? `${stats.revenueMonth.toLocaleString('ru-RU')}` : '—'}
@@ -225,7 +231,13 @@ export function DashboardPage() {
           iconBg="bg-violet-100/90 dark:bg-violet-950/40"
           iconColor="text-violet-700 dark:text-violet-300"
           icon={
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75">
+            <svg
+              className="h-5 w-5 overflow-visible"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth="1.75"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
