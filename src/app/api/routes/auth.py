@@ -7,7 +7,13 @@ from app.api.deps import SessionStore, get_session_store, require_user
 from app.core.config import Settings, get_settings
 from app.core.verification_token import EmailVerificationTokenError
 from app.models.user import User
-from app.schemas.auth import LoginPayload, RegisterAcceptedOut, RegisterPayload, VerifyEmailPayload
+from app.schemas.auth import (
+    LoginPayload,
+    RegisterAcceptedOut,
+    RegisterClientPayload,
+    RegisterPayload,
+    VerifyEmailPayload,
+)
 from app.schemas.errors import ErrorDetail
 from app.schemas.user import UserSchema
 from app.services.notifications.dispatcher import (
@@ -75,6 +81,38 @@ async def register(
         await register_master_use_case(user, display_name=payload.master_display_name)
         await dispatcher.dispatch_email_verification(user_id=user.id, to_email=user.email)
 
+        return RegisterAcceptedOut(id=user.id, email=user.email)
+    except UserAlreadyExists:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="User already exists.") from None
+
+
+@router.post(
+    path="/register-client",
+    summary="Register a client account (no master profile)",
+    description=(
+        "Creates a user without a master profile for clients accepting an invitation. "
+        "Sends the same email verification flow as master registration."
+    ),
+    response_model=RegisterAcceptedOut,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorDetail,
+            "description": "This email is already registered.",
+        },
+    },
+)
+async def register_client(
+    payload: RegisterClientPayload,
+    register_user_use_case: Annotated[RegisterUserUseCase, Depends(get_register_user_use_case)],
+    dispatcher: Annotated[NotificationDispatcher, Depends(get_notification_dispatcher)],
+) -> RegisterAcceptedOut:
+    try:
+        user = await register_user_use_case.register_client(
+            email=str(payload.email),
+            password=payload.password,
+        )
+        await dispatcher.dispatch_email_verification(user_id=user.id, to_email=user.email)
         return RegisterAcceptedOut(id=user.id, email=user.email)
     except UserAlreadyExists:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="User already exists.") from None

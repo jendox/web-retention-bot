@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.models.booking import Booking
 from app.models.client import Client, InvitationStatus, MasterClient
 from app.models.invitation import Invitation
+from app.models.master import MasterProfile
 from app.repositories.base import BaseRepository
 
 
@@ -100,13 +102,49 @@ class ClientRepository(BaseRepository):
             return None
         return row[0], row[1]
 
+    async def list_masters_for_user_clients(self, user_id: UUID) -> list[tuple[MasterProfile, MasterClient, Client]]:
+        stmt = (
+            select(MasterProfile, MasterClient, Client)
+            .join(MasterClient, MasterClient.master_id == MasterProfile.id)
+            .join(Client, MasterClient.client_id == Client.id)
+            .where(
+                Client.user_id == user_id,
+                MasterClient.invitation_status != InvitationStatus.REVOKED,
+            )
+            .order_by(func.lower(MasterProfile.display_name).asc(), Client.id.asc())
+        )
+        rows = await self.session.execute(stmt)
+        return [(row[0], row[1], row[2]) for row in rows.all()]
+
+    async def client_ids_for_master_user(self, master_id: UUID, user_id: UUID) -> list[UUID]:
+        stmt = select(Client.id).join(MasterClient).where(
+            MasterClient.master_id == master_id,
+            Client.user_id == user_id,
+        )
+        return list((await self.session.scalars(stmt)).all())
+
     async def count_bookings_for_client(self, client_id: UUID) -> int:
         stmt = select(func.count()).select_from(Booking).where(Booking.client_id == client_id)
         count = (await self.session.execute(stmt)).scalar_one()
         return int(count)
 
-    async def has_invitation_linked_to_client(self, client_id: UUID) -> bool:
-        stmt = select(Invitation.id).where(Invitation.linked_client_id == client_id).limit(1)
+    async def has_invitation_blocking_client(self, client_id: UUID) -> bool:
+        now = datetime.now(UTC)
+        stmt = (
+            select(Invitation.id)
+            .where(
+                or_(
+                    Invitation.linked_client_id == client_id,
+                    and_(
+                        Invitation.target_client_id == client_id,
+                        Invitation.accepted_at.is_(None),
+                        Invitation.revoked_at.is_(None),
+                        Invitation.expires_at > now,
+                    ),
+                ),
+            )
+            .limit(1)
+        )
         return (await self.session.execute(stmt)).scalar_one_or_none() is not None
 
     async def delete_client(self, client: Client) -> None:

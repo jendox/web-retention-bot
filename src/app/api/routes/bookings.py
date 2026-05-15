@@ -4,15 +4,33 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import optional_master_profile, require_master_profile
+from app.api.deps import optional_master_profile, require_master_profile, require_user
 from app.core.database import get_db_session
 from app.models.master import MasterProfile
+from app.models.user import User
 from app.repositories.bookings import BookingRepository
-from app.schemas.booking import BookingCreate, BookingOut, BookingReschedule
+from app.schemas.booking import BookingClientListItem, BookingCreate, BookingOut, BookingReschedule
 from app.use_cases.booking_updates import cancel_booking, reschedule_booking
 from app.use_cases.create_booking import create_booking
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
+
+
+@router.get("/me", response_model=list[BookingClientListItem])
+async def list_my_bookings_as_client(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    user: Annotated[User, Depends(require_user)],
+) -> list[BookingClientListItem]:
+    repo = BookingRepository(session)
+    rows = await repo.list_with_details_for_linked_user(user.id)
+    return [
+        BookingClientListItem(
+            **BookingOut.model_validate(b).model_dump(),
+            master_display_name=mname,
+            service_name=sname,
+        )
+        for b, mname, sname in rows
+    ]
 
 
 @router.get("", response_model=list[BookingOut])

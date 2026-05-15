@@ -14,6 +14,12 @@ const DETAIL_RU: Record<string, string> = {
   'No fields to update.': 'Нечего сохранить: не переданы поля.',
   'Client has bookings and cannot be deleted.': 'Нельзя удалить клиента: есть записи.',
   'Client is linked to an invitation and cannot be deleted.': 'Нельзя удалить клиента: есть привязка по приглашению.',
+  'You cannot accept your own invitation.': 'Нельзя принять собственное приглашение.',
+  'Invitation revoked': 'Приглашение отозвано.',
+  'Client already has a login linked.': 'У клиента уже есть вход в приложение.',
+  'An active invitation already exists for this client.': 'Для этого клиента уже есть активное приглашение.',
+  'This client card is already linked to another account.': 'Эта карточка уже привязана к другому аккаунту.',
+  'You are already linked to this master.': 'Вы уже связаны с этим мастером.',
   'Service not found.': 'Услуга не найдена.',
   'Service has bookings and cannot be deleted.': 'Нельзя удалить услугу: есть записи, связанные с ней.',
 }

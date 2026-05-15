@@ -100,6 +100,7 @@ function StatCard({ icon, value, label, sub, iconBg, iconColor, iconLinkTo, icon
 export function DashboardPage() {
   const navigate = useNavigate()
   const [inviteMessage, setInviteMessage] = useState<string>()
+  const [inviteCopyDone, setInviteCopyDone] = useState(false)
 
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
   const master = useQuery({ queryKey: ['master'], queryFn: masterMeApi, enabled: me.isSuccess, retry: false })
@@ -126,8 +127,22 @@ export function DashboardPage() {
     onSuccess: (payload) => {
       const relative = `/invite/${payload.token}`
       setInviteMessage(`${window.location.origin}${relative}`)
+      setInviteCopyDone(false)
     },
   })
+
+  const copyInviteLink = async () => {
+    if (!inviteMessage) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(inviteMessage)
+      setInviteCopyDone(true)
+      window.setTimeout(() => setInviteCopyDone(false), 2000)
+    } catch {
+      setInviteCopyDone(false)
+    }
+  }
 
   const clientNameById = useMemo(() => {
     const m = new Map<string, string>()
@@ -347,7 +362,25 @@ export function DashboardPage() {
       {inviteMessage ? (
         <div className="rounded-xl border border-teal-200/80 bg-teal-50/90 p-4 text-sm text-stone-800 dark:border-teal-900/50 dark:bg-teal-950/30 dark:text-stone-100">
           <p className="font-medium text-teal-900 dark:text-teal-100">Ссылка для клиента</p>
-          <p className="mt-2 break-all font-mono text-xs">{inviteMessage}</p>
+          <p className="mt-2 break-all font-mono text-xs">
+            <button
+              type="button"
+              onClick={() => void copyInviteLink()}
+              className="text-left underline decoration-teal-600/50 decoration-dotted hover:text-teal-900 dark:hover:text-teal-100"
+              title="Скопировать"
+            >
+              {inviteMessage}
+            </button>
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void copyInviteLink()}
+              className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-500 dark:bg-teal-500 dark:text-stone-950 dark:hover:bg-teal-400"
+            >
+              {inviteCopyDone ? 'Скопировано' : 'Копировать'}
+            </button>
+          </div>
         </div>
       ) : null}
     </div>

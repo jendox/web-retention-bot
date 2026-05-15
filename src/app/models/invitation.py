@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.client import Client
     from app.models.master import MasterProfile
 
 
@@ -22,10 +23,18 @@ class Invitation(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     target_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     linked_client_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("clients.id"),
         nullable=True,
     )
+    target_client_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("clients.id"),
+        nullable=True,
+        index=True,
+    )
 
     master: Mapped["MasterProfile"] = relationship("MasterProfile", back_populates="invitations")
+    target_client: Mapped["Client | None"] = relationship("Client", foreign_keys=[target_client_id])

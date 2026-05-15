@@ -63,6 +63,21 @@ class RegisterPayload(BaseModel):
         return value
 
 
+class RegisterClientPayload(BaseModel):
+    """Регистрация клиента без профиля мастера (по инвайт-ссылке)."""
+
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("password", mode="before")
+    @classmethod
+    def _validate_client_password(cls, value: str) -> str:
+        result = validate_password(password=value)
+        if not result.ok:
+            raise ValueError("; ".join(result.errors))
+        return value
+
+
 class RegisterAcceptedOut(BaseModel):
     """Successful registration: user + master row created; session only after verify-email."""
 

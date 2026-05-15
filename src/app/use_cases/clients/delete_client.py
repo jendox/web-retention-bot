@@ -20,7 +20,7 @@ class DeleteClientUseCase:
 
         if await self._client_repo.count_bookings_for_client(client_id):
             raise ClientHasBlockingRelationsError(reason="has_bookings") from None
-        if await self._client_repo.has_invitation_linked_to_client(client_id):
+        if await self._client_repo.has_invitation_blocking_client(client_id):
             raise ClientHasBlockingRelationsError(reason="has_invitation") from None
 
         await self._client_repo.delete_client(client)

@@ -29,5 +29,11 @@ class BookingOut(BaseModel):
     status: str
 
 
+class BookingClientListItem(BookingOut):
+    master_display_name: str
+    service_name: str
+
+
 class BookingReschedule(BaseModel):
     start_at: datetime = Field(description="UTC start instant for the reservation")
+

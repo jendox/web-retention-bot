@@ -5,6 +5,9 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.models.booking import Booking, BookingStatus
+from app.models.client import Client
+from app.models.master import MasterProfile
+from app.models.service import Service
 from app.repositories.base import BaseRepository
 
 
@@ -59,7 +62,15 @@ class BookingRepository(BaseRepository):
         rows = await self.session.execute(stmt)
         return list(rows.scalars())
 
-    async def add(self, booking: Booking) -> Booking:
-        self.session.add(booking)
-        await self.session.flush()
-        return booking
+    async def list_with_details_for_linked_user(self, user_id: UUID) -> list[tuple[Booking, str, str]]:
+        stmt = (
+            select(Booking, MasterProfile.display_name, Service.name)
+            .join(Client, Booking.client_id == Client.id)
+            .join(MasterProfile, Booking.master_id == MasterProfile.id)
+            .join(Service, Booking.service_id == Service.id)
+            .where(Client.user_id == user_id)
+            .order_by(Booking.start_at.asc())
+            .limit(500)
+        )
+        rows = await self.session.execute(stmt)
+        return [(row[0], row[1], row[2]) for row in rows.all()]

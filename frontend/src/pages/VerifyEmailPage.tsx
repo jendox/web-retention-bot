@@ -23,7 +23,13 @@ export function VerifyEmailPage() {
       try {
         await verifyEmailApi({ token: decodeURIComponent(token) })
         await queryClient.invalidateQueries({ queryKey: ['me'] })
-        navigate('/dashboard')
+        const next = sessionStorage.getItem('invite_post_verify_return')
+        if (next) {
+          sessionStorage.removeItem('invite_post_verify_return')
+          navigate(next)
+        } else {
+          navigate('/')
+        }
       } catch (err) {
         setError(getUserFacingError(err))
       }

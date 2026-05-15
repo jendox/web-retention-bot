@@ -4,8 +4,8 @@ import enum
 import uuid
 from typing import TYPE_CHECKING
 
+from sqlalchemy import Boolean, ForeignKey, String, Uuid
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -14,6 +14,7 @@ from app.models.base import TimeStampedModel
 if TYPE_CHECKING:
     from app.models.booking import Booking
     from app.models.master import MasterProfile
+    from app.models.user import User
 
 
 class InvitationStatus(enum.StrEnum):
@@ -30,6 +31,14 @@ class Client(TimeStampedModel):
     display_name: Mapped[str] = mapped_column(String(200))
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
+
+    user: Mapped[User | None] = relationship("User", back_populates="client_profiles")
 
     master_links: Mapped[list[MasterClient]] = relationship(
         "MasterClient",
@@ -47,6 +56,8 @@ class MasterClient(Base):
     client_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("clients.id"))
     alias: Mapped[str | None] = mapped_column(String(200), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    linked_account_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    invite_email_mismatch: Mapped[bool] = mapped_column(Boolean(), default=False, nullable=False)
     invitation_status: Mapped[InvitationStatus] = mapped_column(
         SAEnum(
             InvitationStatus,

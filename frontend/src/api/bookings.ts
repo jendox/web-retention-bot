@@ -13,6 +13,15 @@ export type Booking = {
   status: string
 }
 
+export type BookingClientListItem = Booking & {
+  master_display_name: string
+  service_name: string
+}
+
+export async function bookingsMyListApi() {
+  return apiFetch<BookingClientListItem[]>('/api/bookings/me')
+}
+
 export async function bookingsListApi() {
   return apiFetch<Booking[]>('/api/bookings')
 }

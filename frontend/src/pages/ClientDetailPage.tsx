@@ -201,7 +201,21 @@ export function ClientDetailPage() {
         </p>
       </div>
 
-      <form className="space-y-6" onSubmit={handleSubmit((vals) => save.mutate(vals))}>
+        {detail.data?.link.invite_email_mismatch ? (
+          <div
+            className="rounded-xl border border-amber-200/90 bg-amber-50/90 p-4 text-sm text-amber-950 shadow-sm dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-100"
+            role="status"
+          >
+            <p className="font-medium">Расхождение email</p>
+            <p className="mt-1 text-amber-900/90 dark:text-amber-200">
+              Клиент зашёл как <span className="font-mono">{detail.data.link.linked_account_email ?? '—'}</span>, в
+              карточке указан другой контакт. Обновите email ниже, если уведомления должны уходить на адрес входа —
+              значок исчезнет после совпадения.
+            </p>
+          </div>
+        ) : null}
+
+        <form className="space-y-6" onSubmit={handleSubmit((vals) => save.mutate(vals))}>
         {showSavedNotice ? (
           <div
             className="flex items-center gap-2 rounded-xl border border-teal-200/80 bg-teal-50 px-4 py-3 text-sm text-teal-900 shadow-sm dark:border-teal-800/60 dark:bg-teal-950/50 dark:text-teal-100"

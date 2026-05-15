@@ -39,6 +39,10 @@ class UpdateClientUseCase:
             elif key in _LINK_FIELDS:
                 setattr(link, key, value)
 
+        if link.linked_account_email and client.email:
+            if str(client.email).lower() == link.linked_account_email.lower():
+                link.invite_email_mismatch = False
+
         await self._client_repo.session.flush()
         await self._client_repo.session.refresh(client)
         await self._client_repo.session.refresh(link)

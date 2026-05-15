@@ -4,11 +4,15 @@ import { useForm } from 'react-hook-form'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { meApi } from '../api/auth'
+import { ApiError } from '../api/client'
 import { clientsCreateApi, clientsDeleteApi, clientsListApi, type ClientWithLink } from '../api/clients'
+import { invitationsCreateApi } from '../api/invitations'
 import { getUserFacingError } from '../lib/apiErrors'
 import { cn } from '../lib/forms'
 import { parsePage, parsePageSize, type PageSize } from '../lib/pagination'
 import { queryClient } from '../lib/query'
+
+type InviteModalTarget = { kind: 'general' } | { kind: 'client'; clientId: string; name: string }
 
 const fieldClass =
   'w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-stone-900 shadow-sm outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-400/15 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-100 dark:focus:border-stone-500'
@@ -218,7 +222,10 @@ export function ClientsPage() {
   }
 
   const [addOpen, setAddOpen] = useState(false)
-  const [inviteInfoOpen, setInviteInfoOpen] = useState(false)
+  const [inviteModal, setInviteModal] = useState<InviteModalTarget | null>(null)
+  const [inviteUrl, setInviteUrl] = useState<string | null>(null)
+  const [inviteConflict, setInviteConflict] = useState(false)
+  const [inviteCopyDone, setInviteCopyDone] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<ClientWithLink | null>(null)
 
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
@@ -270,6 +277,54 @@ export function ClientsPage() {
     },
   })
 
+  const createInviteLink = useMutation({
+    mutationFn: async (input: { target: InviteModalTarget; replace: boolean }) => {
+      if (input.target.kind === 'general') {
+        return invitationsCreateApi({ replace: input.replace })
+      }
+      return invitationsCreateApi({ target_client_id: input.target.clientId, replace: input.replace })
+    },
+    onSuccess: (data) => {
+      setInviteUrl(`${window.location.origin}/invite/${data.token}`)
+      setInviteConflict(false)
+    },
+    onError: (err) => {
+      if (err instanceof ApiError && err.status === 409) {
+        setInviteConflict(true)
+        setInviteUrl(null)
+      }
+    },
+  })
+
+  const openInviteModal = (target: InviteModalTarget) => {
+    setInviteModal(target)
+    setInviteUrl(null)
+    setInviteConflict(false)
+    setInviteCopyDone(false)
+    createInviteLink.reset()
+    createInviteLink.mutate({ target, replace: false })
+  }
+
+  const reissueInvite = () => {
+    if (!inviteModal) {
+      return
+    }
+    createInviteLink.mutate({ target: inviteModal, replace: true })
+  }
+
+  const copyInviteUrl = async () => {
+    if (!inviteUrl) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(inviteUrl)
+      setInviteCopyDone(true)
+      window.setTimeout(() => setInviteCopyDone(false), 2000)
+    } catch {
+      setInviteCopyDone(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -294,9 +349,9 @@ export function ClientsPage() {
           </button>
           <button
             type="button"
-            onClick={() => setInviteInfoOpen(true)}
-            title="Создать ссылку-приглашение: клиент зарегистрируется и подтвердит почту (скоро)"
-            aria-label="Создать ссылку-приглашение для клиента"
+            onClick={() => openInviteModal({ kind: 'general' })}
+            title="Общая ссылка-приглашение: клиент регистрируется и подтверждает email"
+            aria-label="Создать общую ссылку-приглашение"
             className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-teal-600/40 bg-white text-teal-700 shadow-sm transition hover:border-teal-600 hover:bg-teal-50 dark:border-teal-500/50 dark:bg-stone-900 dark:text-teal-300 dark:hover:bg-teal-950/40"
           >
             <IconLinkInvite className="h-5 w-5" />
@@ -311,8 +366,7 @@ export function ClientsPage() {
           <div className="px-6 py-16 text-center">
             <p className="text-stone-700 dark:text-stone-200">Пока никого нет в списке</p>
             <p className="mt-2 text-sm text-stone-500 dark:text-stone-400">
-              Нажмите «+», чтобы добавить клиента вручную, или подготовьте приглашение по ссылке (вторая кнопка —
-              скоро).
+              Нажмите «+», чтобы добавить клиента вручную,               или ссылку-приглашение (значок цепочки — общая или по строке клиента).
             </p>
           </div>
         ) : (
@@ -325,6 +379,9 @@ export function ClientsPage() {
                   <th className="px-4 py-3 font-semibold text-stone-700 dark:text-stone-300">Телефон</th>
                   <th className="px-4 py-3 font-semibold text-stone-700 dark:text-stone-300">Email</th>
                   <th className="hidden px-4 py-3 font-semibold text-stone-500 md:table-cell">Заметка</th>
+                  <th className="w-10 px-1 py-3 text-center font-semibold text-stone-500">
+                    <span className="sr-only">Пригласить</span>
+                  </th>
                   <th className="w-14 px-2 py-3 text-right font-semibold text-stone-500">
                     <span className="sr-only">Удалить</span>
                   </th>
@@ -352,6 +409,32 @@ export function ClientsPage() {
                     <td className="px-4 py-3 text-stone-600 dark:text-stone-400">{row.client.email ?? '—'}</td>
                     <td className="hidden max-w-xs truncate px-4 py-3 text-stone-500 md:table-cell">
                       {row.link.notes ?? '—'}
+                    </td>
+                    <td
+                      className="px-1 py-2 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        disabled={Boolean(row.client.user_id)}
+                        title={
+                          row.client.user_id
+                            ? 'У клиента уже есть вход'
+                            : 'Ссылка для этой карточки клиента'
+                        }
+                        onClick={() =>
+                          openInviteModal({
+                            kind: 'client',
+                            clientId: row.client.id,
+                            name: row.client.display_name,
+                          })
+                        }
+                        className="rounded-lg p-2 text-teal-600 transition enabled:hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-teal-400 dark:enabled:hover:bg-teal-950/40"
+                        aria-label={`Пригласить клиента ${row.client.display_name}`}
+                      >
+                        <IconLinkInvite className="h-5 w-5" />
+                      </button>
                     </td>
                     <td className="px-2 py-2 text-right" onClick={(e) => e.stopPropagation()}>
                       <button
@@ -482,35 +565,78 @@ export function ClientsPage() {
         </div>
       ) : null}
 
-      {inviteInfoOpen ? (
+      {inviteModal ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/45 p-4 backdrop-blur-[2px]"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="invite-soon-title"
+          aria-labelledby="invite-link-title"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
-              setInviteInfoOpen(false)
+              setInviteModal(null)
             }
           }}
         >
           <div
-            className="w-full max-w-sm rounded-2xl border border-stone-200 bg-white p-6 shadow-xl dark:border-stone-700 dark:bg-stone-900"
+            className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-xl dark:border-stone-700 dark:bg-stone-900"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="invite-soon-title" className="text-lg font-semibold text-stone-900 dark:text-stone-50">
-              Приглашение по ссылке
+            <h2 id="invite-link-title" className="text-lg font-semibold text-stone-900 dark:text-stone-50">
+              Ссылка-приглашение
             </h2>
-            <p className="mt-3 text-sm leading-relaxed text-stone-600 dark:text-stone-400">
-              Здесь будет создание персональной ссылки: клиент сможет зарегистрироваться и подтвердить почту, а вы
-              получите привязку к его карточке. Эндпоинт и сценарий подключим следующим шагом.
+            <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">
+              {inviteModal.kind === 'general'
+                ? 'Отправьте клиенту. После регистрации и подтверждения email он сможет принять приглашение.'
+                : `Для карточки «${inviteModal.name}». Ссылка привяжется к этой записи после принятия.`}
             </p>
+
+            {createInviteLink.isPending && !inviteConflict ? (
+              <p className="mt-4 text-sm text-stone-500">Создаём ссылку…</p>
+            ) : null}
+
+            {inviteConflict ? (
+              <div className="mt-4 space-y-3 rounded-lg border border-amber-200/90 bg-amber-50/90 p-3 text-sm dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+                <p>Для этого клиента уже есть активное приглашение. Можно перевыпустить — старая ссылка перестанет работать.</p>
+                <button
+                  type="button"
+                  onClick={() => reissueInvite()}
+                  disabled={createInviteLink.isPending}
+                  className="rounded-lg bg-amber-700 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-50 dark:bg-amber-600 dark:hover:bg-amber-500"
+                >
+                  {createInviteLink.isPending ? '…' : 'Перевыпустить ссылку'}
+                </button>
+              </div>
+            ) : null}
+
+            {inviteUrl ? (
+              <div className="mt-4 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => void copyInviteUrl()}
+                  className="w-full break-all rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-left font-mono text-xs text-stone-800 underline decoration-dotted hover:bg-stone-100 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-100 dark:hover:bg-stone-900"
+                >
+                  {inviteUrl}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copyInviteUrl()}
+                  className="w-full rounded-lg bg-teal-600 py-2 text-sm font-semibold text-white hover:bg-teal-500 dark:bg-teal-500 dark:text-stone-950"
+                >
+                  {inviteCopyDone ? 'Скопировано' : 'Копировать'}
+                </button>
+              </div>
+            ) : null}
+
+            {createInviteLink.isError && !inviteConflict ? (
+              <p className="mt-3 text-sm text-red-700 dark:text-red-300">{getUserFacingError(createInviteLink.error)}</p>
+            ) : null}
+
             <button
               type="button"
-              onClick={() => setInviteInfoOpen(false)}
-              className="mt-5 w-full rounded-lg bg-teal-600 py-2.5 text-sm font-semibold text-white hover:bg-teal-500"
+              onClick={() => setInviteModal(null)}
+              className="mt-5 w-full rounded-lg border border-stone-300 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-800"
             >
-              Понятно
+              Закрыть
             </button>
           </div>
         </div>

@@ -22,7 +22,7 @@ export function LoginPage() {
     mutationFn: (values: LoginForm) => loginApi(values),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['me'] })
-      navigate('/dashboard')
+      navigate('/')
     },
     onError: (err) => {
       form.setError('root', { message: getUserFacingError(err) })

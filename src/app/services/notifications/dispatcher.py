@@ -94,6 +94,50 @@ class NotificationDispatcher:
 
         return EmailVerificationDispatchResult(event=event, user_notification=user_note, delivery=delivery)
 
+    async def dispatch_invite_email_mismatch_for_master(
+        self,
+        *,
+        master_user_id: UUID,
+        master_profile_id: UUID,
+        client_id: UUID,
+        profile_email: str,
+        account_email: str,
+        client_display_name: str,
+    ) -> None:
+        payload = {
+            "profile_email": profile_email,
+            "account_email": account_email,
+            "client_display_name": client_display_name,
+            "client_id": str(client_id),
+        }
+        event = await self._notification_event_repo.create(
+            NotificationEventCreate(
+                type=NotificationEventType.DEFAULT,
+                target_user_id=master_user_id,
+                master_profile_id=master_profile_id,
+                client_id=client_id,
+                payload=payload,
+            )
+        )
+        title = "Клиент принял приглашение с другим email"
+        body = (
+            f"«{client_display_name}»: в карточке был указан {profile_email}, "
+            f"а вошёл как {account_email}. Обновите email в карточке, "
+            "если хотите слать уведомления на актуальный адрес."
+        )
+        dedup = f"invite_email_mismatch:{client_id}:{account_email}"
+        await self._user_notification_repo.create(
+            UserNotificationCreate(
+                event_id=event.id,
+                recipient_user_id=master_user_id,
+                event_type=NotificationEventType.DEFAULT,
+                title=title,
+                body=body,
+                payload=payload,
+                dedup_key=dedup,
+            ),
+        )
+
 
 def get_notification_dispatcher(
     request: Request,

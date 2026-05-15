@@ -20,6 +20,10 @@ export async function registerApi(body: {
   return apiFetch<RegisterAccepted>('/api/auth/register', { method: 'POST', body: JSON.stringify(body) })
 }
 
+export async function registerClientApi(body: { email: string; password: string }) {
+  return apiFetch<RegisterAccepted>('/api/auth/register-client', { method: 'POST', body: JSON.stringify(body) })
+}
+
 export async function verifyEmailApi(body: { token: string }) {
   return apiFetch<AuthUser>('/api/auth/verify-email', {
     method: 'POST',

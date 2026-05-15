@@ -16,6 +16,7 @@ class ClientSchema(BaseModel):
     display_name: str
     phone: str | None
     email: EmailStr | None
+    user_id: UUID | None = None
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -51,10 +52,25 @@ class MasterClientOut(BaseModel):
     alias: str | None
     notes: str | None
     invitation_status: str
+    linked_account_email: str | None = None
+    invite_email_mismatch: bool = False
 
     model_config = ConfigDict(
         from_attributes=True,
     )
+
+
+class ClientMyMasterItem(BaseModel):
+    """Мастер, с которым связана карточка клиента у текущего пользователя."""
+
+    master_id: UUID
+    display_name: str
+    public_slug: str | None = None
+    link_id: UUID
+    invitation_status: str
+    client_id: UUID
+    client_display_name: str
+    alias: str | None = None
 
 
 class ClientWithLinkResponse(BaseModel):

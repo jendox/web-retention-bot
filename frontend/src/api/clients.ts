@@ -6,8 +6,16 @@ export type ClientWithLink = {
     display_name: string
     phone: string | null
     email: string | null
+    user_id?: string | null
   }
-  link: { id: string; alias: string | null; notes: string | null; invitation_status: string }
+  link: {
+    id: string
+    alias: string | null
+    notes: string | null
+    invitation_status: string
+    linked_account_email?: string | null
+    invite_email_mismatch?: boolean
+  }
 }
 
 export type PaginatedClients = {
@@ -15,6 +23,21 @@ export type PaginatedClients = {
   total: number
   page: number
   page_size: number
+}
+
+export type ClientMyMasterItem = {
+  master_id: string
+  display_name: string
+  public_slug: string | null
+  link_id: string
+  invitation_status: string
+  client_id: string
+  client_display_name: string
+  alias: string | null
+}
+
+export async function clientsMyMastersApi() {
+  return apiFetch<ClientMyMasterItem[]>('/api/clients/me/masters')
 }
 
 export async function clientsListApi(params?: { page?: number; page_size?: number }) {

@@ -17,6 +17,17 @@ class RegisterUserUseCase:
     def __init__(self, user_repo: UserRepository) -> None:
         self.user_repo = user_repo
 
+    async def register_client(self, *, email: str, password: str) -> UserSchema:
+        email_norm = email.strip().lower()
+        existing = await self.user_repo.get_by_email(email_norm)
+        if existing is not None:
+            raise UserAlreadyExists("Email already registered")
+        user = await self.user_repo.create(
+            email=email_norm,
+            password_hash=hash_password(password),
+        )
+        return UserSchema.from_model(user)
+
     async def __call__(self, payload: RegisterPayload) -> UserSchema:
         email = str(payload.email).lower()
         user = await self.user_repo.get_by_email(email)

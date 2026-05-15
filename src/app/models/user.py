@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import TimeStampedModel
 
 if TYPE_CHECKING:
+    from app.models.client import Client
     from app.models.master import MasterProfile
 
 
@@ -24,5 +25,9 @@ class User(TimeStampedModel):
 
     master_profile: Mapped[MasterProfile | None] = relationship(
         "MasterProfile",
+        back_populates="user",
+    )
+    client_profiles: Mapped[list[Client]] = relationship(
+        "Client",
         back_populates="user",
     )

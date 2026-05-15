@@ -4,11 +4,15 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_master_profile
+from app.api.deps import require_master_profile, require_user
+from app.core.database import get_db_session
 from app.core.pagination import Pagination, get_pagination
 from app.models.master import MasterProfile
-from app.schemas.client import ClientCreate, ClientUpdate, ClientWithLinkResponse
+from app.models.user import User
+from app.repositories.clients import ClientRepository
+from app.schemas.client import ClientCreate, ClientMyMasterItem, ClientUpdate, ClientWithLinkResponse
 from app.schemas.errors import ErrorDetail
 from app.schemas.pagination import PaginatedResponse
 from app.use_cases.clients.create_client import CreateClientUseCase, get_create_client_use_case
@@ -23,6 +27,38 @@ from app.use_cases.clients.list_clients import ListClientsUseCase, get_list_clie
 from app.use_cases.clients.update_client import UpdateClientUseCase, get_update_client_use_case
 
 router = APIRouter(prefix="/clients", tags=["clients"])
+
+
+@router.get(
+    "/me/masters",
+    summary="List masters linked to the current user as a client",
+    description=(
+        "Returns master profiles for every non-revoked master–client link where the client card "
+        "belongs to the authenticated user. Independent of bookings."
+    ),
+    response_model=list[ClientMyMasterItem],
+)
+async def list_my_masters(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    user: Annotated[User, Depends(require_user)],
+) -> list[ClientMyMasterItem]:
+    repo = ClientRepository(session)
+    rows = await repo.list_masters_for_user_clients(user.id)
+    out: list[ClientMyMasterItem] = []
+    for master, link, client in rows:
+        out.append(
+            ClientMyMasterItem(
+                master_id=master.id,
+                display_name=master.display_name,
+                public_slug=master.public_slug,
+                link_id=link.id,
+                invitation_status=link.invitation_status.value,
+                client_id=client.id,
+                client_display_name=client.display_name,
+                alias=link.alias,
+            )
+        )
+    return out
 
 
 def _blocking_delete_detail(exc: ClientHasBlockingRelationsError) -> str:
