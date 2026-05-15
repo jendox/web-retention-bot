@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { NavLink, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { verifyEmailApi } from '../api/auth'
+import { AuthErrorBanner, AuthScreen } from '../components/auth/AuthScreen'
+import { AUTH_LINK_CLASS } from '../components/auth/authStyles'
+import { getUserFacingError } from '../lib/apiErrors'
 import { queryClient } from '../lib/query'
 
 export function VerifyEmailPage() {
@@ -22,7 +25,7 @@ export function VerifyEmailPage() {
         await queryClient.invalidateQueries({ queryKey: ['me'] })
         navigate('/dashboard')
       } catch (err) {
-        setError(`${err}`)
+        setError(getUserFacingError(err))
       }
     }
     void run()
@@ -30,25 +33,39 @@ export function VerifyEmailPage() {
 
   if (!token) {
     return (
-      <div className="mx-auto max-w-lg px-6 py-14 pr-14">
-        <h1 className="text-xl font-semibold">Некорректная ссылка</h1>
-        <p className="mt-2 text-slate-600 dark:text-slate-400">В этой странице нет параметра token.</p>
-      </div>
+      <AuthScreen
+        title="Некорректная ссылка"
+        subtitle="В адресе страницы нет параметра подтверждения. Откройте ссылку из письма целиком."
+        footer={
+          <NavLink className={AUTH_LINK_CLASS} to="/login">
+            На страницу входа
+          </NavLink>
+        }
+      >
+        <p className="text-center text-sm text-slate-600 dark:text-slate-400">Обратитесь в поддержку, если проблема повторяется.</p>
+      </AuthScreen>
     )
   }
 
   if (error) {
     return (
-      <div className="mx-auto max-w-lg px-6 py-14 pr-14">
-        <h1 className="text-xl font-semibold">Ссылка не сработала</h1>
-        <p className="mt-2 text-rose-600 dark:text-rose-300">{error}</p>
-      </div>
+      <AuthScreen
+        title="Не удалось подтвердить email"
+        subtitle="Запросите новую ссылку или войдите, если аккаунт уже активирован."
+        footer={
+          <NavLink className={AUTH_LINK_CLASS} to="/login">
+            На страницу входа
+          </NavLink>
+        }
+      >
+        <AuthErrorBanner message={error} />
+      </AuthScreen>
     )
   }
 
   return (
-    <div className="mx-auto max-w-lg px-6 py-14 pr-14">
-      <p className="text-slate-600 dark:text-slate-400">Подтверждаем email…</p>
-    </div>
+    <AuthScreen title="Подтверждаем email" subtitle="Секунду, выполняем вход…">
+      <p className="text-center text-sm text-slate-600 dark:text-slate-400">Пожалуйста, не закрывайте вкладку.</p>
+    </AuthScreen>
   )
 }

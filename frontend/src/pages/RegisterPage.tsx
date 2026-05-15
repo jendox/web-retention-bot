@@ -4,6 +4,9 @@ import { useForm } from 'react-hook-form'
 import { NavLink, useNavigate } from 'react-router-dom'
 
 import { registerApi } from '../api/auth'
+import { AuthErrorBanner, AuthFieldLabel, AuthScreen } from '../components/auth/AuthScreen'
+import { AUTH_FIELD_CLASS, AUTH_LINK_CLASS, AUTH_PRIMARY_BUTTON_CLASS } from '../components/auth/authStyles'
+import { getUserFacingError } from '../lib/apiErrors'
 import { registerSchema } from '../lib/validators'
 
 type RegisterForm = {
@@ -26,60 +29,53 @@ export function RegisterPage() {
     onSuccess: async (data) => {
       navigate('/pending-verification', { state: { email: data.email } })
     },
-    onError: (err) => form.setError('root', { message: `${err}` }),
+    onError: (err) => form.setError('root', { message: getUserFacingError(err) }),
   })
 
   return (
-    <div className="mx-auto flex max-w-lg flex-col gap-8 px-6 py-14 pr-14">
-      <div>
-        <h1 className="text-3xl font-semibold">Регистрация мастера</h1>
-        <p className="text-slate-600 dark:text-slate-400">
-          Ссылка подтверждения отправляется на email (пока см. логи сервера).
-        </p>
-      </div>
-
-      <form
-        className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900"
-        onSubmit={form.handleSubmit((vals) => mutation.mutate(vals))}
-      >
-        <label className="flex flex-col gap-1 text-sm">
-          Email
-          <input
-            {...form.register('email')}
-            type="email"
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
-          />
+    <AuthScreen
+      title="Регистрация"
+      subtitle="Создайте аккаунт и укажите отображаемое имя — например, название студии или салона."
+      footer={
+        <NavLink to="/login" className={AUTH_LINK_CLASS}>
+          Уже есть аккаунт — войти
+        </NavLink>
+      }
+    >
+      <form className="space-y-4" onSubmit={form.handleSubmit((vals) => mutation.mutate(vals))}>
+        <label className="flex flex-col">
+          <AuthFieldLabel>Email</AuthFieldLabel>
+          <input {...form.register('email')} type="email" autoComplete="email" className={AUTH_FIELD_CLASS} />
+          {form.formState.errors.email && (
+            <p className="mt-1 text-sm text-red-800/90 dark:text-red-300/90">{form.formState.errors.email.message}</p>
+          )}
         </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Пароль
+        <label className="flex flex-col">
+          <AuthFieldLabel>Пароль</AuthFieldLabel>
           <input
             type="password"
             {...form.register('password')}
             autoComplete="new-password"
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
+            className={AUTH_FIELD_CLASS}
           />
+          {form.formState.errors.password && (
+            <p className="mt-1 text-sm text-red-800/90 dark:text-red-300/90">{form.formState.errors.password.message}</p>
+          )}
         </label>
-        <label className="flex flex-col gap-1 text-sm">
-          Отображаемое имя
-          <input
-            {...form.register('master_display_name')}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950"
-          />
+        <label className="flex flex-col">
+          <AuthFieldLabel>Отображаемое имя</AuthFieldLabel>
+          <input {...form.register('master_display_name')} autoComplete="organization" className={AUTH_FIELD_CLASS} />
+          {form.formState.errors.master_display_name && (
+            <p className="mt-1 text-sm text-red-800/90 dark:text-red-300/90">
+              {form.formState.errors.master_display_name.message}
+            </p>
+          )}
         </label>
-        {form.formState.errors.root && (
-          <p className="text-sm text-rose-600 dark:text-rose-400">{form.formState.errors.root.message}</p>
-        )}
-        <button
-          disabled={mutation.isPending}
-          className="w-full rounded-md bg-emerald-600 px-3 py-2 font-semibold text-white disabled:opacity-50 dark:bg-emerald-500 dark:text-slate-950"
-          type="submit"
-        >
-          Зарегистрироваться
+        {form.formState.errors.root && <AuthErrorBanner message={form.formState.errors.root.message ?? ''} />}
+        <button disabled={mutation.isPending} className={AUTH_PRIMARY_BUTTON_CLASS} type="submit">
+          {mutation.isPending ? 'Отправляем…' : 'Зарегистрироваться'}
         </button>
       </form>
-      <NavLink className="text-sm font-medium text-emerald-600 dark:text-emerald-400" to="/login">
-        Уже есть аккаунт
-      </NavLink>
-    </div>
+    </AuthScreen>
   )
 }

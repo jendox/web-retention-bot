@@ -2,21 +2,24 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import SessionStore, get_session_store, require_user
 from app.core.config import Settings, get_settings
-from app.core.database import get_db_session
-from app.core.security import verify_password
 from app.core.verification_token import EmailVerificationTokenError
 from app.models.user import User
-from app.repositories.users import UserRepository
 from app.schemas.auth import LoginPayload, RegisterAcceptedOut, RegisterPayload, VerifyEmailPayload
 from app.schemas.errors import ErrorDetail
 from app.schemas.user import UserSchema
 from app.services.notifications.dispatcher import (
     NotificationDispatcher,
     get_notification_dispatcher,
+)
+from app.use_cases.login import (
+    EmailNotVerifiedError,
+    InactiveUserError,
+    InvalidCredentialsError,
+    LoginUseCase,
+    get_login_use_case,
 )
 from app.use_cases.register_master import RegisterMasterUseCase, get_register_master_use_case
 from app.use_cases.register_user import RegisterUserUseCase, UserAlreadyExists, get_register_user_use_case
@@ -113,34 +116,87 @@ async def verify_email(
         ) from None
 
 
-@router.post("/login", response_model=UserSchema)
+@router.post(
+    path="/login",
+    summary="Sign in with email and password",
+    description=(
+        "Validates credentials for an existing user whose email is already verified. On success: issues an httpOnly "
+        "session cookie (same as after `/auth/verify-email`). Use `/auth/me` to read the profile."
+    ),
+    response_model=UserSchema,
+    response_description="Authenticated; session cookie set.",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDetail,
+            "description": "Unknown email or wrong password.",
+        },
+        status.HTTP_403_FORBIDDEN: {
+            "model": ErrorDetail,
+            "description": "Email not verified yet, or account is disabled.",
+        },
+    },
+)
 async def login(
     request: Request,
     response: Response,
     payload: LoginPayload,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    login_use_case: Annotated[LoginUseCase, Depends(get_login_use_case)],
     store: Annotated[SessionStore, Depends(get_session_store)],
 ) -> UserSchema:
     settings = request.app.state.settings
-    repo = UserRepository(session)
-    user = await repo.get_by_email(payload.email)
-    if not user or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    if user.email_verified_at is None:
+    try:
+        user = await login_use_case(email=payload.email, password=payload.password)
+    except InvalidCredentialsError:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials") from None
+    except EmailNotVerifiedError:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail="Email address is not verified yet",
-        )
+        ) from None
+    except InactiveUserError:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled",
+        ) from None
     await _attach_session(settings, response, store, user.id)
-    return UserSchema.from_model(user)
+    return user
 
 
-@router.get("/me", response_model=UserSchema)
+@router.get(
+    path="/me",
+    summary="Current authenticated user",
+    description=(
+        "Returns the user profile for the active session (httpOnly cookie). Requires a prior successful "
+        "`/auth/login` or `/auth/verify-email`. Responds with 401 if there is no valid session, and 403 if the "
+        "user’s email is not verified."
+    ),
+    response_model=UserSchema,
+    response_description="Profile for the session user.",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDetail,
+            "description": "Missing or invalid session cookie.",
+        },
+        status.HTTP_403_FORBIDDEN: {
+            "model": ErrorDetail,
+            "description": "Session present but email is not verified.",
+        },
+    },
+)
 async def me(current: Annotated[User, Depends(require_user)]) -> UserSchema:
     return UserSchema.from_model(current)
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    path="/logout",
+    summary="Sign out and clear session",
+    description=(
+        "Deletes the server-side session and clears the httpOnly session cookie. Idempotent: succeeds even if "
+        "there was no session."
+    ),
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_description="Session removed; empty body.",
+)
 async def logout(
     request: Request,
     response: Response,
