@@ -1,15 +1,15 @@
-"""Standalone client records linked to masters without requiring app accounts."""
+from __future__ import annotations
 
 import enum
 import uuid
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String, Uuid
 from sqlalchemy import Enum as SAEnum
+from sqlalchemy import ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.base import TimeStampedModel
 
 if TYPE_CHECKING:
     from app.models.booking import Booking
@@ -17,19 +17,19 @@ if TYPE_CHECKING:
 
 
 class InvitationStatus(enum.StrEnum):
-    pending = "pending"
-    linked = "linked"
-    revoked = "revoked"
+    PENDING = "PENDING"
+    LINKED = "LINKED"
+    REVOKED = "REVOKED"
 
 
-class Client(Base):
+class Client(TimeStampedModel):
     __tablename__ = "clients"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
     display_name: Mapped[str] = mapped_column(String(200))
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     master_links: Mapped[list["MasterClient"]] = relationship(
         "MasterClient",
@@ -54,7 +54,7 @@ class MasterClient(Base):
             native_enum=False,
             length=32,
         ),
-        default=InvitationStatus.linked,
+        default=InvitationStatus.LINKED,
     )
 
     master: Mapped["MasterProfile"] = relationship("MasterProfile", back_populates="master_clients")

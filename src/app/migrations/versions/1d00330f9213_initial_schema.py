@@ -28,6 +28,7 @@ def upgrade() -> None:
     sa.Column('phone', sa.String(length=50), nullable=True),
     sa.Column('email', sa.String(length=320), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('retention_policies',

@@ -1,29 +1,75 @@
-"""Client + linkage persistence."""
+from __future__ import annotations
 
+from typing import Annotated
 from uuid import UUID
 
-from sqlalchemy import select
+from fastapi import Depends
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.client import Client, MasterClient
+from app.core.database import get_db_session
+from app.models.booking import Booking
+from app.models.client import Client, InvitationStatus, MasterClient
+from app.models.invitation import Invitation
 from app.repositories.base import BaseRepository
 
 
 class ClientRepository(BaseRepository):
-    async def create(self, client: Client) -> Client:
+    async def create(
+        self,
+        *,
+        display_name: str,
+        phone: str | None = None,
+        email: str | None = None,
+    ) -> Client:
+        client = Client(
+            display_name=display_name,
+            phone=phone,
+            email=email,
+        )
         self.session.add(client)
         await self.session.flush()
         return client
 
-    async def master_clients_with_clients(self, master_id: UUID) -> list[tuple[MasterClient, Client]]:
+    async def count_clients_for_master(self, master_id: UUID) -> int:
+        stmt = select(func.count()).select_from(MasterClient).where(MasterClient.master_id == master_id)
+        n = (await self.session.execute(stmt)).scalar_one()
+        return int(n)
+
+    async def master_clients_with_clients_page(
+        self,
+        master_id: UUID,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[tuple[MasterClient, Client]]:
         stmt = (
             select(MasterClient, Client)
             .join(Client, MasterClient.client_id == Client.id)
             .where(MasterClient.master_id == master_id)
+            .order_by(func.lower(Client.display_name).asc(), Client.id.asc())
+            .limit(limit)
+            .offset(offset)
         )
         rows = await self.session.execute(stmt)
         return list(rows.all())
 
-    async def create_link(self, link: MasterClient) -> MasterClient:
+    async def create_link(
+        self,
+        *,
+        master_id: UUID,
+        client_id: UUID,
+        invitation_status: InvitationStatus = InvitationStatus.LINKED,
+        alias: str | None = None,
+        notes: str | None = None,
+    ) -> MasterClient:
+        link = MasterClient(
+            master_id=master_id,
+            client_id=client_id,
+            invitation_status=invitation_status,
+            alias=alias,
+            notes=notes,
+        )
         self.session.add(link)
         await self.session.flush()
         return link
@@ -42,3 +88,33 @@ class ClientRepository(BaseRepository):
         )
         row = await self.session.execute(stmt)
         return row.scalar_one_or_none() is not None
+
+    async def get_link_with_client(self, master_id: UUID, client_id: UUID) -> tuple[MasterClient, Client] | None:
+        stmt = (
+            select(MasterClient, Client)
+            .join(Client, MasterClient.client_id == Client.id)
+            .where(MasterClient.master_id == master_id, MasterClient.client_id == client_id)
+        )
+        row = (await self.session.execute(stmt)).one_or_none()
+        if row is None:
+            return None
+        return row[0], row[1]
+
+    async def count_bookings_for_client(self, client_id: UUID) -> int:
+        stmt = select(func.count()).select_from(Booking).where(Booking.client_id == client_id)
+        count = (await self.session.execute(stmt)).scalar_one()
+        return int(count)
+
+    async def has_invitation_linked_to_client(self, client_id: UUID) -> bool:
+        stmt = select(Invitation.id).where(Invitation.linked_client_id == client_id).limit(1)
+        return (await self.session.execute(stmt)).scalar_one_or_none() is not None
+
+    async def delete_client(self, client: Client) -> None:
+        await self.session.delete(client)
+        await self.session.flush()
+
+
+def get_client_repo(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ClientRepository:
+    return ClientRepository(session)

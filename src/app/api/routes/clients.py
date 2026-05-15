@@ -1,49 +1,168 @@
-from typing import Annotated
+from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Annotated
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.api.deps import require_master_profile
-from app.core.database import get_db_session
-from app.models.client import Client, InvitationStatus, MasterClient
+from app.core.pagination import Pagination, get_pagination
 from app.models.master import MasterProfile
-from app.repositories.clients import ClientRepository
-from app.schemas.client import ClientCreate, ClientOut, MasterClientOut
+from app.schemas.client import ClientCreate, ClientUpdate, ClientWithLinkResponse
+from app.schemas.errors import ErrorDetail
+from app.schemas.pagination import PaginatedResponse
+from app.use_cases.clients.create_client import CreateClientUseCase, get_create_client_use_case
+from app.use_cases.clients.delete_client import DeleteClientUseCase, get_delete_client_use_case
+from app.use_cases.clients.exceptions import (
+    ClientHasBlockingRelationsError,
+    ClientNotFoundError,
+    ClientNothingToUpdateError,
+)
+from app.use_cases.clients.get_client import GetClientUseCase, get_get_client_use_case
+from app.use_cases.clients.list_clients import ListClientsUseCase, get_list_clients_use_case
+from app.use_cases.clients.update_client import UpdateClientUseCase, get_update_client_use_case
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
 
-@router.get("", response_model=list[dict])
+def _blocking_delete_detail(exc: ClientHasBlockingRelationsError) -> str:
+    if exc.reason == "has_bookings":
+        return "Client has bookings and cannot be deleted."
+    return "Client is linked to an invitation and cannot be deleted."
+
+
+@router.get(
+    path="",
+    summary="List clients for the current master",
+    description=(
+        "Returns clients linked to the authenticated master profile (paginated), with per-master alias, notes, "
+        "and invitation status. Sort order: display name (case-insensitive), then client id."
+    ),
+    response_model=PaginatedResponse[ClientWithLinkResponse],
+    response_description="Page of linked clients plus total count for the same filter.",
+)
 async def list_clients(
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    pagination: Annotated[Pagination, Depends(get_pagination)],
+    use_case: Annotated[ListClientsUseCase, Depends(get_list_clients_use_case)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
-) -> list[dict]:
-    repo = ClientRepository(session)
-    rows = await repo.master_clients_with_clients(master.id)
-    return [
-        {"link": MasterClientOut.model_validate(link), "client": ClientOut.model_validate(client)}
-        for link, client in rows
-    ]
+) -> PaginatedResponse[ClientWithLinkResponse]:
+    return await use_case(master.id, pagination)
 
 
-@router.post("", status_code=status.HTTP_201_CREATED, response_model=dict)
-async def post_client(
+@router.post(
+    path="",
+    summary="Create a manual client card",
+    description=(
+        "Creates a client record and a master–client link without an app login (invitation flow is separate). "
+        "Optional phone and email are stored as given; email is normalized to lowercase."
+    ),
+    status_code=status.HTTP_201_CREATED,
+    response_model=ClientWithLinkResponse,
+    response_description="New client and link; same shape as list items.",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDetail,
+            "description": "Session missing or invalid (handled by dependency).",
+        },
+    },
+)
+async def add_client(
     payload: ClientCreate,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    use_case: Annotated[CreateClientUseCase, Depends(get_create_client_use_case)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
-) -> dict:
-    repo = ClientRepository(session)
-    client = Client(
-        display_name=payload.display_name,
-        phone=payload.phone,
-        email=str(payload.email).lower() if payload.email else None,
-    )
-    await repo.create(client)
-    link = MasterClient(
-        master_id=master.id,
-        client_id=client.id,
-        invitation_status=InvitationStatus.linked,
-    )
-    await repo.create_link(link)
-    await session.refresh(client)
-    return {"client": ClientOut.model_validate(client), "link": MasterClientOut.model_validate(link)}
+) -> ClientWithLinkResponse:
+    return await use_case(payload, master.id)
+
+
+@router.get(
+    path="/{client_id}",
+    summary="Get one linked client",
+    description=(
+        "Fetches a single client only if it is linked to the current master. Use for the client detail / edit screen."
+    ),
+    response_model=ClientWithLinkResponse,
+    response_description="Client profile and master-specific alias, notes, and link status.",
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorDetail,
+            "description": "No such client or it is not linked to this master.",
+        },
+    },
+)
+async def get_client(
+    client_id: UUID,
+    use_case: Annotated[GetClientUseCase, Depends(get_get_client_use_case)],
+    master: Annotated[MasterProfile, Depends(require_master_profile)],
+) -> ClientWithLinkResponse:
+    try:
+        return await use_case(master.id, client_id)
+    except ClientNotFoundError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Client not found.") from None
+
+
+@router.patch(
+    path="/{client_id}",
+    summary="Update client and master link fields",
+    description=(
+        "Partial update: send only fields to change. Core client fields (name, phone, email) and master-only "
+        "fields (alias, notes) are applied in one request."
+    ),
+    response_model=ClientWithLinkResponse,
+    response_description="Updated client and link snapshot.",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ErrorDetail,
+            "description": "Request body omitted all updatable fields.",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorDetail,
+            "description": "No such client or it is not linked to this master.",
+        },
+    },
+)
+async def patch_client(
+    client_id: UUID,
+    payload: ClientUpdate,
+    use_case: Annotated[UpdateClientUseCase, Depends(get_update_client_use_case)],
+    master: Annotated[MasterProfile, Depends(require_master_profile)],
+) -> ClientWithLinkResponse:
+    try:
+        return await use_case(master.id, client_id, payload)
+    except ClientNotFoundError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Client not found.") from None
+    except ClientNothingToUpdateError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No fields to update.") from None
+
+
+@router.delete(
+    path="/{client_id}",
+    summary="Delete a client card",
+    description=(
+        "Removes the client row when there are no bookings and no invitation points at this client via "
+        "`linked_client_id`. Otherwise responds with 409 so data stays consistent."
+    ),
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_description="Client removed; no response body.",
+    responses={
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorDetail,
+            "description": "No such client or it is not linked to this master.",
+        },
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorDetail,
+            "description": "Client has bookings or is referenced by an invitation link.",
+        },
+    },
+)
+async def delete_client(
+    client_id: UUID,
+    use_case: Annotated[DeleteClientUseCase, Depends(get_delete_client_use_case)],
+    master: Annotated[MasterProfile, Depends(require_master_profile)],
+) -> Response:
+    try:
+        await use_case(master.id, client_id)
+    except ClientNotFoundError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Client not found.") from None
+    except ClientHasBlockingRelationsError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=_blocking_delete_detail(exc)) from None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

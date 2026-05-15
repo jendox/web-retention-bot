@@ -1,21 +1,95 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
-import { logoutApi, meApi } from '../api/auth'
+import { meApi } from '../api/auth'
+import { bookingsListApi, type Booking } from '../api/bookings'
+import { clientsListApi } from '../api/clients'
 import { invitationsCreateApi } from '../api/invitations'
 import { masterMeApi } from '../api/masters'
-import { queryClient } from '../lib/query'
+import { servicesListApi } from '../api/services'
+import { IconChevronRight } from '../components/layout/navIcons'
+import { cn } from '../lib/forms'
+import { ALLOWED_PAGE_SIZES } from '../lib/pagination'
+
+function isSameLocalDay(iso: string, ref: Date) {
+  const d = new Date(iso)
+  return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth() && d.getDate() === ref.getDate()
+}
+
+const CLIENTS_PAGE_SIZE_CAP = ALLOWED_PAGE_SIZES[ALLOWED_PAGE_SIZES.length - 1]
+
+function startOfMonth(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), 1)
+}
+
+function endOfMonth(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999)
+}
+
+function formatRuGreetingDate(d: Date) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(d)
+}
+
+function formatSlotShort(iso: string) {
+  const dt = new Date(iso)
+  return new Intl.DateTimeFormat('ru-RU', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(dt)
+}
+
+const accentBar = ['border-l-teal-600', 'border-l-amber-500', 'border-l-rose-400', 'border-l-sky-500'] as const
+
+type StatProps = {
+  icon: ReactNode
+  value: string | number
+  label: string
+  sub?: string
+  iconBg: string
+  iconColor: string
+}
+
+function StatCard({ icon, value, label, sub, iconBg, iconColor }: StatProps) {
+  return (
+    <div className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+      <div className="flex items-start gap-3">
+        <div
+          className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', iconBg, iconColor)}
+        >
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <p className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">{value}</p>
+          <p className="text-sm text-stone-600 dark:text-stone-400">{label}</p>
+          {sub ? <p className="mt-0.5 text-xs text-stone-500 dark:text-stone-500">{sub}</p> : null}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export function DashboardPage() {
   const navigate = useNavigate()
   const [inviteMessage, setInviteMessage] = useState<string>()
+
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
-  const master = useQuery({
-    queryKey: ['master'],
-    queryFn: masterMeApi,
+  const master = useQuery({ queryKey: ['master'], queryFn: masterMeApi, enabled: me.isSuccess, retry: false })
+  const clients = useQuery({
+    queryKey: ['clients', 'dashboard-summary', 1, CLIENTS_PAGE_SIZE_CAP],
+    queryFn: () => clientsListApi({ page: 1, page_size: CLIENTS_PAGE_SIZE_CAP }),
     enabled: me.isSuccess,
   })
+  const bookings = useQuery({ queryKey: ['bookings'], queryFn: bookingsListApi, enabled: me.isSuccess })
+  const services = useQuery({ queryKey: ['services'], queryFn: servicesListApi, enabled: me.isSuccess })
 
   useEffect(() => {
     if (me.isError) {
@@ -23,77 +97,247 @@ export function DashboardPage() {
     }
   }, [me.isError, navigate])
 
-  const logout = useMutation({
-    mutationFn: logoutApi,
-    onSuccess: async () => {
-      await queryClient.removeQueries({ queryKey: ['me'] })
-      await queryClient.removeQueries({ queryKey: ['master'] })
-      navigate('/login')
-    },
-  })
-
   const createInvite = useMutation({
     mutationFn: () => invitationsCreateApi({}),
     onSuccess: (payload) => {
       const relative = `/invite/${payload.token}`
-      setInviteMessage(`Ссылка для клиента: ${window.location.origin}${relative}`)
+      setInviteMessage(`${window.location.origin}${relative}`)
     },
   })
 
-  if (me.isLoading) {
-    return <p className="text-slate-600 dark:text-slate-400">Загрузка…</p>
+  const clientNameById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const row of clients.data?.items ?? []) {
+      m.set(row.client.id, row.client.display_name)
+    }
+    return m
+  }, [clients.data])
+
+  const stats = useMemo(() => {
+    const nowInner = new Date()
+    const list = bookings.data ?? []
+    const scheduled = list.filter((b) => b.status === 'scheduled')
+    const today = scheduled.filter((b) => isSameLocalDay(b.start_at, nowInner))
+    today.sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+    const nextToday = today[0]
+
+    const monthStart = startOfMonth(nowInner)
+    const monthEnd = endOfMonth(nowInner)
+    const inMonth = scheduled.filter((b) => {
+      const t = new Date(b.start_at)
+      return t >= monthStart && t <= monthEnd
+    })
+    let revenue = 0
+    for (const b of inMonth) {
+      const n = Number.parseFloat(b.price_snapshot)
+      if (!Number.isNaN(n)) {
+        revenue += n
+      }
+    }
+
+    const upcoming = scheduled
+      .filter((b) => new Date(b.start_at) >= nowInner)
+      .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
+      .slice(0, 5)
+
+    return {
+      clientCount: clients.data?.total ?? 0,
+      serviceCount: (services.data ?? []).filter((s) => s.is_active).length,
+      todayCount: today.length,
+      nextTodayLabel: nextToday ? formatSlotShort(nextToday.start_at) : undefined,
+      revenueMonth: revenue,
+      upcoming,
+    }
+  }, [bookings.data, clients.data, services.data])
+
+  const firstName = useMemo(() => {
+    const n = master.data?.display_name?.trim()
+    if (!n) {
+      return me.data?.email?.split('@')[0] ?? 'Вы'
+    }
+    return n.split(/\s+/)[0] ?? n
+  }, [master.data?.display_name, me.data?.email])
+
+  if (me.isLoading || !me.data) {
+    return <p className="text-stone-500 dark:text-stone-400">Загрузка…</p>
   }
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-semibold">Привет!</h2>
-          <p className="text-slate-600 dark:text-slate-400">Управляйте профилем, услугами и записями.</p>
+      <header className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-3xl">
+          Добро пожаловать, {firstName}! <span aria-hidden>👋</span>
+        </h1>
+        <p className="text-sm capitalize text-stone-500 dark:text-stone-400">{formatRuGreetingDate(new Date())}</p>
+      </header>
+
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          value={stats.clientCount}
+          label="Клиентов в базе"
+          iconBg="bg-teal-100 dark:bg-teal-950/50"
+          iconColor="text-teal-700 dark:text-teal-300"
+          icon={
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197"
+              />
+            </svg>
+          }
+        />
+        <StatCard
+          value={stats.serviceCount}
+          label="Активных услуг"
+          iconBg="bg-emerald-100/90 dark:bg-emerald-950/40"
+          iconColor="text-emerald-700 dark:text-emerald-300"
+          icon={
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m8 0V8a2 2 0 00-2-2H8a2 2 0 00-2 2v2m12 0H4"
+              />
+            </svg>
+          }
+        />
+        <StatCard
+          value={stats.todayCount}
+          label="Записей сегодня"
+          sub={stats.nextTodayLabel ? `Ближайшая · ${stats.nextTodayLabel}` : undefined}
+          iconBg="bg-amber-100/90 dark:bg-amber-950/35"
+          iconColor="text-amber-800 dark:text-amber-200"
+          icon={
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
+          }
+        />
+        <StatCard
+          value={stats.revenueMonth > 0 ? `${stats.revenueMonth.toLocaleString('ru-RU')}` : '—'}
+          label="Выручка за месяц"
+          sub="По активным записям"
+          iconBg="bg-violet-100/90 dark:bg-violet-950/40"
+          iconColor="text-violet-700 dark:text-violet-300"
+          icon={
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          }
+        />
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-5">
+        <div className="rounded-xl border border-stone-200/90 bg-white p-5 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80 lg:col-span-3">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-50">Ближайшие записи</h2>
+            <Link
+              to="/schedule"
+              className="text-sm font-medium text-teal-700 hover:text-teal-600 dark:text-teal-400 dark:hover:text-teal-300"
+            >
+              Расписание →
+            </Link>
+          </div>
+          {stats.upcoming.length === 0 ? (
+            <p className="text-sm text-stone-500 dark:text-stone-400">Пока нет предстоящих записей.</p>
+          ) : (
+            <ul className="space-y-2">
+              {stats.upcoming.map((b: Booking, i: number) => (
+                <li
+                  key={b.id}
+                  className={cn(
+                    'flex gap-3 rounded-lg border border-stone-100 bg-stone-50/80 py-3 pl-3 pr-3 dark:border-stone-800 dark:bg-stone-950/40',
+                    'border-l-4',
+                    accentBar[i % accentBar.length],
+                  )}
+                >
+                  <div className="min-w-[7.5rem] shrink-0 text-xs font-medium text-stone-600 dark:text-stone-400">
+                    {formatSlotShort(b.start_at)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-stone-900 dark:text-stone-100">
+                      {clientNameById.get(b.client_id) ?? 'Клиент'}
+                    </p>
+                    <p className="text-xs text-stone-500 dark:text-stone-500">
+                      Услуга · {b.duration_min} мин · {b.price_snapshot} {b.currency_snapshot}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => createInvite.mutate()}
-            className="rounded-md border border-emerald-600 px-4 py-2 text-sm font-semibold text-emerald-700 disabled:opacity-50 dark:border-emerald-400 dark:text-emerald-300"
-          >
-            Создать инвайт
-          </button>
-          <button
-            type="button"
-            onClick={() => logout.mutate()}
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm dark:border-slate-700"
-          >
-            Выйти
-          </button>
+
+        <div className="rounded-xl border border-stone-200/90 bg-white p-5 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80 lg:col-span-2">
+          <h2 className="mb-4 text-lg font-semibold text-stone-900 dark:text-stone-50">Быстрые действия</h2>
+          <ul className="space-y-1">
+            {[
+              { to: '/clients', label: 'Добавить клиента' },
+              { to: '/bookings', label: 'Новая запись' },
+              { to: '/services', label: 'Добавить услугу' },
+              { to: '/schedule', label: 'Открыть расписание' },
+            ].map((item) => (
+              <li key={item.to}>
+                <Link
+                  to={item.to}
+                  className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-stone-800 transition hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-stone-800/60"
+                >
+                  {item.label}
+                  <IconChevronRight className="h-4 w-4 text-stone-400" />
+                </Link>
+              </li>
+            ))}
+            <li>
+              <button
+                type="button"
+                onClick={() => createInvite.mutate()}
+                disabled={createInvite.isPending}
+                className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium text-stone-800 transition hover:bg-stone-100 disabled:opacity-50 dark:text-stone-200 dark:hover:bg-stone-800/60"
+              >
+                Ссылка-приглашение для клиента
+                <IconChevronRight className="h-4 w-4 text-stone-400" />
+              </button>
+            </li>
+          </ul>
         </div>
-      </div>
+      </section>
 
       <section className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-sm text-slate-600 dark:text-slate-400">Учётная запись</p>
-          <p className="text-xl font-semibold">{me.data?.email}</p>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
-            {me.data?.email_verified ? 'Email подтверждён' : 'Подтвердите email для безопасного доступа'}
+        <div className="rounded-xl border border-stone-200/90 bg-white p-5 dark:border-stone-700/90 dark:bg-stone-900/80">
+          <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Учётная запись</p>
+          <p className="mt-2 text-lg font-semibold text-stone-900 dark:text-stone-50">{me.data.email}</p>
+          <p className="mt-1 text-xs text-stone-500">
+            {me.data.email_verified ? 'Email подтверждён' : 'Подтвердите email'}
           </p>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-          <p className="text-sm text-slate-600 dark:text-slate-400">Профиль мастера</p>
+        <div className="rounded-xl border border-stone-200/90 bg-white p-5 dark:border-stone-700/90 dark:bg-stone-900/80">
+          <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Профиль мастера</p>
           {master.data ? (
             <>
-              <p className="text-xl font-semibold">{master.data.display_name}</p>
-              <p className="text-slate-600 dark:text-slate-400">TZ: {master.data.timezone}</p>
+              <p className="mt-2 text-lg font-semibold text-stone-900 dark:text-stone-50">{master.data.display_name}</p>
+              <p className="text-xs text-stone-500">Часовой пояс: {master.data.timezone}</p>
             </>
           ) : (
-            <p className="text-slate-600 dark:text-slate-400">Нет профиля</p>
+            <p className="mt-2 text-sm text-stone-500">Профиль не загружен</p>
           )}
         </div>
       </section>
 
-      {inviteMessage && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-slate-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-slate-100">
-          {inviteMessage}
+      {inviteMessage ? (
+        <div className="rounded-xl border border-teal-200/80 bg-teal-50/90 p-4 text-sm text-stone-800 dark:border-teal-900/50 dark:bg-teal-950/30 dark:text-stone-100">
+          <p className="font-medium text-teal-900 dark:text-teal-100">Ссылка для клиента</p>
+          <p className="mt-2 break-all font-mono text-xs">{inviteMessage}</p>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

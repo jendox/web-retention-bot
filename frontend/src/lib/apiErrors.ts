@@ -10,6 +10,10 @@ const DETAIL_RU: Record<string, string> = {
   'Not authenticated': 'Требуется вход.',
   'Email address is not verified': 'Сначала подтвердите email.',
   'Master profile not found': 'Профиль мастера не найден.',
+  'Client not found.': 'Клиент не найден.',
+  'No fields to update.': 'Нечего сохранить: не переданы поля.',
+  'Client has bookings and cannot be deleted.': 'Нельзя удалить клиента: есть записи.',
+  'Client is linked to an invitation and cannot be deleted.': 'Нельзя удалить клиента: есть привязка по приглашению.',
 }
 
 export class ApiError extends Error {
