@@ -23,6 +23,8 @@ class SecuritySettings(BaseModel):
 
 class SessionSettings(BaseModel):
     cookie_name: str = "session_id"
+    csrf_cookie_name: str = "csrf_token"
+    csrf_header_name: str = "X-CSRF-Token"
     cookie_secure: bool = False
     ttl_seconds: int = 60 * 60 * 24 * 14
 

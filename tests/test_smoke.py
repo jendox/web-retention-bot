@@ -9,6 +9,9 @@ from app.core.config import get_settings
 from app.core.verification_token import mint_email_verification_token
 from app.main import app
 
+CSRF_COOKIE = "csrf_token"
+CSRF_HEADER = "X-CSRF-Token"
+
 
 def _skip_if_unreachable(exc: BaseException) -> None:
     cur: BaseException | None = exc
@@ -18,6 +21,17 @@ def _skip_if_unreachable(exc: BaseException) -> None:
         if isinstance(cur, OSError) and getattr(cur, "errno", None) == errno.ECONNREFUSED:
             pytest.skip(f"infra unreachable: {exc}")
         cur = cur.__cause__
+
+
+def _csrf_headers(client: TestClient) -> dict[str, str]:
+    token = client.cookies.get(CSRF_COOKIE)
+    assert token
+    return {CSRF_HEADER: token}
+
+
+def _issue_csrf(client: TestClient) -> None:
+    resp = client.get("/api/auth/csrf")
+    assert resp.status_code == 200, resp.text
 
 
 def test_health():
@@ -40,14 +54,19 @@ def test_auth_register_verify_login_flow():
 
     try:
         with TestClient(app) as client:
-            reg = client.post("/api/auth/register", json=register_body)
+            _issue_csrf(client)
+            reg = client.post("/api/auth/register", json=register_body, headers=_csrf_headers(client))
             assert reg.status_code == 201
             data = reg.json()
             assert data["email"] == email
             assert data["email_verified"] is False
             assert client.get("/api/auth/me").status_code == 401
 
-            deny = client.post("/api/auth/login", json={"email": email, "password": password})
+            deny = client.post(
+                "/api/auth/login",
+                json={"email": email, "password": password},
+                headers=_csrf_headers(client),
+            )
             assert deny.status_code == 403
 
             tok = mint_email_verification_token(
@@ -57,15 +76,20 @@ def test_auth_register_verify_login_flow():
                 ttl_seconds=settings.security.email_verification_ttl_seconds,
             )
 
-            verify = client.post("/api/auth/verify-email", json={"token": tok})
+            verify = client.post("/api/auth/verify-email", json={"token": tok}, headers=_csrf_headers(client))
             assert verify.status_code == 200
             assert verify.json()["email_verified"] is True
             assert client.get("/api/auth/me").status_code == 200
 
-            client.post("/api/auth/logout")
+            client.post("/api/auth/logout", headers=_csrf_headers(client))
             assert client.get("/api/auth/me").status_code == 401
 
-            login_ok = client.post("/api/auth/login", json={"email": email, "password": password})
+            _issue_csrf(client)
+            login_ok = client.post(
+                "/api/auth/login",
+                json={"email": email, "password": password},
+                headers=_csrf_headers(client),
+            )
             assert login_ok.status_code == 200
             assert client.get("/api/auth/me").status_code == 200
 

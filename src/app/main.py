@@ -8,7 +8,7 @@ import app.worker.celery_app as _celery_app  # noqa: F401  # side effect: config
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.database import Database
-from app.core.middlewares import REQUEST_ID_HEADER, RequestContextMiddleware
+from app.core.middlewares import REQUEST_ID_HEADER, CSRFMiddleware, RequestContextMiddleware
 from app.core.structured_logging import configure_structlog
 
 
@@ -35,6 +35,7 @@ def create_application() -> FastAPI:
     )
     _app.state.settings = settings
 
+    _app.add_middleware(CSRFMiddleware)
     _app.add_middleware(RequestContextMiddleware)
     _app.add_middleware(
         CORSMiddleware,

@@ -205,7 +205,7 @@ function AddServiceModal({ open, onClose, defaultCurrency, onSubmit, isPending, 
             </select>
           </label>
           <label className="flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300">
-            <input type="checkbox" {...form.register('is_active', { valueAsBoolean: true })} className="rounded border-stone-300" />
+            <input type="checkbox" {...form.register('is_active')} className="rounded border-stone-300" />
             Услуга активна (видна при записи)
           </label>
           {errorMessage ? (
@@ -387,7 +387,7 @@ function EditServiceModal({ service, onClose, onSubmit, isPending, errorMessage 
             </select>
           </label>
           <label className="flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300">
-            <input type="checkbox" {...form.register('is_active', { valueAsBoolean: true })} className="rounded border-stone-300" />
+            <input type="checkbox" {...form.register('is_active')} className="rounded border-stone-300" />
             Услуга активна (видна при записи)
           </label>
           <label className="block">

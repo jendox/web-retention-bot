@@ -1,3 +1,4 @@
+import secrets
 from typing import Annotated
 from uuid import UUID
 
@@ -34,6 +35,20 @@ from app.use_cases.verify_email import VerifyEmailUseCase, get_verify_email_use_
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _attach_csrf_cookie(settings: Settings, response: Response) -> str:
+    token = secrets.token_urlsafe(32)
+    response.set_cookie(
+        key=settings.session.csrf_cookie_name,
+        value=token,
+        httponly=False,
+        samesite="lax",
+        secure=settings.session.cookie_secure,
+        max_age=settings.session.ttl_seconds,
+        path="/",
+    )
+    return token
+
+
 async def _attach_session(settings: Settings, response: Response, store: SessionStore, user_id: UUID) -> None:
     token = await store.create(user_id, settings.session.ttl_seconds)
     response.set_cookie(
@@ -45,12 +60,29 @@ async def _attach_session(settings: Settings, response: Response, store: Session
         max_age=settings.session.ttl_seconds,
         path="/",
     )
+    _attach_csrf_cookie(settings, response)
 
 
 async def _clear_session(response: Response, store: SessionStore, cookie_value: str | None) -> None:
     await store.destroy(cookie_value)
     settings = get_settings()
     response.delete_cookie(settings.session.cookie_name, path="/")
+    response.delete_cookie(settings.session.csrf_cookie_name, path="/")
+
+
+@router.get(
+    path="/csrf",
+    summary="Issue a CSRF token",
+    description=(
+        "Sets a readable CSRF cookie and returns the same token in the response body. The SPA should call this "
+        "before unsafe requests (`POST`, `PUT`, `PATCH`, `DELETE`) and then send the token in `X-CSRF-Token`."
+    ),
+    response_description="CSRF token issued.",
+)
+async def csrf_token(request: Request, response: Response) -> dict[str, str]:
+    settings = request.app.state.settings
+    token = _attach_csrf_cookie(settings, response)
+    return {"csrf_token": token}
 
 
 @router.post(
@@ -243,4 +275,5 @@ async def logout(
     settings = request.app.state.settings
     token = request.cookies.get(settings.session.cookie_name)
     await _clear_session(response, store, token)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response

@@ -12,7 +12,7 @@ class InvitationError(Exception):
         status_code: int | None = None,
         error_message: str | None = None,
     ) -> None:
-        super().__init__(self)
+        super().__init__(error_message)
         if status_code is not None:
             self.status_code = status_code
         if error_message is not None:

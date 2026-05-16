@@ -145,6 +145,9 @@ export function InvitationPage() {
   }
 
   const data = landing.data
+  if (!data) {
+    return null
+  }
   const services: Service[] = data.services
 
   const loggedInVerified = me.isSuccess && me.data?.email_verified === true

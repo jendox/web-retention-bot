@@ -11,6 +11,8 @@ from app.main import app
 
 MASTER_PASSWORD = "masterpass1"
 CLIENT_PASSWORD = "clientpass1"
+CSRF_COOKIE = "csrf_token"
+CSRF_HEADER = "X-CSRF-Token"
 
 
 def _skip_if_unreachable(exc: BaseException) -> None:
@@ -33,7 +35,19 @@ def _verification_token(user_id: str, email: str) -> str:
     )
 
 
+def _csrf_headers(client: TestClient) -> dict[str, str]:
+    token = client.cookies.get(CSRF_COOKIE)
+    assert token
+    return {CSRF_HEADER: token}
+
+
+def _issue_csrf(client: TestClient) -> None:
+    resp = client.get("/api/auth/csrf")
+    assert resp.status_code == 200, resp.text
+
+
 def _register_verified_master(client: TestClient, *, email: str, display_name: str) -> dict:
+    _issue_csrf(client)
     reg = client.post(
         "/api/auth/register",
         json={
@@ -41,9 +55,14 @@ def _register_verified_master(client: TestClient, *, email: str, display_name: s
             "password": MASTER_PASSWORD,
             "master_display_name": display_name,
         },
+        headers=_csrf_headers(client),
     )
     assert reg.status_code == 201, reg.text
-    verify = client.post("/api/auth/verify-email", json={"token": _verification_token(reg.json()["id"], email)})
+    verify = client.post(
+        "/api/auth/verify-email",
+        json={"token": _verification_token(reg.json()["id"], email)},
+        headers=_csrf_headers(client),
+    )
     assert verify.status_code == 200, verify.text
     master = client.get("/api/masters/me")
     assert master.status_code == 200, master.text
@@ -51,15 +70,21 @@ def _register_verified_master(client: TestClient, *, email: str, display_name: s
 
 
 def _register_verified_client(client: TestClient, *, email: str) -> dict:
+    _issue_csrf(client)
     reg = client.post(
         "/api/auth/register-client",
         json={
             "email": email,
             "password": CLIENT_PASSWORD,
         },
+        headers=_csrf_headers(client),
     )
     assert reg.status_code == 201, reg.text
-    verify = client.post("/api/auth/verify-email", json={"token": _verification_token(reg.json()["id"], email)})
+    verify = client.post(
+        "/api/auth/verify-email",
+        json={"token": _verification_token(reg.json()["id"], email)},
+        headers=_csrf_headers(client),
+    )
     assert verify.status_code == 200, verify.text
     return verify.json()
 
@@ -74,7 +99,7 @@ def test_open_invitation_accept_creates_client_link():
         with TestClient(app) as client:
             master = _register_verified_master(client, email=master_email, display_name=master_name)
 
-            created = client.post("/api/invitations", json={})
+            created = client.post("/api/invitations", json={}, headers=_csrf_headers(client))
             assert created.status_code == 201, created.text
             token = created.json()["token"]
 
@@ -86,12 +111,13 @@ def test_open_invitation_accept_creates_client_link():
             assert landing_data["accepted_at"] is None
             assert landing_data["linked_client_id"] is None
 
-            assert client.post("/api/auth/logout").status_code == 204
+            assert client.post("/api/auth/logout", headers=_csrf_headers(client)).status_code == 204
             _register_verified_client(client, email=client_email)
 
             accepted = client.post(
                 f"/api/invitations/{token}/accept",
                 json={"display_name": "Open Invite Client", "phone": "+375291112233"},
+                headers=_csrf_headers(client),
             )
             assert accepted.status_code == 200, accepted.text
             accepted_data = accepted.json()
@@ -133,11 +159,16 @@ def test_targeted_invitation_accept_links_existing_client_and_flags_email_mismat
                     "phone": "+375291110000",
                     "email": profile_email,
                 },
+                headers=_csrf_headers(client),
             )
             assert created_client.status_code == 201, created_client.text
             target_client_id = created_client.json()["client"]["id"]
 
-            invite = client.post("/api/invitations", json={"target_client_id": target_client_id})
+            invite = client.post(
+                "/api/invitations",
+                json={"target_client_id": target_client_id},
+                headers=_csrf_headers(client),
+            )
             assert invite.status_code == 201, invite.text
             token = invite.json()["token"]
             assert invite.json()["target_client_id"] == target_client_id
@@ -147,12 +178,13 @@ def test_targeted_invitation_accept_links_existing_client_and_flags_email_mismat
             assert landing.json()["invite_kind"] == "client"
             assert landing.json()["master_record_has_email"] is True
 
-            assert client.post("/api/auth/logout").status_code == 204
+            assert client.post("/api/auth/logout", headers=_csrf_headers(client)).status_code == 204
             _register_verified_client(client, email=client_email)
 
             accepted = client.post(
                 f"/api/invitations/{token}/accept",
                 json={"display_name": "Accepted Client", "phone": "+375292224455"},
+                headers=_csrf_headers(client),
             )
             assert accepted.status_code == 200, accepted.text
             assert accepted.json() == {
@@ -170,10 +202,12 @@ def test_targeted_invitation_accept_links_existing_client_and_flags_email_mismat
                 and item["client_display_name"] == "Accepted Client"
             ]
 
-            assert client.post("/api/auth/logout").status_code == 204
+            assert client.post("/api/auth/logout", headers=_csrf_headers(client)).status_code == 204
+            _issue_csrf(client)
             login_master = client.post(
                 "/api/auth/login",
                 json={"email": master_email, "password": MASTER_PASSWORD},
+                headers=_csrf_headers(client),
             )
             assert login_master.status_code == 200, login_master.text
 
