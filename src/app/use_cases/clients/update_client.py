@@ -7,7 +7,7 @@ from app.core.structured_logging import get_logger, log_context
 from app.repositories.clients import ClientRepository, get_client_repo
 from app.schemas.client import ClientSchema, ClientUpdate, ClientWithLinkResponse, MasterClientOut
 
-from .exceptions import ClientNotFoundError, ClientNothingToUpdateError
+from .exceptions import ClientEmailLockedError, ClientNameLockedError, ClientNotFoundError, ClientNothingToUpdateError
 
 _CLIENT_FIELDS = frozenset({"display_name", "phone", "email"})
 _LINK_FIELDS = frozenset({"notes", "alias"})
@@ -36,6 +36,20 @@ class UpdateClientUseCase:
                 logger.warning("failed", reason="client_not_found")
                 raise ClientNotFoundError from None
             link, client = row
+
+            if "email" in patch and client.user_id is not None and not link.invite_email_mismatch:
+                incoming_email = str(patch["email"]).lower() if patch["email"] is not None else None
+                current_email = str(client.email).lower() if client.email is not None else None
+                if incoming_email != current_email:
+                    logger.warning("failed", reason="client_email_locked")
+                    raise ClientEmailLockedError from None
+
+            if "display_name" in patch and client.user_id is not None:
+                incoming_name = str(patch["display_name"])
+                current_name = str(client.display_name)
+                if incoming_name != current_name:
+                    logger.warning("failed", reason="client_name_locked")
+                    raise ClientNameLockedError from None
 
             for key, value in patch.items():
                 if key in _CLIENT_FIELDS:

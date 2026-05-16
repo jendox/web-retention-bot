@@ -343,7 +343,7 @@ export function ClientsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">Клиенты</h1>
           <p className="mt-1 max-w-xl text-sm text-stone-600 dark:text-stone-400">
-            Список людей для учёта: записи и контакты без обязательной регистрации в сервисе.
+            Список клиентов, их контакты, приглашения и записи.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2 sm:pt-1">
@@ -390,7 +390,7 @@ export function ClientsPage() {
                   <th className="px-4 py-3 font-semibold text-stone-700 dark:text-stone-300">Имя</th>
                   <th className="px-4 py-3 font-semibold text-stone-700 dark:text-stone-300">Email</th>
                   <th className="px-4 py-3 font-semibold text-stone-700 dark:text-stone-300">Телефон</th>
-                  <th className="hidden px-4 py-3 font-semibold text-stone-500 md:table-cell">Заметка</th>
+                  <th className="hidden px-4 py-3 font-semibold text-stone-500 md:table-cell">Псевдоним</th>
                   <th className="w-10 px-1 py-3 text-center font-semibold text-stone-500">
                     <span className="sr-only">Пригласить</span>
                   </th>
@@ -435,7 +435,7 @@ export function ClientsPage() {
                     </td>
                     <td className="px-4 py-3 text-stone-600 dark:text-stone-400">{row.client.phone ?? '—'}</td>
                     <td className="hidden max-w-xs truncate px-4 py-3 text-stone-500 md:table-cell">
-                      {row.link.notes ?? '—'}
+                      {row.link.alias ?? '—'}
                     </td>
                     <td
                       className="px-1 py-2 text-center"

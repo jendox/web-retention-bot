@@ -9,6 +9,14 @@ class ClientNothingToUpdateError(Exception):
     """PATCH body contained no fields to apply."""
 
 
+class ClientEmailLockedError(Exception):
+    """Email is controlled by the linked client account and cannot be changed."""
+
+
+class ClientNameLockedError(Exception):
+    """Display name is controlled by the linked client account and cannot be changed."""
+
+
 class ClientHasBlockingRelationsError(Exception):
     """Client cannot be removed (e.g. has bookings or invitations)."""
 

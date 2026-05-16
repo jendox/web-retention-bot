@@ -18,7 +18,9 @@ from app.schemas.pagination import PaginatedResponse
 from app.use_cases.clients.create_client import CreateClientUseCase, get_create_client_use_case
 from app.use_cases.clients.delete_client import DeleteClientUseCase, get_delete_client_use_case
 from app.use_cases.clients.exceptions import (
+    ClientEmailLockedError,
     ClientHasBlockingRelationsError,
+    ClientNameLockedError,
     ClientNotFoundError,
     ClientNothingToUpdateError,
 )
@@ -154,6 +156,10 @@ async def get_client(
             "model": ErrorDetail,
             "description": "No such client or it is not linked to this master.",
         },
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorDetail,
+            "description": "Linked client account fields cannot be changed.",
+        },
     },
 )
 async def patch_client(
@@ -168,6 +174,16 @@ async def patch_client(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Client not found.") from None
     except ClientNothingToUpdateError:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No fields to update.") from None
+    except ClientEmailLockedError:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Client email is linked to the client account and cannot be changed.",
+        ) from None
+    except ClientNameLockedError:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="Client name is linked to the client account and cannot be changed.",
+        ) from None
 
 
 @router.delete(

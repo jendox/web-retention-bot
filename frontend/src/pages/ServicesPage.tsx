@@ -518,8 +518,7 @@ export function ServicesPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">Услуги</h1>
           <p className="mt-1 max-w-xl text-sm text-stone-600 dark:text-stone-400">
-            Каталог для записи: длительность, цена и валюта. Валюта по умолчанию в профиле:{' '}
-            <span className="font-medium text-stone-800 dark:text-stone-200">{defaultCurrency}</span>.
+            Добавьте услуги, которые клиенты смогут выбрать при записи.
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2 sm:pt-1">

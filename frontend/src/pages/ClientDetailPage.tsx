@@ -26,6 +26,46 @@ type FormValues = {
   notes: string
 }
 
+function EmailStatus({
+  clientEmail,
+  linkedAccountEmail,
+  mismatch,
+}: {
+  clientEmail: string | null | undefined
+  linkedAccountEmail: string | null | undefined
+  mismatch: boolean
+}) {
+  if (mismatch) {
+    return (
+      <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+        Email отличается от аккаунта клиента: {linkedAccountEmail ?? '—'}.
+      </p>
+    )
+  }
+  if (linkedAccountEmail && clientEmail) {
+    return (
+      <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
+        Email подтвержден аккаунтом клиента и не редактируется.
+      </p>
+    )
+  }
+  if (clientEmail) {
+    return <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">Email указан вручную.</p>
+  }
+  return <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">Email не указан.</p>
+}
+
+function NameStatus({ locked }: { locked: boolean }) {
+  if (!locked) {
+    return <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">Имя указано в карточке мастера.</p>
+  }
+  return (
+    <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300">
+      Имя подтверждено аккаунтом клиента и не редактируется.
+    </p>
+  )
+}
+
 /** Заглушки до подключения API списка записей по клиенту */
 const MOCK_UPCOMING_BOOKINGS = [
   {
@@ -182,6 +222,8 @@ export function ClientDetailPage() {
         : detail.data?.link.invitation_status === 'REVOKED'
           ? 'Отозван'
           : (detail.data?.link.invitation_status ?? '—')
+  const emailLocked = Boolean(detail.data?.client.user_id && !detail.data.link.invite_email_mismatch)
+  const nameLocked = Boolean(detail.data?.client.user_id)
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 pb-10">
@@ -280,16 +322,24 @@ export function ClientDetailPage() {
               <div className="space-y-4 pt-2">
                 <label className="block">
                   <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
-                    Имя или подпись <span className="text-red-600 dark:text-red-400">*</span>
+                    Имя клиента <span className="text-red-600 dark:text-red-400">*</span>
                   </span>
                   <input
                     {...register('display_name', { required: true })}
-                    className={cn(fieldClass, 'mt-1')}
+                    readOnly={nameLocked}
+                    aria-readonly={nameLocked}
+                    className={cn(
+                      fieldClass,
+                      'mt-1',
+                      nameLocked &&
+                        'cursor-not-allowed bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400',
+                    )}
                     aria-required="true"
                   />
                   {errors.display_name ? (
                     <span className="mt-1 block text-xs text-red-700 dark:text-red-300">Укажите имя</span>
                   ) : null}
+                  <NameStatus locked={nameLocked} />
                 </label>
 
                 <label className="block">
@@ -299,11 +349,29 @@ export function ClientDetailPage() {
 
                 <label className="block">
                   <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Email</span>
-                  <input {...register('email')} type="email" className={cn(fieldClass, 'mt-1')} />
+                  <input
+                    {...register('email')}
+                    type="email"
+                    readOnly={emailLocked}
+                    aria-readonly={emailLocked}
+                    className={cn(
+                      fieldClass,
+                      'mt-1',
+                      emailLocked &&
+                        'cursor-not-allowed bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400',
+                    )}
+                  />
+                  {detail.data ? (
+                    <EmailStatus
+                      clientEmail={detail.data.client.email}
+                      linkedAccountEmail={detail.data.link.linked_account_email}
+                      mismatch={Boolean(detail.data.link.invite_email_mismatch)}
+                    />
+                  ) : null}
                 </label>
 
                 <label className="block">
-                  <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Псевдоним (для себя)</span>
+                  <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Псевдоним у вас</span>
                   <input {...register('alias')} className={cn(fieldClass, 'mt-1')} />
                 </label>
 
