@@ -57,6 +57,18 @@ function IconTrash(props: { className?: string }) {
   )
 }
 
+function IconWarning(props: { className?: string }) {
+  return (
+    <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"
+      />
+    </svg>
+  )
+}
+
 type AddModalProps = {
   open: boolean
   onClose: () => void
@@ -376,8 +388,8 @@ export function ClientsPage() {
               <thead>
                 <tr className="border-b border-stone-200 bg-stone-50/80 dark:border-stone-700 dark:bg-stone-950/50">
                   <th className="px-4 py-3 font-semibold text-stone-700 dark:text-stone-300">Имя</th>
-                  <th className="px-4 py-3 font-semibold text-stone-700 dark:text-stone-300">Телефон</th>
                   <th className="px-4 py-3 font-semibold text-stone-700 dark:text-stone-300">Email</th>
+                  <th className="px-4 py-3 font-semibold text-stone-700 dark:text-stone-300">Телефон</th>
                   <th className="hidden px-4 py-3 font-semibold text-stone-500 md:table-cell">Заметка</th>
                   <th className="w-10 px-1 py-3 text-center font-semibold text-stone-500">
                     <span className="sr-only">Пригласить</span>
@@ -405,8 +417,23 @@ export function ClientsPage() {
                     <td className="px-4 py-3 font-medium text-stone-900 dark:text-stone-100">
                       {row.client.display_name}
                     </td>
+                    <td className="px-4 py-3 text-stone-600 dark:text-stone-400">
+                      <div className="flex items-center gap-2">
+                        <span className={cn(row.link.invite_email_mismatch && 'text-amber-800 dark:text-amber-200')}>
+                          {row.client.email ?? '—'}
+                        </span>
+                        {row.link.invite_email_mismatch ? (
+                          <span
+                            className="inline-flex shrink-0 items-center justify-center text-amber-600 dark:text-amber-300"
+                            title="Email в карточке отличается от email аккаунта клиента. Проверьте адрес, чтобы клиент получал уведомления."
+                            aria-label="Email в карточке отличается от email аккаунта клиента"
+                          >
+                            <IconWarning className="h-4 w-4" />
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-stone-600 dark:text-stone-400">{row.client.phone ?? '—'}</td>
-                    <td className="px-4 py-3 text-stone-600 dark:text-stone-400">{row.client.email ?? '—'}</td>
                     <td className="hidden max-w-xs truncate px-4 py-3 text-stone-500 md:table-cell">
                       {row.link.notes ?? '—'}
                     </td>

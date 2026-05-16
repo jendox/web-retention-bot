@@ -209,8 +209,8 @@ export function ClientDetailPage() {
             <p className="font-medium">Расхождение email</p>
             <p className="mt-1 text-amber-900/90 dark:text-amber-200">
               Клиент зашёл как <span className="font-mono">{detail.data.link.linked_account_email ?? '—'}</span>, в
-              карточке указан другой контакт. Обновите email ниже, если уведомления должны уходить на адрес входа —
-              значок исчезнет после совпадения.
+              карточке указан другой контакт. Обновите email ниже, чтобы клиент гарантированно получал уведомления.
+              Предупреждение исчезнет после совпадения адресов.
             </p>
           </div>
         ) : null}

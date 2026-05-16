@@ -7,6 +7,15 @@ import { AUTH_LINK_CLASS } from '../components/auth/authStyles'
 import { getUserFacingError } from '../lib/apiErrors'
 import { queryClient } from '../lib/query'
 
+const POST_VERIFY_KEY = 'invite_post_verify_return'
+
+function takePostVerifyReturnPath(): string | null {
+  const next = sessionStorage.getItem(POST_VERIFY_KEY) ?? localStorage.getItem(POST_VERIFY_KEY)
+  sessionStorage.removeItem(POST_VERIFY_KEY)
+  localStorage.removeItem(POST_VERIFY_KEY)
+  return next
+}
+
 export function VerifyEmailPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
@@ -23,9 +32,8 @@ export function VerifyEmailPage() {
       try {
         await verifyEmailApi({ token: decodeURIComponent(token) })
         await queryClient.invalidateQueries({ queryKey: ['me'] })
-        const next = sessionStorage.getItem('invite_post_verify_return')
+        const next = takePostVerifyReturnPath()
         if (next) {
-          sessionStorage.removeItem('invite_post_verify_return')
           navigate(next)
         } else {
           navigate('/')

@@ -22,6 +22,7 @@ const DETAIL_RU: Record<string, string> = {
   'You are already linked to this master.': 'Вы уже связаны с этим мастером.',
   'Service not found.': 'Услуга не найдена.',
   'Service has bookings and cannot be deleted.': 'Нельзя удалить услугу: есть записи, связанные с ней.',
+  'Too many requests': 'Слишком много попыток. Попробуйте позже.',
 }
 
 export class ApiError extends Error {
@@ -38,8 +39,8 @@ export class ApiError extends Error {
 }
 
 export function translateApiDetail(detail: string): string {
-  const trimmed = detail.trim()
-  return DETAIL_RU[trimmed] ?? DETAIL_RU[detail] ?? detail
+  const trimmed = detail.trim().replace(/^Value error,\s*/i, '')
+  return DETAIL_RU[trimmed] ?? DETAIL_RU[detail] ?? trimmed
 }
 
 /** Разбор тела ответа FastAPI (строка или validation errors). */
@@ -53,7 +54,7 @@ export function parseFastApiDetail(rawBody: string): string {
       return j.detail
         .map((item: unknown) => {
           if (item && typeof item === 'object' && 'msg' in item) {
-            return String((item as { msg: string }).msg)
+            return String((item as { msg: string }).msg).replace(/^Value error,\s*/i, '')
           }
           return JSON.stringify(item)
         })

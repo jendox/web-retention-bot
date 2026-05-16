@@ -1,28 +1,60 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
-import { Link, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 
-import { availabilityApi } from '../api/availability'
-import { bookingsCreateApi } from '../api/bookings'
 import { loginApi, meApi, registerClientApi } from '../api/auth'
 import { invitationAcceptApi, invitationGetApi } from '../api/invitations'
-import type { Service } from '../api/services'
 import { getUserFacingError } from '../lib/apiErrors'
+import { validatePassword } from '../lib/validators'
 
-const storageKey = (t: string) => `inviteClient:${t}`
 const POST_VERIFY_KEY = 'invite_post_verify_return'
 
 const inputClass =
   'rounded-md border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950'
 
+const stepBaseClass = 'rounded-md border px-3 py-2 transition'
+const stepCurrentClass =
+  'border-emerald-500 bg-emerald-50 text-emerald-950 shadow-sm ring-1 ring-emerald-200 dark:border-emerald-500 dark:bg-emerald-950/30 dark:text-emerald-50 dark:ring-emerald-900'
+const stepDoneClass =
+  'border-emerald-200 bg-white text-slate-600 dark:border-emerald-900/50 dark:bg-slate-900 dark:text-slate-400'
+const stepUpcomingClass =
+  'border-slate-200 bg-white text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500'
+const stepTitleBaseClass = 'font-medium'
+
+type AcceptFormValues = {
+  display_name: string
+  phone: string
+}
+
+type AuthFormValues = {
+  email: string
+  password: string
+}
+
+function stepClass(state: 'current' | 'done' | 'upcoming') {
+  const stateClass = state === 'current' ? stepCurrentClass : state === 'done' ? stepDoneClass : stepUpcomingClass
+  return `${stepBaseClass} ${stateClass}`
+}
+
+function stepTitleClass(state: 'current' | 'done' | 'upcoming') {
+  if (state === 'current') {
+    return `${stepTitleBaseClass} text-emerald-900 dark:text-emerald-100`
+  }
+  if (state === 'done') {
+    return `${stepTitleBaseClass} text-slate-900 dark:text-slate-100`
+  }
+  return `${stepTitleBaseClass} text-slate-500 dark:text-slate-500`
+}
+
 export function InvitationPage() {
   const { token = '' } = useParams()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [stagingClientId, setStagingClientId] = useState<string | null>(null)
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register')
   const [registeredNotice, setRegisteredNotice] = useState(false)
   const [postAcceptMismatch, setPostAcceptMismatch] = useState(false)
+  const [acceptedClientId, setAcceptedClientId] = useState<string | null>(null)
 
   const landing = useQuery({
     queryKey: ['invite', token],
@@ -33,34 +65,21 @@ export function InvitationPage() {
 
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
 
-  const clientId = useMemo(() => {
-    if (landing.data?.linked_client_id) {
-      return landing.data.linked_client_id
-    }
-    if (stagingClientId) {
-      return stagingClientId
-    }
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem(storageKey(token))
-      return stored ?? null
-    }
-    return null
-  }, [landing.data?.linked_client_id, stagingClientId, token])
-
-  const acceptForm = useForm({ defaultValues: { display_name: '', phone: '' } })
-  const registerForm = useForm({ defaultValues: { email: '', password: '' } })
-  const loginForm = useForm({ defaultValues: { email: '', password: '' } })
+  const acceptForm = useForm<AcceptFormValues>({ defaultValues: { display_name: '', phone: '' }, mode: 'onTouched' })
+  const registerForm = useForm<AuthFormValues>({ defaultValues: { email: '', password: '' }, mode: 'onTouched' })
+  const loginForm = useForm<AuthFormValues>({ defaultValues: { email: '', password: '' }, mode: 'onTouched' })
 
   const accept = useMutation({
     mutationFn: (body: { display_name: string; phone?: string | null }) => invitationAcceptApi(token, body),
     onSuccess: async (payload) => {
       setPostAcceptMismatch(payload.email_mismatch_with_master_record)
-      localStorage.setItem(storageKey(token), payload.client_id)
-      setStagingClientId(payload.client_id)
-      await landing.refetch()
-      await queryClient.invalidateQueries({ queryKey: ['me'] })
-      await queryClient.invalidateQueries({ queryKey: ['clients', 'me', 'masters'] })
-      setStagingClientId(null)
+      setAcceptedClientId(payload.client_id)
+      await Promise.all([
+        landing.refetch(),
+        queryClient.invalidateQueries({ queryKey: ['me'] }),
+        queryClient.invalidateQueries({ queryKey: ['clients', 'me', 'masters'] }),
+        queryClient.invalidateQueries({ queryKey: ['bookings', 'me'] }),
+      ])
     },
   })
 
@@ -74,63 +93,52 @@ export function InvitationPage() {
   const loginMut = useMutation({
     mutationFn: loginApi,
     onSuccess: async () => {
+      setRegisteredNotice(false)
       await queryClient.invalidateQueries({ queryKey: ['me'] })
     },
   })
 
   useEffect(() => {
     if (token && typeof window !== 'undefined') {
-      sessionStorage.setItem('last_invite_url', `${window.location.origin}/invite/${token}`)
+      const inviteUrl = `${window.location.origin}/invite/${token}`
+      sessionStorage.setItem('last_invite_url', inviteUrl)
+      localStorage.setItem('last_invite_url', inviteUrl)
     }
   }, [token])
 
   useEffect(() => {
-    if (!landing.data?.accepted_at) {
+    if (!token || typeof window === 'undefined') {
       return
     }
-    const cid = landing.data.linked_client_id
-    if (cid && typeof window !== 'undefined') {
-      localStorage.setItem(storageKey(token), cid)
+    const returnPath = `/invite/${token}`
+    sessionStorage.setItem(POST_VERIFY_KEY, returnPath)
+    localStorage.setItem(POST_VERIFY_KEY, returnPath)
+  }, [token])
+
+  useEffect(() => {
+    if (!me.data?.email_verified || acceptForm.getValues('display_name')) {
+      return
     }
-  }, [landing.data?.accepted_at, landing.data?.linked_client_id, token])
+    const fallbackName = me.data.email.split('@')[0]?.trim()
+    if (fallbackName) {
+      acceptForm.setValue('display_name', fallbackName)
+    }
+  }, [acceptForm, me.data?.email, me.data?.email_verified])
 
-  const [serviceId, setServiceId] = useState<string>()
-  const [day, setDay] = useState<string>(() => new Date().toISOString().slice(0, 10))
-  const masterId = useMemo(() => {
-    const services = landing.data?.services ?? []
-    return services[0]?.master_id
-  }, [landing.data?.services])
-
-  const slotsQuery = useQuery({
-    queryKey: ['slots', masterId, serviceId, day],
-    queryFn: () =>
-      availabilityApi({
-        master_id: masterId ?? '',
-        service_id: serviceId ?? '',
-        date: day,
-      }),
-    enabled: Boolean(masterId && serviceId && clientId && landing.data?.accepted_at),
-  })
-
-  const booking = useMutation({
-    mutationFn: (start: string) =>
-      bookingsCreateApi({
-        client_id: clientId ?? '',
-        service_id: serviceId ?? '',
-        start_at: start,
-        invite_token: token,
-      }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['bookings', 'me'] })
-    },
-  })
+  useEffect(() => {
+    if (!acceptedClientId) {
+      return
+    }
+    const timer = window.setTimeout(() => navigate('/client'), 1800)
+    return () => window.clearTimeout(timer)
+  }, [acceptedClientId, navigate])
 
   if (!token) {
     return <div className="px-6 py-10 text-slate-600 dark:text-slate-400">Некорректная ссылка.</div>
   }
 
   if (landing.isLoading) {
-    return <div className="px-6 py-10 pr-14 text-slate-600 dark:text-slate-400">Открываем инвайт…</div>
+    return <div className="px-6 py-10 pr-14 text-slate-600 dark:text-slate-400">Открываем приглашение...</div>
   }
 
   if (landing.isError) {
@@ -138,7 +146,7 @@ export function InvitationPage() {
       <div className="mx-auto max-w-lg px-6 py-10 pr-14">
         <p className="text-rose-700 dark:text-rose-300">{getUserFacingError(landing.error)}</p>
         <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
-          Попросите у мастера новую ссылку, если приглашение отозвали или срок истёк.
+          Попросите у мастера новую ссылку, если приглашение отозвали или срок истек.
         </p>
       </div>
     )
@@ -148,170 +156,216 @@ export function InvitationPage() {
   if (!data) {
     return null
   }
-  const services: Service[] = data.services
 
   const loggedInVerified = me.isSuccess && me.data?.email_verified === true
+  const loggedInUnverified = me.isSuccess && me.data && !me.data.email_verified
+  const accepted = Boolean(data.accepted_at || acceptedClientId)
+  const linkedClientId = data.linked_client_id ?? acceptedClientId
+  const masterInitial = data.master_display_name.trim().charAt(0).toUpperCase() || 'M'
+  const currentStep = accepted ? 4 : loggedInVerified ? 3 : registeredNotice || loggedInUnverified ? 2 : 1
+  const firstStepState = currentStep === 1 ? 'current' : 'done'
+  const secondStepState = currentStep === 2 ? 'current' : currentStep > 2 ? 'done' : 'upcoming'
+  const thirdStepState = currentStep === 3 ? 'current' : currentStep > 3 ? 'done' : 'upcoming'
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 px-6 py-10 pr-14">
-      <header>
-        <p className="text-sm uppercase tracking-wide text-emerald-600 dark:text-emerald-400">Приглашение</p>
-        <h1 className="text-3xl font-semibold">{data.master_display_name}</h1>
-        <p className="text-slate-600 dark:text-slate-400">
-          Часовой пояс мастера: {data.timezone}. Ссылка активна до {new Date(data.expires_at).toLocaleString('ru-RU')}
-        </p>
+    <div className="mx-auto max-w-3xl space-y-6 px-6 py-8 pr-14 sm:py-12">
+      <header className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="border-b border-slate-100 bg-emerald-50/80 px-6 py-5 dark:border-slate-800 dark:bg-emerald-950/20">
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-2xl font-semibold text-white dark:bg-emerald-500 dark:text-slate-950">
+              {masterInitial}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">Личный кабинет клиента</p>
+              <h1 className="text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                Вас пригласил {data.master_display_name}
+              </h1>
+            </div>
+          </div>
+        </div>
+        <div className="space-y-4 px-6 py-5">
+          <p className="max-w-2xl text-base text-slate-700 dark:text-slate-300">
+            Войдите или создайте аккаунт, чтобы принять приглашение
+          </p>
+          <div className="grid gap-3 text-sm sm:grid-cols-3">
+            <div className={stepClass(firstStepState)}>
+              <p className={stepTitleClass(firstStepState)}>1. Войдите</p>
+              <p className="mt-0.5">или создайте аккаунт</p>
+            </div>
+            <div className={stepClass(secondStepState)}>
+              <p className={stepTitleClass(secondStepState)}>2. Подтвердите email</p>
+              <p className="mt-0.5">если аккаунт новый</p>
+            </div>
+            <div className={stepClass(thirdStepState)}>
+              <p className={stepTitleClass(thirdStepState)}>3. Примите приглашение</p>
+              <p className="mt-0.5">мастер появится в кабинете</p>
+            </div>
+          </div>
+        </div>
       </header>
 
-      {!data.accepted_at && data.invite_kind === 'client' && data.master_record_has_email ? (
-        <div
-          className="rounded-xl border border-amber-200/90 bg-amber-50/90 p-4 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-100"
-          role="status"
-        >
-          <p className="font-medium">Обратите внимание</p>
-          <p className="mt-1 text-amber-900/90 dark:text-amber-200">
-            В карточке у мастера уже указан email. Если вы войдёте с <span className="font-medium">другим</span> адресом,
-            мастер увидит напоминание обновить контакт — иначе уведомления могут уходить не на тот ящик.
-          </p>
-        </div>
-      ) : null}
-
-      {!data.accepted_at && !loggedInVerified ? (
-        <div className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-xl font-semibold">Вход или регистрация</h2>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            Чтобы принять приглашение, войдите в существующий аккаунт или создайте новый и подтвердите email.
-          </p>
-
-          {me.isSuccess && me.data && !me.data.email_verified ? (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-950/50">
-              <p className="font-medium text-slate-900 dark:text-slate-100">Подтвердите email</p>
-              <p className="mt-1 text-slate-600 dark:text-slate-400">
-                Мы отправили письмо на {me.data.email}. После подтверждения откройте эту страницу снова — вы будете
-                авторизованы автоматически.
+      {!accepted && !loggedInVerified ? (
+        <section className="space-y-6 rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+          <div className="space-y-1">
+            <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-50">
+              {loggedInUnverified ? 'Подтвердите email' : 'Войдите или создайте аккаунт'}
+            </h2>
+            {loggedInUnverified ? (
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                После подтверждения email вы вернетесь сюда и сможете принять приглашение.
               </p>
-              <Link
-                to="/login"
-                className="mt-3 inline-block text-sm font-medium text-emerald-700 underline hover:text-emerald-600 dark:text-emerald-400"
-              >
-                Уже подтвердили? Войти
-              </Link>
+            ) : null}
+          </div>
+
+          {loggedInUnverified ? (
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-950/50">
+              <p className="font-medium text-slate-900 dark:text-slate-100">Письмо отправлено на {me.data.email}</p>
+              <p className="mt-1 text-slate-600 dark:text-slate-400">
+                Откройте ссылку из письма. После подтверждения останется один шаг: принять приглашение.
+              </p>
             </div>
           ) : null}
 
           {registeredNotice ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
               <p className="font-medium">Проверьте почту</p>
               <p className="mt-1">
-                Перейдите по ссылке из письма, затем эта страница откроется снова и вы сможете завершить приглашение.
+                Перейдите по ссылке из письма. Мы вернем вас сюда, чтобы завершить приглашение.
               </p>
             </div>
           ) : null}
 
-          <div className="flex gap-2 border-b border-slate-200 pb-2 dark:border-slate-700">
-            <button
-              type="button"
-              className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                authMode === 'register'
-                  ? 'bg-emerald-600 text-white dark:bg-emerald-500'
-                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
-              }`}
-              onClick={() => setAuthMode('register')}
-            >
-              Регистрация
-            </button>
-            <button
-              type="button"
-              className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                authMode === 'login'
-                  ? 'bg-emerald-600 text-white dark:bg-emerald-500'
-                  : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
-              }`}
-              onClick={() => setAuthMode('login')}
-            >
-              Вход
-            </button>
-          </div>
+          {!loggedInUnverified ? (
+            <>
+              <div className="flex gap-2 border-b border-slate-200 pb-2 dark:border-slate-700">
+                <button
+                  type="button"
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                    authMode === 'register'
+                      ? 'bg-emerald-600 text-white dark:bg-emerald-500 dark:text-slate-950'
+                      : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                  }`}
+                  onClick={() => setAuthMode('register')}
+                >
+                  Создать аккаунт
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                    authMode === 'login'
+                      ? 'bg-emerald-600 text-white dark:bg-emerald-500 dark:text-slate-950'
+                      : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'
+                  }`}
+                  onClick={() => setAuthMode('login')}
+                >
+                  Войти
+                </button>
+              </div>
 
-          {authMode === 'register' ? (
-            <form
-              className="space-y-3"
-              onSubmit={registerForm.handleSubmit((vals) => {
-                if (typeof window !== 'undefined') {
-                  sessionStorage.setItem(POST_VERIFY_KEY, `/invite/${token}`)
-                }
-                registerMut.mutate({
-                  email: vals.email.trim(),
-                  password: vals.password,
-                })
-              })}
-            >
-              <input
-                {...registerForm.register('email', { required: true })}
-                type="email"
-                autoComplete="email"
-                placeholder="Email"
-                className={`w-full ${inputClass}`}
-              />
-              <input
-                {...registerForm.register('password', { required: true, minLength: 8 })}
-                type="password"
-                autoComplete="new-password"
-                placeholder="Пароль (мин. 8 символов, буква и цифра)"
-                className={`w-full ${inputClass}`}
-              />
-              {registerMut.isError ? (
-                <p className="text-sm text-rose-600 dark:text-rose-300">{getUserFacingError(registerMut.error)}</p>
-              ) : null}
-              <button
-                className="rounded-md bg-emerald-600 px-4 py-2 font-semibold text-white dark:bg-emerald-500 dark:text-slate-950"
-                type="submit"
-                disabled={registerMut.isPending}
-              >
-                {registerMut.isPending ? 'Отправка…' : 'Зарегистрироваться'}
-              </button>
-            </form>
-          ) : (
-            <form
-              className="space-y-3"
-              onSubmit={loginForm.handleSubmit((vals) => {
-                loginMut.mutate({
-                  email: vals.email.trim(),
-                  password: vals.password,
-                })
-              })}
-            >
-              <input
-                {...loginForm.register('email', { required: true })}
-                type="email"
-                autoComplete="email"
-                placeholder="Email"
-                className={`w-full ${inputClass}`}
-              />
-              <input
-                {...loginForm.register('password', { required: true })}
-                type="password"
-                autoComplete="current-password"
-                placeholder="Пароль"
-                className={`w-full ${inputClass}`}
-              />
-              {loginMut.isError ? (
-                <p className="text-sm text-rose-600 dark:text-rose-300">{getUserFacingError(loginMut.error)}</p>
-              ) : null}
-              <button
-                className="rounded-md bg-emerald-600 px-4 py-2 font-semibold text-white dark:bg-emerald-500 dark:text-slate-950"
-                type="submit"
-                disabled={loginMut.isPending}
-              >
-                {loginMut.isPending ? 'Вход…' : 'Войти'}
-              </button>
-            </form>
-          )}
-        </div>
+              {authMode === 'register' ? (
+                <form
+                  className="space-y-3"
+                  onSubmit={registerForm.handleSubmit((vals) => {
+                    if (typeof window !== 'undefined') {
+                      const returnPath = `/invite/${token}`
+                      sessionStorage.setItem(POST_VERIFY_KEY, returnPath)
+                      localStorage.setItem(POST_VERIFY_KEY, returnPath)
+                    }
+                    registerMut.mutate({
+                      email: vals.email.trim(),
+                      password: vals.password,
+                    })
+                  })}
+                >
+                  <input
+                    {...registerForm.register('email', { required: 'Введите email' })}
+                    type="email"
+                    autoComplete="email"
+                    placeholder="Email"
+                    className={`w-full ${inputClass}`}
+                  />
+                  {registerForm.formState.errors.email ? (
+                    <p className="text-sm text-rose-600 dark:text-rose-300">
+                      {registerForm.formState.errors.email.message}
+                    </p>
+                  ) : null}
+                  <input
+                    {...registerForm.register('password', {
+                      validate: validatePassword,
+                    })}
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Пароль: минимум 8 символов, буква и цифра"
+                    className={`w-full ${inputClass}`}
+                  />
+                  {registerForm.formState.errors.password ? (
+                    <p className="text-sm text-rose-600 dark:text-rose-300">
+                      {registerForm.formState.errors.password.message}
+                    </p>
+                  ) : null}
+                  {registerMut.isError ? (
+                    <p className="text-sm text-rose-600 dark:text-rose-300">{getUserFacingError(registerMut.error)}</p>
+                  ) : null}
+                  <button
+                    className="rounded-md bg-emerald-600 px-4 py-2 font-semibold text-white disabled:opacity-60 dark:bg-emerald-500 dark:text-slate-950"
+                    type="submit"
+                    disabled={registerMut.isPending}
+                  >
+                    {registerMut.isPending ? 'Отправка...' : 'Создать аккаунт'}
+                  </button>
+                </form>
+              ) : (
+                <form
+                  className="space-y-3"
+                  onSubmit={loginForm.handleSubmit((vals) => {
+                    loginMut.mutate({
+                      email: vals.email.trim(),
+                      password: vals.password,
+                    })
+                  })}
+                >
+                  <input
+                    {...loginForm.register('email', { required: 'Введите email' })}
+                    type="email"
+                    autoComplete="email"
+                    placeholder="Email"
+                    className={`w-full ${inputClass}`}
+                  />
+                  {loginForm.formState.errors.email ? (
+                    <p className="text-sm text-rose-600 dark:text-rose-300">{loginForm.formState.errors.email.message}</p>
+                  ) : null}
+                  <input
+                    {...loginForm.register('password', { required: 'Введите пароль' })}
+                    type="password"
+                    autoComplete="current-password"
+                    placeholder="Пароль"
+                    className={`w-full ${inputClass}`}
+                  />
+                  {loginForm.formState.errors.password ? (
+                    <p className="text-sm text-rose-600 dark:text-rose-300">
+                      {loginForm.formState.errors.password.message}
+                    </p>
+                  ) : null}
+                  {loginMut.isError ? (
+                    <p className="text-sm text-rose-600 dark:text-rose-300">{getUserFacingError(loginMut.error)}</p>
+                  ) : null}
+                  <button
+                    className="rounded-md bg-emerald-600 px-4 py-2 font-semibold text-white disabled:opacity-60 dark:bg-emerald-500 dark:text-slate-950"
+                    type="submit"
+                    disabled={loginMut.isPending}
+                  >
+                    {loginMut.isPending ? 'Вход...' : 'Войти'}
+                  </button>
+                </form>
+              )}
+            </>
+          ) : null}
+        </section>
       ) : null}
 
-      {!data.accepted_at && loggedInVerified ? (
+      {!accepted && loggedInVerified ? (
         <form
-          className="space-y-3 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900"
+          className="space-y-4 rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900"
           onSubmit={acceptForm.handleSubmit((vals) =>
             accept.mutate({
               display_name: vals.display_name.trim(),
@@ -319,79 +373,62 @@ export function InvitationPage() {
             }),
           )}
         >
-          <h2 className="text-xl font-semibold">Завершите приглашение</h2>
-          <p className="text-sm text-slate-600 dark:text-slate-400">Вы вошли как {me.data?.email}.</p>
-          <input
-            {...acceptForm.register('display_name', { required: true })}
-            placeholder="Как к вам обращаться?"
-            className={`w-full ${inputClass}`}
-          />
-          <input {...acceptForm.register('phone')} placeholder="Телефон (необязательно)" className={`w-full ${inputClass}`} />
+          <div className="space-y-1">
+            <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-50">Остался последний шаг</h2>
+          </div>
+
+          <label className="block space-y-1">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Как к вам обращаться?</span>
+            <input
+              {...acceptForm.register('display_name', { required: true })}
+              autoComplete="name"
+              className={`w-full ${inputClass}`}
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="flex items-baseline gap-2">
+              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Телефон</span>
+              <span className="text-xs text-slate-400 dark:text-slate-500">необязательно</span>
+            </span>
+            <input {...acceptForm.register('phone')} autoComplete="tel" className={`w-full ${inputClass}`} />
+          </label>
           {accept.isError ? (
             <p className="text-sm text-rose-600 dark:text-rose-300">{getUserFacingError(accept.error)}</p>
           ) : null}
           <button
-            className="rounded-md bg-emerald-600 px-4 py-2 font-semibold text-white dark:bg-emerald-500 dark:text-slate-950"
+            className="rounded-md bg-emerald-600 px-4 py-2 font-semibold text-white disabled:opacity-60 dark:bg-emerald-500 dark:text-slate-950"
             type="submit"
             disabled={accept.isPending}
           >
-            {accept.isPending ? 'Сохранение…' : 'Принять приглашение'}
+            {accept.isPending ? 'Принимаем...' : 'Принять приглашение'}
           </button>
         </form>
       ) : null}
 
-      {data.accepted_at && postAcceptMismatch ? (
-        <div
-          className="rounded-xl border border-amber-200/90 bg-amber-50/90 p-4 text-sm dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-100"
-          role="status"
-        >
-          <p className="font-medium">Email не совпадал с карточкой у мастера</p>
-          <p className="mt-1 text-amber-900/90 dark:text-amber-200">
-            Мы сохранили контакт в карточке как у мастера; вы вошли как {me.data?.email}. Мастер получил напоминание
-            проверить email, чтобы уведомления доходили до вас.
-          </p>
+      {accepted ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 backdrop-blur-sm">
+          <div
+            className="w-full max-w-sm rounded-lg border border-emerald-200 bg-white p-6 text-center shadow-xl dark:border-emerald-900/50 dark:bg-slate-900"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-2xl text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+              ✓
+            </div>
+            <h2 className="mt-4 text-xl font-semibold text-slate-950 dark:text-slate-50">Приглашение принято</h2>
+            {postAcceptMismatch ? (
+              <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
+                Email отличается от карточки мастера. Мы сохранили приглашение.
+              </p>
+            ) : null}
+            {!linkedClientId ? (
+              <p className="mt-3 text-xs text-rose-700 dark:text-rose-300">
+                Если мастер не появится в кабинете, обновите страницу.
+              </p>
+            ) : null}
+          </div>
         </div>
       ) : null}
-
-      {data.accepted_at && (
-        <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="text-xl font-semibold">Запись</h2>
-          <select className={`w-full ${inputClass}`} value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
-            <option value="">Выберите услугу</option>
-            {services.map((svc) => (
-              <option key={svc.id} value={svc.id}>
-                {svc.name} · {svc.duration_min} мин
-              </option>
-            ))}
-          </select>
-
-          <input type="date" value={day} onChange={(e) => setDay(e.target.value)} className={inputClass} />
-
-          {!clientId && (
-            <p className="text-sm text-rose-600 dark:text-rose-300">
-              Клиентская связка не найдена — примите инвайт ещё раз.
-            </p>
-          )}
-
-          <div className="flex flex-wrap gap-2">
-            {(slotsQuery.data ?? []).map((slot) => (
-              <button
-                type="button"
-                key={slot.start_at}
-                disabled={booking.isPending}
-                className="rounded-md border border-slate-300 px-3 py-1 text-sm dark:border-slate-700"
-                onClick={() => booking.mutate(slot.start_at)}
-              >
-                {new Date(slot.start_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </button>
-            ))}
-          </div>
-
-          {booking.isSuccess && (
-            <p className="text-emerald-700 dark:text-emerald-300">Запись создана — ждём вас!</p>
-          )}
-        </section>
-      )}
     </div>
   )
 }
