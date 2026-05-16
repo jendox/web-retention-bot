@@ -8,6 +8,7 @@ from fastapi import Request, Response, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
+from app.core.rate_limit import RATE_LIMIT_POLICIES, RedisRateLimiter, match_rate_limit_policies
 from app.core.structured_logging import bind_request_context, clear_log_context, get_logger
 
 REQUEST_ID_HEADER = "X-Request-Id"
@@ -18,9 +19,11 @@ CSRF_EXEMPT_PATHS = frozenset(
     }
 )
 CSRF_ERROR_DETAIL = "CSRF token missing or invalid"
+RATE_LIMIT_ERROR_DETAIL = "Too many requests"
 
-logger = get_logger("app.requestctx_middleware")
+request_ctx_logger = get_logger("app.request_ctx_middleware")
 csrf_logger = get_logger("app.csrf_middleware")
+rate_limit_logger = get_logger("app.rate_limit_middleware")
 
 
 class CSRFMiddleware(BaseHTTPMiddleware):
@@ -67,7 +70,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             response.headers[REQUEST_ID_HEADER] = request_id
             return response
         except Exception:
-            logger.exception("unhandled_exception")
+            request_ctx_logger.exception("unhandled_exception")
             return JSONResponse(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 content={"detail": "Internal server error", "request_id": request_id},
@@ -75,3 +78,50 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             )
         finally:
             clear_log_context()
+
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        policies = match_rate_limit_policies(
+            policies=RATE_LIMIT_POLICIES,
+            method=request.method,
+            path=request.url.path,
+        )
+        if not policies:
+            return await call_next(request)
+
+        redis = request.app.state.redis
+        limiter = RedisRateLimiter(redis)
+
+        for matched_policy in policies:
+            policy = matched_policy.policy
+            identity = await policy.key_builder(request)
+            if not identity:
+                continue
+
+            result = await limiter.check(policy=policy, identity=identity)
+            if not result.allowed:
+                rate_limit_logger.warning(
+                    "rate_limited",
+                    rate_limit_policy=policy.name,
+                    rate_limit_identity=identity,
+                    rate_limit_limit=result.limit,
+                    rate_limit_remaining=result.remaining,
+                    rate_limit_retry_after=result.retry_after,
+                )
+                return JSONResponse(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    content={"detail": RATE_LIMIT_ERROR_DETAIL},
+                    headers={
+                        "Retry-After": str(result.retry_after),
+                        "X-RateLimit-Limit": str(result.limit),
+                        "X-RateLimit-Remaining": str(result.remaining),
+                        "X-RateLimit-Reset": str(result.reset_after),
+                    },
+                )
+
+        return await call_next(request)
