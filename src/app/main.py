@@ -8,7 +8,8 @@ import app.worker.celery_app as _celery_app  # noqa: F401  # side effect: config
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.database import Database
-from app.core.middlewares import RequestContextMiddleware
+from app.core.middlewares import REQUEST_ID_HEADER, RequestContextMiddleware
+from app.core.structured_logging import configure_structlog
 
 
 @asynccontextmanager
@@ -24,6 +25,10 @@ async def lifespan(_app: FastAPI):
 
 def create_application() -> FastAPI:
     settings = get_settings()
+    configure_structlog(
+        debug=settings.app_env.lower() in {"dev", "development", "local", "test"},
+        json_logs=settings.app_env.lower() not in {"dev", "development", "local", "test"},
+    )
     _app = FastAPI(
         title="Retention Scheduling API",
         lifespan=lifespan,
@@ -37,7 +42,7 @@ def create_application() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
-        expose_headers=["X-Request-Id"],
+        expose_headers=[REQUEST_ID_HEADER],
     )
     _app.include_router(api_router, prefix="/api")
 
