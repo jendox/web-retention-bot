@@ -32,9 +32,10 @@ class FakeInvitationRepo:
 
 
 class FakeClientRepo:
-    def __init__(self, *, link_with_client=None, existing_client_ids=None):
+    def __init__(self, *, link_with_client=None, existing_client_ids=None, unlinked_email_matches=None):
         self.link_with_client = link_with_client
         self.existing_client_ids = existing_client_ids or []
+        self.unlinked_email_matches = unlinked_email_matches or []
         self.created_client = None
         self.created_link = None
 
@@ -43,6 +44,9 @@ class FakeClientRepo:
 
     async def client_ids_for_master_user(self, master_id, user_id):
         return self.existing_client_ids
+
+    async def unlinked_clients_by_master_email(self, *, master_id, email, limit=2):
+        return self.unlinked_email_matches[:limit]
 
     async def create(self, *, display_name, phone=None, email=None):
         self.created_client = SimpleNamespace(
@@ -113,6 +117,50 @@ async def test_accept_open_invitation_creates_new_client_and_link():
     assert client_repo.created_link.linked_account_email == "client@example.com"
     assert client_repo.created_link.invitation_status == InvitationStatus.LINKED
     assert invite.linked_client_id == client_id
+    assert invite.accepted_at is not None
+
+
+async def test_accept_open_invitation_links_existing_unlinked_client_with_same_email():
+    master_id = uuid.uuid4()
+    existing_client_id = uuid.uuid4()
+    invite = _valid_invite(master_id=master_id)
+    user = SimpleNamespace(id=uuid.uuid4(), email="client@example.com")
+    link = SimpleNamespace(
+        master_id=master_id,
+        client_id=existing_client_id,
+        invitation_status=InvitationStatus.PENDING,
+        linked_account_email=None,
+        invite_email_mismatch=True,
+    )
+    client = SimpleNamespace(
+        id=existing_client_id,
+        display_name="Stored Name",
+        phone="+375290000000",
+        email="CLIENT@example.com",
+        user_id=None,
+    )
+    client_repo = FakeClientRepo(unlinked_email_matches=[(link, client)])
+    use_case = AcceptInvitationUseCase(client_repo, FakeInvitationRepo(invite=invite), FakeDispatcher())
+
+    client_id, mismatch = await use_case(
+        token="invite-token",
+        display_name="Accepted Name",
+        phone="+375291112233",
+        user=user,
+    )
+
+    assert mismatch is False
+    assert client_id == existing_client_id
+    assert client_repo.created_client is None
+    assert client_repo.created_link is None
+    assert client.display_name == "Accepted Name"
+    assert client.phone == "+375291112233"
+    assert client.email == "client@example.com"
+    assert client.user_id == user.id
+    assert link.linked_account_email == "client@example.com"
+    assert link.invite_email_mismatch is False
+    assert link.invitation_status == InvitationStatus.LINKED
+    assert invite.linked_client_id == existing_client_id
     assert invite.accepted_at is not None
 
 

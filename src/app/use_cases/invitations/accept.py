@@ -148,6 +148,24 @@ class AcceptInvitationUseCase:
                 error_message="You are already linked to this master.",
             ) from None
 
+        matching_clients = await self._client_repo.unlinked_clients_by_master_email(
+            master_id=invite.master_id,
+            email=user_email,
+        )
+        if len(matching_clients) == 1:
+            link, client = matching_clients[0]
+            client.display_name = display_name
+            client.phone = phone
+            client.email = user_email
+            client.user_id = user_id
+            link.linked_account_email = user_email
+            link.invite_email_mismatch = False
+            link.invitation_status = InvitationStatus.LINKED
+            logger.info("merged_with_existing_client", linked_client_id=str(client.id))
+            return client.id
+        if len(matching_clients) > 1:
+            logger.warning("duplicate_unlinked_clients_by_email", email=user_email)
+
         client = await self._client_repo.create(
             display_name=display_name,
             phone=phone,

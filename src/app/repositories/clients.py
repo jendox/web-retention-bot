@@ -111,6 +111,27 @@ class ClientRepository(BaseRepository):
             return None
         return row[0], row[1]
 
+    async def unlinked_clients_by_master_email(
+        self,
+        *,
+        master_id: UUID,
+        email: str,
+        limit: int = 2,
+    ) -> list[tuple[MasterClient, Client]]:
+        stmt = (
+            select(MasterClient, Client)
+            .join(Client, MasterClient.client_id == Client.id)
+            .where(
+                MasterClient.master_id == master_id,
+                Client.user_id.is_(None),
+                func.lower(Client.email) == email.lower(),
+            )
+            .order_by(Client.id.asc())
+            .limit(limit)
+        )
+        rows = await self.session.execute(stmt)
+        return [(row[0], row[1]) for row in rows.all()]
+
     async def list_masters_for_user_clients(self, user_id: UUID) -> list[tuple[MasterProfile, MasterClient, Client]]:
         stmt = (
             select(MasterProfile, MasterClient, Client)
