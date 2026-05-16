@@ -50,7 +50,7 @@ class LoginUseCase:
                 raise InactiveUserError()
 
             logger.info("success", user_id=str(user.id))
-            return UserSchema.from_model(user)
+            return UserSchema.model_validate(user)
 
 
 def get_login_use_case(

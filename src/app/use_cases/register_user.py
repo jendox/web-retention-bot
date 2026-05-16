@@ -32,7 +32,7 @@ class RegisterUserUseCase:
                 password_hash=hash_password(password),
             )
             logger.info("success", user_id=str(user.id))
-            return UserSchema.from_model(user)
+            return UserSchema.model_validate(user)
 
     async def __call__(self, payload: RegisterPayload) -> UserSchema:
         email = str(payload.email).lower()
@@ -47,7 +47,7 @@ class RegisterUserUseCase:
                 password_hash=hash_password(payload.password),
             )
             logger.info("success", user_id=str(user.id))
-            return UserSchema.from_model(user)
+            return UserSchema.model_validate(user)
 
 
 def get_register_user_use_case(

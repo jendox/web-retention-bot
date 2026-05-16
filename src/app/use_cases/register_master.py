@@ -33,7 +33,7 @@ class RegisterMasterUseCase:
             else:
                 logger.info("exists", master_id=str(master.id))
 
-            return MasterProfileSchema.from_model(master)
+            return MasterProfileSchema.model_validate(master)
 
 
 def get_register_master_use_case(

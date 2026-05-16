@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from typing import Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.currency import Currency
-from app.models import MasterProfile as MasterProfileModel
 
 
 class MasterProfileSchema(BaseModel):
@@ -19,16 +17,6 @@ class MasterProfileSchema(BaseModel):
     model_config = ConfigDict(
         from_attributes=True,
     )
-
-    @classmethod
-    def from_model(cls, master: MasterProfileModel) -> Self:
-        return cls(
-            id=master.id,
-            display_name=master.display_name,
-            public_slug=master.public_slug,
-            timezone=master.timezone,
-            default_currency=master.default_currency,
-        )
 
 
 class MasterProfileUpdate(BaseModel):

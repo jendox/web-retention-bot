@@ -222,7 +222,7 @@ async def login(
     },
 )
 async def me(current: Annotated[User, Depends(require_user)]) -> UserSchema:
-    return UserSchema.from_model(current)
+    return UserSchema.model_validate(current)
 
 
 @router.post(

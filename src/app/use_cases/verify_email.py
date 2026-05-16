@@ -35,7 +35,7 @@ class VerifyEmailUseCase:
             else:
                 logger.info("already_verified")
 
-            return UserSchema.from_model(user)
+            return UserSchema.model_validate(user)
 
 
 def get_verify_email_use_case(
