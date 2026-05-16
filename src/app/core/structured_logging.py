@@ -7,7 +7,13 @@ from contextlib import contextmanager
 from typing import Any
 
 import structlog
-from structlog.contextvars import bind_contextvars, clear_contextvars, merge_contextvars, unbind_contextvars
+from structlog.contextvars import (
+    bind_contextvars,
+    clear_contextvars,
+    get_contextvars,
+    merge_contextvars,
+    unbind_contextvars,
+)
 
 LOG_TIME_FORMAT = "iso"
 
@@ -115,3 +121,12 @@ def bind_request_context(
 
 def clear_log_context() -> None:
     clear_contextvars()
+
+
+def get_log_context() -> dict[str, Any]:
+    return dict(get_contextvars())
+
+
+def get_request_id() -> str | None:
+    request_id = get_log_context().get("request_id")
+    return str(request_id) if request_id is not None else None

@@ -63,39 +63,45 @@ NOTIFICATION_HANDLERS: dict[NotificationEventType, Callable] = {
 
 
 async def _process_notification_delivery_async(delivery_id: UUID) -> None:
-    with log_context(use_case="process_notification_delivery", delivery_id=str(delivery_id)):
-        settings = get_settings()
-        async with worker_db_session() as session:
-            notification_delivery_repo = NotificationDeliveryRepository(session)
-            delivery = await notification_delivery_repo.get(delivery_id)
-            if delivery is None:
-                logger.warning("missing")
-                return
-            if delivery.status != DeliveryStatus.PENDING:
-                logger.info("skipped", reason="status_not_pending", status=delivery.status.value)
-                return
+    settings = get_settings()
+    async with worker_db_session() as session:
+        notification_delivery_repo = NotificationDeliveryRepository(session)
+        delivery = await notification_delivery_repo.get(delivery_id)
+        if delivery is None:
+            logger.warning("missing")
+            return
+        if delivery.status != DeliveryStatus.PENDING:
+            logger.info("skipped", reason="status_not_pending", status=delivery.status.value)
+            return
 
-            if delivery.channel != DeliveryChannel.EMAIL:
-                delivery.status = DeliveryStatus.SKIPPED
-                delivery.error_message = "channel not implemented in worker"
-                logger.warning("skipped", reason="channel_not_implemented", channel=delivery.channel.value)
-                return
+        if delivery.channel != DeliveryChannel.EMAIL:
+            delivery.status = DeliveryStatus.SKIPPED
+            delivery.error_message = "channel not implemented in worker"
+            logger.warning("skipped", reason="channel_not_implemented", channel=delivery.channel.value)
+            return
 
-            event_type = delivery.user_notification.event_type
-            handler = NOTIFICATION_HANDLERS.get(event_type)
-            if handler is None:
-                logger.error("failed", reason="unsupported_event_type", event_type=event_type.value)
-                raise RuntimeError(f"Unsupported notification event type: {event_type.value}")
+        event_type = delivery.user_notification.event_type
+        handler = NOTIFICATION_HANDLERS.get(event_type)
+        if handler is None:
+            logger.error("failed", reason="unsupported_event_type", event_type=event_type.value)
+            raise RuntimeError(f"Unsupported notification event type: {event_type.value}")
 
-            logger.info("processing", event_type=event_type.value, channel=delivery.channel.value)
-            await handler(settings, delivery)
+        logger.info("processing", event_type=event_type.value, channel=delivery.channel.value)
+        await handler(settings, delivery)
 
 
 @shared_task(name="notifications.process_notification_delivery", bind=True, max_retries=5)
 def process_notification_delivery(self, delivery_id: str) -> None:
     """Consume a pending NotificationDelivery row (email channel supported)."""
-    try:
-        asyncio.run(_process_notification_delivery_async(UUID(delivery_id)))
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("worker_error", delivery_id=delivery_id)
-        raise self.retry(exc=exc, countdown=2) from exc
+    headers = self.request.headers or {}
+    with log_context(
+        task="process_notification_delivery",
+        task_id=self.request.id,
+        parent_request_id=headers.get("parent_request_id"),
+        delivery_id=str(delivery_id),
+    ):
+        try:
+            asyncio.run(_process_notification_delivery_async(UUID(delivery_id)))
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("worker_error", delivery_id=delivery_id)
+            raise self.retry(exc=exc, countdown=2) from exc

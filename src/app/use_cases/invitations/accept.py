@@ -13,28 +13,14 @@ from app.models.user import User
 from app.repositories.clients import ClientRepository, get_client_repo
 from app.repositories.invitations import InvitationRepository, get_invitation_repo
 from app.services.notifications.dispatcher import NotificationDispatcher, get_notification_dispatcher
+from app.use_cases.invitations.exceptions import AcceptInvitationError
 
 __all__ = [
-    "AcceptInvitationError",
     "AcceptInvitationUseCase",
     "get_accept_invitation_use_case",
 ]
 
 logger = get_logger("app.invitation")
-
-
-class AcceptInvitationError(Exception):
-    def __init__(
-        self,
-        *,
-        status_code: int | None = None,
-        error_message: str | None = None,
-    ) -> None:
-        super().__init__(self)
-        if status_code is not None:
-            self.status_code = status_code
-        if error_message is not None:
-            self.error_message = error_message
 
 
 class AcceptInvitationUseCase:

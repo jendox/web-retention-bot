@@ -12,6 +12,8 @@ from app.models.booking import Booking
 from app.models.service import Service
 from app.repositories.base import BaseRepository
 
+__all__ = ["ServiceRepository", "get_service_repo"]
+
 
 class ServiceRepository(BaseRepository):
     async def list_for_master(self, master_id: UUID) -> list[Service]:

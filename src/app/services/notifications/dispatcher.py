@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.database import get_db_session
-from app.core.structured_logging import get_logger, log_context
+from app.core.structured_logging import get_logger, get_request_id, log_context
 from app.models import NotificationDelivery, NotificationEvent, UserNotification
 from app.models.notifications.enums import DeliveryChannel, DeliveryStatus, NotificationEventType
 from app.repositories.notifications import (
@@ -52,7 +52,7 @@ class NotificationDispatcher:
         user_id: UUID,
         to_email: str,
     ) -> EmailVerificationDispatchResult:
-        with log_context(use_case="dispatch_email_verification", user_id=str(user_id), channel="email"):
+        with log_context(notification="dispatch_email_verification", user_id=str(user_id), channel="email"):
             payload: dict[str, str] = {"to_email": to_email}
 
             event = await self._notification_event_repo.create(
@@ -95,7 +95,11 @@ class NotificationDispatcher:
                 delivery.status = DeliveryStatus.SENT
                 logger.info("sent_eagerly", event_id=str(event.id), delivery_id=str(delivery.id))
             else:
-                process_notification_delivery.apply_async(args=[str(delivery.id)], countdown=2)
+                process_notification_delivery.apply_async(
+                    args=[str(delivery.id)],
+                    countdown=2,
+                    headers={"parent_request_id": get_request_id()},
+                )
                 logger.info("queued", event_id=str(event.id), delivery_id=str(delivery.id))
 
             return EmailVerificationDispatchResult(event=event, user_notification=user_note, delivery=delivery)
@@ -111,7 +115,7 @@ class NotificationDispatcher:
         client_display_name: str,
     ) -> None:
         with log_context(
-            use_case="dispatch_invite_email_mismatch",
+            notification="dispatch_invite_email_mismatch",
             master_user_id=str(master_user_id),
             master_id=str(master_profile_id),
             client_id=str(client_id),

@@ -5,22 +5,18 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends
+from fastapi import Depends, status
 
 from app.core.structured_logging import get_logger, log_context
-from app.repositories.clients import ClientNotFound, ClientRepository, get_client_repo
+from app.repositories.clients import ClientRepository, get_client_repo
 from app.repositories.invitations import InvitationRepository, get_invitation_repo
 from app.schemas.invitation import InvitationOut
+from app.use_cases.invitations.exceptions import CreateInvitationError
 
 __all__ = [
     "CreateInvitationUseCase",
-    "CreateInvitationError",
     "get_create_invitation_use_case",
 ]
-
-
-class CreateInvitationError(Exception): ...
-
 
 logger = get_logger("app.invitation")
 
@@ -52,17 +48,26 @@ class CreateInvitationUseCase:
                 row = await self._client_repo.get_link_with_client(master_id=master_id, client_id=target_client_id)
                 if row is None:
                     logger.warning("failed", reason="client_not_found")
-                    raise ClientNotFound("Client not found.") from None
+                    raise CreateInvitationError(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        error_message="Client not found.",
+                    ) from None
                 _link, client = row
                 if client.user_id is not None:
                     logger.warning("failed", reason="client_already_linked", client_user_id=str(client.user_id))
-                    raise CreateInvitationError("Client already has a login linked.") from None
+                    raise CreateInvitationError(
+                        status_code=status.HTTP_409_CONFLICT,
+                        error_message="Client already has a login linked.",
+                    ) from None
                 if replace:
                     await self._invite_repo.revoke_pending_target_invites(master_id, target_client_id)
                     logger.info("revoked_pending_target_invites")
                 elif await self._invite_repo.find_active_pending_target_invite(master_id, target_client_id) is not None:
                     logger.warning("failed", reason="active_invitation_exists")
-                    raise CreateInvitationError("An active invitation already exists for this client.") from None
+                    raise CreateInvitationError(
+                        status_code=status.HTTP_409_CONFLICT,
+                        error_message="An active invitation already exists for this client.",
+                    ) from None
 
             token = secrets.token_urlsafe(48)[:64]
             invite = await self._invite_repo.create_invite(
