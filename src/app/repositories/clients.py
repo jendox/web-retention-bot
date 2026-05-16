@@ -15,6 +15,15 @@ from app.models.invitation import Invitation
 from app.models.master import MasterProfile
 from app.repositories.base import BaseRepository
 
+__all__ = [
+    "ClientRepository",
+    "ClientNotFound",
+    "get_client_repo",
+]
+
+
+class ClientNotFound(Exception): ...
+
 
 class ClientRepository(BaseRepository):
     async def create(

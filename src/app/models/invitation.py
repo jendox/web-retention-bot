@@ -1,4 +1,4 @@
-"""Tokenized invitations masters share with prospective clients."""
+from __future__ import annotations
 
 import uuid
 from datetime import datetime
@@ -36,5 +36,5 @@ class Invitation(Base):
         index=True,
     )
 
-    master: Mapped["MasterProfile"] = relationship("MasterProfile", back_populates="invitations")
-    target_client: Mapped["Client | None"] = relationship("Client", foreign_keys=[target_client_id])
+    master: Mapped[MasterProfile] = relationship("MasterProfile", back_populates="invitations")
+    target_client: Mapped[Client | None] = relationship("Client", foreign_keys=[target_client_id])

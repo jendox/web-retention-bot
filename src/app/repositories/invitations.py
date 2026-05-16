@@ -1,18 +1,42 @@
-"""Invitation persistence."""
+from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Annotated
 from uuid import UUID
 
+from fastapi import Depends
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.database import get_db_session
 from app.models.invitation import Invitation
 from app.models.master import MasterProfile
 from app.repositories.base import BaseRepository
 
+__all__ = ["InvitationRepository", "InvitationNotFound", "get_invitation_repo"]
+
+
+class InvitationNotFound(Exception): ...
+
 
 class InvitationRepository(BaseRepository):
-    async def create_invite(self, invite: Invitation) -> Invitation:
+    async def create_invite(
+        self,
+        *,
+        master_id: UUID,
+        token: str,
+        expires_at: datetime,
+        target_email: str | None = None,
+        target_client_id: UUID | None = None,
+    ) -> Invitation:
+        invite = Invitation(
+            master_id=master_id,
+            token=token,
+            expires_at=expires_at,
+            target_email=target_email,
+            target_client_id=target_client_id,
+        )
         self.session.add(invite)
         await self.session.flush()
         return invite
@@ -58,3 +82,9 @@ class InvitationRepository(BaseRepository):
         for inv in (await self.session.scalars(stmt)).all():
             inv.revoked_at = now
         await self.session.flush()
+
+
+def get_invitation_repo(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> InvitationRepository:
+    return InvitationRepository(session)

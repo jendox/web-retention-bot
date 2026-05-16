@@ -4,10 +4,11 @@ import redis.asyncio as redis
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-import app.worker.celery_app  # noqa: F401  # side effect: configure Celery before task imports
+import app.worker.celery_app as _celery_app  # noqa: F401  # side effect: configure Celery before task imports
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.database import Database
+from app.core.middlewares import RequestContextMiddleware
 
 
 @asynccontextmanager
@@ -28,12 +29,15 @@ def create_application() -> FastAPI:
         lifespan=lifespan,
     )
     _app.state.settings = settings
+
+    _app.add_middleware(RequestContextMiddleware)
     _app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["X-Request-Id"],
     )
     _app.include_router(api_router, prefix="/api")
 
@@ -42,5 +46,6 @@ def create_application() -> FastAPI:
         return {"status": "ok"}
 
     return _app
+
 
 app = create_application()

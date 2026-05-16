@@ -1,16 +1,18 @@
-"""Invitation flows."""
+from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.schemas.service import ServiceOut
 
+DEFAULT_INVITATION_TOKEN_EXPIRES_HOURS = 72
+
 
 class InvitationCreate(BaseModel):
-    expires_hours: int = Field(default=72, ge=1, le=24 * 30)
+    expires_hours: int = Field(default=DEFAULT_INVITATION_TOKEN_EXPIRES_HOURS, ge=1, le=24 * 30)
     target_email: EmailStr | None = None
     target_client_id: UUID | None = None
     """If set, invite applies only to this client card (must belong to current master)."""
@@ -19,12 +21,14 @@ class InvitationCreate(BaseModel):
 
 
 class InvitationOut(BaseModel):
-    model_config = {"from_attributes": True}
-
     token: str
     expires_at: datetime
     target_email: EmailStr | None
     target_client_id: UUID | None = None
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
 
 
 class InvitationPublicOut(BaseModel):
