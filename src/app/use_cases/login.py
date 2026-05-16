@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import logging
 from typing import Annotated
 
 from fastapi import Depends
 
 from app.core.security import verify_password
+from app.core.structured_logging import get_logger, log_context
 from app.repositories.users import UserRepository, get_user_repo
 from app.schemas.user import UserSchema
 
@@ -17,7 +17,7 @@ __all__ = [
     "get_login_use_case",
 ]
 
-logger = logging.getLogger("app.login")
+logger = get_logger("app.login")
 
 
 class InvalidCredentialsError(Exception): ...
@@ -35,29 +35,22 @@ class LoginUseCase:
 
     async def __call__(self, *, email: str, password: str) -> UserSchema:
         email = str(email).lower()
-        user = await self.user_repo.get_by_email(email)
-        if user is None or not verify_password(password, user.password_hash):
-            logger.info(
-                "login_failed",
-                extra={"reason": "invalid_credentials", "email": email},
-            )
-            raise InvalidCredentialsError()
+        with log_context(use_case="login", email=email):
+            user = await self.user_repo.get_by_email(email)
+            if user is None or not verify_password(password, user.password_hash):
+                logger.info("failed", reason="invalid_credentials")
+                raise InvalidCredentialsError()
 
-        if user.email_verified_at is None:
-            logger.info(
-                "login_failed",
-                extra={"reason": "email_not_verified", "email": email},
-            )
-            raise EmailNotVerifiedError()
+            if user.email_verified_at is None:
+                logger.info("failed", reason="email_not_verified", user_id=str(user.id))
+                raise EmailNotVerifiedError()
 
-        if not user.is_active:
-            logger.info(
-                "login_failed",
-                extra={"reason": "inactive_user", "email": email},
-            )
-            raise InactiveUserError()
+            if not user.is_active:
+                logger.info("failed", reason="inactive_user", user_id=str(user.id))
+                raise InactiveUserError()
 
-        return UserSchema.from_model(user)
+            logger.info("success", user_id=str(user.id))
+            return UserSchema.from_model(user)
 
 
 def get_login_use_case(

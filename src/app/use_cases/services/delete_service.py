@@ -3,10 +3,13 @@ from uuid import UUID
 
 from fastapi import Depends
 
+from app.core.structured_logging import get_logger, log_context
 from app.models.master import MasterProfile
 from app.repositories.services import ServiceRepository, get_service_repo
 
 from .exceptions import ServiceHasBookingsError, ServiceNotFoundError
+
+logger = get_logger("app.service")
 
 
 class DeleteServiceUseCase:
@@ -14,12 +17,16 @@ class DeleteServiceUseCase:
         self._service_repo = service_repo
 
     async def execute(self, master: MasterProfile, service_id: UUID) -> None:
-        service = await self._service_repo.get_for_master(service_id, master.id)
-        if not service:
-            raise ServiceNotFoundError from None
-        if await self._service_repo.count_bookings_for_service(service_id):
-            raise ServiceHasBookingsError from None
-        await self._service_repo.delete_entity(service)
+        with log_context(use_case="delete_service", master_id=str(master.id), service_id=str(service_id)):
+            service = await self._service_repo.get_for_master(service_id, master.id)
+            if not service:
+                logger.warning("failed", reason="service_not_found")
+                raise ServiceNotFoundError from None
+            if await self._service_repo.count_bookings_for_service(service_id):
+                logger.warning("failed", reason="has_bookings")
+                raise ServiceHasBookingsError from None
+            await self._service_repo.delete_entity(service)
+            logger.info("deleted")
 
 
 def get_delete_service_use_case(

@@ -115,7 +115,10 @@ async def post_invitation(
         },
     },
 )
-async def get_invitation_landing(token: str, session: Annotated[AsyncSession, Depends(get_db_session)]):
+async def get_invitation_landing(
+    token: str,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> InvitationLandingResponse:
     repo = InvitationRepository(session)
     services_repo = ServiceRepository(session)
     invite = await repo.get_by_token(token)
