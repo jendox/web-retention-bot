@@ -21,16 +21,20 @@ from app.services.notifications.dispatcher import (
     NotificationDispatcher,
     get_notification_dispatcher,
 )
-from app.use_cases.login import (
+from app.use_cases.auth import (
     EmailNotVerifiedError,
     InactiveUserError,
     InvalidCredentialsError,
     LoginUseCase,
+    RegisterMasterUseCase,
+    RegisterUserUseCase,
+    UserAlreadyExists,
+    VerifyEmailUseCase,
     get_login_use_case,
+    get_register_master_use_case,
+    get_register_user_use_case,
+    get_verify_email_use_case,
 )
-from app.use_cases.register_master import RegisterMasterUseCase, get_register_master_use_case
-from app.use_cases.register_user import RegisterUserUseCase, UserAlreadyExists, get_register_user_use_case
-from app.use_cases.verify_email import VerifyEmailUseCase, get_verify_email_use_case
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 

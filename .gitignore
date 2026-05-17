@@ -18,3 +18,5 @@ frontend/dist/
 .idea/
 
 *.egg-info/
+.codex/
+.agents/

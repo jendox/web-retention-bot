@@ -10,6 +10,12 @@ from app.repositories.users import UserRepository, get_user_repo
 from app.schemas.auth import RegisterPayload
 from app.schemas.user import UserSchema
 
+__all__ = [
+    "UserAlreadyExists",
+    "RegisterUserUseCase",
+    "get_register_user_use_case",
+]
+
 logger = get_logger("app.register_user")
 
 
