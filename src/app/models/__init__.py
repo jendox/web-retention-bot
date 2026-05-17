@@ -13,7 +13,7 @@ from app.models.notifications import (  # noqa: F401
     UserNotificationPreference,
 )
 from app.models.notifications.models import NotificationChannel
-from app.models.schedule import WeeklyScheduleRule, WorkdayOverride  # noqa: F401
+from app.models.schedule import WeeklyScheduleRule, WorkdayOverride, WorkdayOverrideInterval  # noqa: F401
 from app.models.service import Service  # noqa: F401
 from app.models.user import User  # noqa: F401
 
@@ -34,4 +34,5 @@ __all__ = [
     "User",
     "WeeklyScheduleRule",
     "WorkdayOverride",
+    "WorkdayOverrideInterval",
 ]

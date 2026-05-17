@@ -28,12 +28,13 @@ function endOfMonth(d: Date) {
 }
 
 function formatRuGreetingDate(d: Date) {
-  return new Intl.DateTimeFormat('ru-RU', {
+  const formatted = new Intl.DateTimeFormat('ru-RU', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   }).format(d)
+  return formatted.replace(' Г.', ' г.')
 }
 
 function formatSlotShort(iso: string) {
@@ -207,7 +208,7 @@ export function DashboardPage() {
         <h1 className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-3xl">
           Добро пожаловать, {firstName}! <span aria-hidden>👋</span>
         </h1>
-        <p className="text-sm capitalize text-stone-500 dark:text-stone-400">{formatRuGreetingDate(new Date())}</p>
+        <p className="text-sm text-stone-500 dark:text-stone-400">{formatRuGreetingDate(new Date())}</p>
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

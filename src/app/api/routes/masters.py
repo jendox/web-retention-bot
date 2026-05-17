@@ -14,7 +14,7 @@ from app.schemas.master import (
     MasterScheduleOut,
     MasterScheduleUpsert,
 )
-from app.use_cases.replace_schedule import replace_master_schedule
+from app.use_cases.replace_schedule import ScheduleBookingConflictError, replace_master_schedule
 
 router = APIRouter(prefix="/masters", tags=["masters"])
 
@@ -24,24 +24,27 @@ async def _snapshot_schedule(session: AsyncSession, master_id: UUID) -> MasterSc
     weekly_models = await schedules.weekly_for_master(master_id)
     overrides_models = await schedules.overrides_for_master(master_id)
 
-    weekly_rules = sorted(
-        [
+    weekly_by_day: dict[int, list[dict]] = {}
+    for rule in sorted(weekly_models, key=lambda item: (item.weekday, item.start_time)):
+        weekly_by_day.setdefault(rule.weekday, []).append(
             {
-                "weekday": rule.weekday,
                 "start_time": rule.start_time.strftime("%H:%M"),
                 "end_time": rule.end_time.strftime("%H:%M"),
-            }
-            for rule in weekly_models
-        ],
-        key=lambda item: (item["weekday"], item["start_time"]),
-    )
+            },
+        )
+    weekly_rules = [{"weekday": weekday, "intervals": intervals} for weekday, intervals in weekly_by_day.items()]
     overrides = sorted(
         [
             {
                 "override_date": ov.override_date.isoformat(),
                 "is_closed": ov.is_closed,
-                "start_time": ov.start_time.strftime("%H:%M") if ov.start_time else None,
-                "end_time": ov.end_time.strftime("%H:%M") if ov.end_time else None,
+                "intervals": [
+                    {
+                        "start_time": interval.start_time.strftime("%H:%M"),
+                        "end_time": interval.end_time.strftime("%H:%M"),
+                    }
+                    for interval in ov.intervals
+                ],
                 "note": ov.note,
             }
             for ov in overrides_models
@@ -92,9 +95,25 @@ async def put_schedule_route(
         await replace_master_schedule(
             session,
             master.id,
+            master.timezone,
             weekly=payload.weekly_rules,
             overrides=payload.overrides,
         )
+    except ScheduleBookingConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Schedule changes affect existing bookings.",
+                "bookings": [
+                    {
+                        "id": str(booking.id),
+                        "start_at": booking.start_at.isoformat(),
+                        "end_at": booking.end_at.isoformat(),
+                    }
+                    for booking in exc.conflicts
+                ],
+            },
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return await _snapshot_schedule(session, master.id)

@@ -27,6 +27,12 @@ const DETAIL_RU: Record<string, string> = {
   'Service not found.': 'Услуга не найдена.',
   'Service has bookings and cannot be deleted.': 'Нельзя удалить услугу: есть записи, связанные с ней.',
   'Too many requests': 'Слишком много попыток. Попробуйте позже.',
+  'Schedule intervals must not overlap.': 'Интервалы рабочего времени не должны пересекаться.',
+  'Schedule interval start_time must be before end_time.': 'Начало интервала должно быть раньше окончания.',
+  'Closed override must not contain intervals.': 'У выходного дня не должно быть рабочих интервалов.',
+  'Working override requires at least one interval.': 'Для рабочего дня нужен хотя бы один интервал.',
+  'Weekly schedule must contain each weekday at most once.': 'Каждый день недели можно указать только один раз.',
+  'Schedule overrides must contain each date at most once.': 'Каждую дату исключения можно указать только один раз.',
 }
 
 export class ApiError extends Error {

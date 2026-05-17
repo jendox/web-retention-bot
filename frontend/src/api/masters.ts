@@ -12,13 +12,17 @@ export async function masterMeApi() {
   return apiFetch<MasterProfile>('/api/masters/me')
 }
 
+export type ScheduleInterval = {
+  start_time: string
+  end_time: string
+}
+
 export type SchedulePayload = {
-  weekly_rules: { weekday: number; start_time: string; end_time: string }[]
+  weekly_rules: { weekday: number; intervals: ScheduleInterval[] }[]
   overrides: {
     override_date: string
     is_closed: boolean
-    start_time?: string | null
-    end_time?: string | null
+    intervals: ScheduleInterval[]
     note?: string | null
   }[]
 }

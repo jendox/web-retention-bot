@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from sqlalchemy import delete, select
+from sqlalchemy.orm import selectinload
 
 from app.models.schedule import WeeklyScheduleRule, WorkdayOverride
 from app.repositories.base import BaseRepository
@@ -19,7 +20,11 @@ class ScheduleRepository(BaseRepository):
         self.session.add_all(rules)
 
     async def overrides_for_master(self, master_id: UUID) -> list[WorkdayOverride]:
-        stmt = select(WorkdayOverride).where(WorkdayOverride.master_id == master_id)
+        stmt = (
+            select(WorkdayOverride)
+            .where(WorkdayOverride.master_id == master_id)
+            .options(selectinload(WorkdayOverride.intervals))
+        )
         rows = await self.session.execute(stmt)
         return list(rows.scalars())
 

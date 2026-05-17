@@ -22,7 +22,7 @@ def parse_clock(value: str) -> time:
     return time(int(hour_str), int(minute_str))
 
 
-def _windows_for_date(
+def windows_for_date(
     target: date,
     weekly: list[WeeklyScheduleRule],
     overrides: list[WorkdayOverride],
@@ -35,12 +35,13 @@ def _windows_for_date(
     weekday = target.weekday()
     baseline = [r for r in weekly if r.weekday == weekday]
     segments: list[tuple[datetime, datetime]] = []
-    if override_for_day and override_for_day.start_time and override_for_day.end_time:
-        start_dt = _combine_local(target, override_for_day.start_time, tz)
-        end_dt = _combine_local(target, override_for_day.end_time, tz)
-        if end_dt <= start_dt:
-            return []
-        segments.append((start_dt, end_dt))
+    if override_for_day:
+        for interval in override_for_day.intervals:
+            start_dt = _combine_local(target, interval.start_time, tz)
+            end_dt = _combine_local(target, interval.end_time, tz)
+            if end_dt <= start_dt:
+                continue
+            segments.append((start_dt, end_dt))
     else:
         for rule in baseline:
             start_dt = _combine_local(target, rule.start_time, tz)
@@ -73,7 +74,7 @@ class AvailabilityEngine:
         overrides: list[WorkdayOverride],
     ) -> list[datetime]:
         tzinfo = ZoneInfo(master.timezone)
-        windows_local = _windows_for_date(day, weekly_rules, overrides, tzinfo)
+        windows_local = windows_for_date(day, weekly_rules, overrides, tzinfo)
         day_start_local = datetime.combine(day, time.min, tzinfo=tzinfo)
         day_end_local = day_start_local + timedelta(days=1)
         range_start = day_start_local.astimezone(UTC).replace(tzinfo=UTC)
@@ -102,4 +103,4 @@ class AvailabilityEngine:
         return False
 
 
-__all__ = ["AvailabilityEngine", "parse_clock"]
+__all__ = ["AvailabilityEngine", "parse_clock", "windows_for_date"]

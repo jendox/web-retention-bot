@@ -1,4 +1,4 @@
-"""Weekly recurrence and per-day overrides for master availability."""
+from __future__ import annotations
 
 import uuid
 from datetime import date, time
@@ -39,11 +39,34 @@ class WorkdayOverride(Base):
     master_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("master_profiles.id"))
     override_date: Mapped[date] = mapped_column(Date)
     is_closed: Mapped[bool] = mapped_column(default=False)
-    start_time: Mapped[time | None] = mapped_column(Time(timezone=False), nullable=True)
-    end_time: Mapped[time | None] = mapped_column(Time(timezone=False), nullable=True)
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     master: Mapped["MasterProfile"] = relationship(
         "MasterProfile",
         back_populates="workday_overrides",
+    )
+    intervals: Mapped[list["WorkdayOverrideInterval"]] = relationship(
+        "WorkdayOverrideInterval",
+        back_populates="override",
+        cascade="all, delete-orphan",
+        order_by="WorkdayOverrideInterval.sort_order",
+    )
+
+
+class WorkdayOverrideInterval(Base):
+    __tablename__ = "workday_override_intervals"
+    __table_args__ = (UniqueConstraint("override_id", "start_time", name="uq_override_interval_start"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    override_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("workday_overrides.id", ondelete="CASCADE"),
+    )
+    start_time: Mapped[time] = mapped_column(Time(timezone=False))
+    end_time: Mapped[time] = mapped_column(Time(timezone=False))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    override: Mapped[WorkdayOverride] = relationship(
+        "WorkdayOverride",
+        back_populates="intervals",
     )
