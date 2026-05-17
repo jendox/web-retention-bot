@@ -25,7 +25,7 @@ class WeeklyScheduleRule(Base):
     start_time: Mapped[time] = mapped_column(Time(timezone=False))
     end_time: Mapped[time] = mapped_column(Time(timezone=False))
 
-    master: Mapped["MasterProfile"] = relationship(
+    master: Mapped[MasterProfile] = relationship(
         "MasterProfile",
         back_populates="weekly_rules",
     )
@@ -41,11 +41,11 @@ class WorkdayOverride(Base):
     is_closed: Mapped[bool] = mapped_column(default=False)
     note: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
-    master: Mapped["MasterProfile"] = relationship(
+    master: Mapped[MasterProfile] = relationship(
         "MasterProfile",
         back_populates="workday_overrides",
     )
-    intervals: Mapped[list["WorkdayOverrideInterval"]] = relationship(
+    intervals: Mapped[list[WorkdayOverrideInterval]] = relationship(
         "WorkdayOverrideInterval",
         back_populates="override",
         cascade="all, delete-orphan",
