@@ -39,6 +39,6 @@ class VerifyEmailUseCase:
 
 
 def get_verify_email_use_case(
-    user_repo: Annotated[UserRepository, Depends(get_user_repo)]
+    user_repo: Annotated[UserRepository, Depends(get_user_repo)],
 ) -> VerifyEmailUseCase:
     return VerifyEmailUseCase(user_repo)

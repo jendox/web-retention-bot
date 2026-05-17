@@ -36,4 +36,3 @@ class BookingClientListItem(BookingOut):
 
 class BookingReschedule(BaseModel):
     start_at: datetime = Field(description="UTC start instant for the reservation")
-

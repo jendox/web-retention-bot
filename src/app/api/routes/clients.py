@@ -58,7 +58,7 @@ async def list_my_masters(
                 client_id=client.id,
                 client_display_name=client.display_name,
                 alias=link.alias,
-            )
+            ),
         )
     return out
 

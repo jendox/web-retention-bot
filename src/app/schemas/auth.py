@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Self
+from typing import Literal, Self, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -24,25 +24,50 @@ class PasswordValidationResult:
         return cls(ok=False, errors=tuple(errors))
 
 
-def validate_password(password: str) -> PasswordValidationResult:
-    errors: list[str] = []
-
+def _validate_password_presence(password: str) -> tuple[str | None, str | None]:
     if password is None:
-        return PasswordValidationResult.failure("Пароль обязателен.")
+        return None, "Пароль обязателен."
 
     normalized = password.strip()
     if not normalized:
-        return PasswordValidationResult.failure("Пароль не может быть пустым.")
+        return None, "Пароль не может быть пустым."
 
-    if len(normalized) < MIN_PASSWORD_LENGTH:
+    return normalized, None
+
+
+def _validate_password_length(password: str) -> list[str]:
+    errors: list[str] = []
+
+    if len(password) < MIN_PASSWORD_LENGTH:
         errors.append(f"Пароль должен быть не менее {MIN_PASSWORD_LENGTH} символов.")
-    if len(normalized) > MAX_PASSWORD_LENGTH:
+    if len(password) > MAX_PASSWORD_LENGTH:
         errors.append(f"Пароль должен быть не более {MAX_PASSWORD_LENGTH} символов.")
 
-    if not any(ch.isalpha() for ch in normalized):
+    return errors
+
+
+def _validate_password_composition(password: str) -> list[str]:
+    errors: list[str] = []
+
+    if not any(ch.isalpha() for ch in password):
         errors.append("Пароль должен содержать хотя бы одну букву.")
-    if not any(ch.isdigit() for ch in normalized):
+    if not any(ch.isdigit() for ch in password):
         errors.append("Пароль должен содержать хотя бы одну цифру.")
+
+    return errors
+
+
+def validate_password(password: str) -> PasswordValidationResult:
+    errors: list[str] = []
+
+    normalized, error = _validate_password_presence(password)
+
+    if normalized is None:
+        error = cast(str, error)
+        return PasswordValidationResult.failure(error)
+
+    errors.extend(_validate_password_length(normalized))
+    errors.extend(_validate_password_composition(normalized))
 
     if errors:
         return PasswordValidationResult.failure(*errors)

@@ -3,8 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum as SAEnum
-from sqlalchemy import ForeignKey, String, Uuid
+from sqlalchemy import Enum as SAEnum, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.currency import DEFAULT_MASTER_CURRENCY, Currency

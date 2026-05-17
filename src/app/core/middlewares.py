@@ -16,7 +16,7 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 CSRF_EXEMPT_PATHS = frozenset(
     {
         "/health",
-    }
+    },
 )
 CSRF_ERROR_DETAIL = "CSRF token missing or invalid"
 RATE_LIMIT_ERROR_DETAIL = "Too many requests"

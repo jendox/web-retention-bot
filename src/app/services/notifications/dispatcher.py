@@ -60,7 +60,7 @@ class NotificationDispatcher:
                     type=NotificationEventType.EMAIL_VERIFICATION,
                     target_user_id=user_id,
                     payload=payload,
-                )
+                ),
             )
 
             note_title, note_body = email_verification_user_notification_copy(to_email=to_email)
@@ -73,7 +73,7 @@ class NotificationDispatcher:
                     body=note_body,
                     payload=payload,
                     dedup_key=f"{EMAIL_VERIFY_DEDUP_PREFIX}{user_id}",
-                )
+                ),
             )
 
             delivery = await self._notification_delivery_repo.create(
@@ -82,7 +82,7 @@ class NotificationDispatcher:
                     channel=DeliveryChannel.EMAIL,
                     status=DeliveryStatus.PENDING,
                     scheduled_at=datetime.now(UTC),
-                )
+                ),
             )
 
             if self._settings.notifications.eager_deliveries:
@@ -133,7 +133,7 @@ class NotificationDispatcher:
                     master_profile_id=master_profile_id,
                     client_id=client_id,
                     payload=payload,
-                )
+                ),
             )
             title = "Клиент принял приглашение с другим email"
             body = (
