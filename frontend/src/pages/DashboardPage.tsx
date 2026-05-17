@@ -6,7 +6,7 @@ import { meApi } from '../api/auth'
 import { bookingsListApi, type Booking } from '../api/bookings'
 import { clientsListApi } from '../api/clients'
 import { invitationsCreateApi } from '../api/invitations'
-import { masterMeApi } from '../api/masters'
+import { useMasterMe } from '../hooks/useMasterMe'
 import { servicesListApi } from '../api/services'
 import { IconBriefcase, IconChevronRight, IconClipboard, IconUsers } from '../components/layout/navIcons'
 import { cn } from '../lib/forms'
@@ -104,7 +104,7 @@ export function DashboardPage() {
   const [inviteCopyDone, setInviteCopyDone] = useState(false)
 
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
-  const master = useQuery({ queryKey: ['master'], queryFn: masterMeApi, enabled: me.isSuccess, retry: false })
+  const master = useMasterMe(me.isSuccess)
   const clients = useQuery({
     queryKey: ['clients', 'dashboard-summary', 1, CLIENTS_PAGE_SIZE_CAP],
     queryFn: () => clientsListApi({ page: 1, page_size: CLIENTS_PAGE_SIZE_CAP }),

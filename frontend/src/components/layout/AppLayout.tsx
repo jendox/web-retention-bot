@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
+import type { AppShellOutletContext } from '../../app/appShellOutletContext'
+
 import { logoutApi, meApi } from '../../api/auth'
 import { ApiError } from '../../api/client'
-import { masterMeApi } from '../../api/masters'
+import { useMasterMe } from '../../hooks/useMasterMe'
 import { cn } from '../../lib/forms'
+import { clearClientShellRole, persistClientShellRole, readPersistedShellRole } from '../../lib/clientShellRoleStorage'
 import { queryClient } from '../../lib/query'
 import {
   IconBriefcase,
@@ -48,16 +51,12 @@ export function AppLayout() {
   const navigate = useNavigate()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
-  const master = useQuery({
-    queryKey: ['master'],
-    queryFn: masterMeApi,
-    enabled: me.isSuccess,
-    retry: false,
-  })
+  const master = useMasterMe(me.isSuccess)
 
   const logout = useMutation({
     mutationFn: logoutApi,
     onSuccess: async () => {
+      clearClientShellRole()
       await queryClient.removeQueries({ queryKey: ['me'] })
       await queryClient.removeQueries({ queryKey: ['master'] })
       navigate('/login')
@@ -67,14 +66,33 @@ export function AppLayout() {
   const email = me.data?.email ?? ''
   const name = master.data?.display_name
 
-  const isClientOnly =
-    me.isSuccess &&
+  const liveMaster404 =
     master.isFetched &&
     master.isError &&
     master.error instanceof ApiError &&
     master.error.status === 404
 
-  const shellLoading = me.isLoading || (me.isSuccess && master.isPending)
+  const isMasterUser = Boolean(master.data)
+
+  /* Надёжно фиксируем режим оболочки до чтения из storage: при «мигании» fetch это же значение подставится из sessionStorage. */
+  if (typeof sessionStorage !== 'undefined' && email) {
+    if (master.data) {
+      persistClientShellRole(email, 'master')
+    } else if (liveMaster404) {
+      persistClientShellRole(email, 'client')
+    }
+  }
+
+  const storedShellRole = email ? readPersistedShellRole(email) : null
+
+  /**
+   * Клиент без профиля мастера. Учитываем sessionStorage: при «мигании» статуса запроса master
+   * живое условие может на кадр стать ложным — иначе показывается сайдбар мастера.
+   */
+  const isClientOnly =
+    Boolean(me.isSuccess && email) && !isMasterUser && (liveMaster404 || storedShellRole === 'client')
+
+  const shellLoading = me.isLoading || (me.isSuccess && !master.isFetched)
 
   const displayName = isClientOnly ? (email.split('@')[0] || 'Клиент') : (name ?? 'Мастер')
   const cabinetLabel = isClientOnly ? 'кабинет клиента' : 'кабинет мастера'
@@ -307,7 +325,7 @@ export function AppLayout() {
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 md:px-8 lg:px-10 lg:py-10">
-            <Outlet />
+            <Outlet context={{ isClientOnly } satisfies AppShellOutletContext} />
           </div>
         </div>
       </main>

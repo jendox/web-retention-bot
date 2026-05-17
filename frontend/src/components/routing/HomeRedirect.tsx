@@ -3,17 +3,12 @@ import { Navigate } from 'react-router-dom'
 
 import { meApi } from '../../api/auth'
 import { ApiError } from '../../api/client'
-import { masterMeApi } from '../../api/masters'
+import { useMasterMe } from '../../hooks/useMasterMe'
 
 /** Стартовый маршрут: мастер → обзор студии, клиент без мастера → личный кабинет. */
 export function HomeRedirect() {
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
-  const master = useQuery({
-    queryKey: ['master'],
-    queryFn: masterMeApi,
-    enabled: me.isSuccess,
-    retry: false,
-  })
+  const master = useMasterMe(me.isSuccess)
 
   if (me.isLoading) {
     return (
@@ -27,7 +22,7 @@ export function HomeRedirect() {
     return <Navigate to="/login" replace />
   }
 
-  if (master.isPending) {
+  if (!master.isFetched) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-stone-100 dark:bg-stone-950">
         <p className="text-sm text-stone-500 dark:text-stone-400">Загрузка…</p>

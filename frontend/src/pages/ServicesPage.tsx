@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { meApi } from '../api/auth'
-import { masterMeApi } from '../api/masters'
+import { useMasterMe } from '../hooks/useMasterMe'
 import {
   serviceDeleteApi,
   servicePatchApi,
@@ -454,7 +454,7 @@ export function ServicesPage() {
   const [pendingDelete, setPendingDelete] = useState<Service | null>(null)
 
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
-  const master = useQuery({ queryKey: ['master'], queryFn: masterMeApi, enabled: me.isSuccess, retry: false })
+  const master = useMasterMe(me.isSuccess)
   const list = useQuery({
     queryKey: ['services', page, pageSize],
     queryFn: () => servicesListApi({ page, page_size: pageSize }),

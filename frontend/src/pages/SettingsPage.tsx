@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useOutletContext } from 'react-router-dom'
 
 import { meApi } from '../api/auth'
-import { ApiError } from '../api/client'
-import { masterMeApi } from '../api/masters'
+import type { AppShellOutletContext } from '../app/appShellOutletContext'
+import { useMasterMe } from '../hooks/useMasterMe'
 import { cn } from '../lib/forms'
 
 const fieldClass =
@@ -31,21 +31,10 @@ function initials(email: string) {
 
 export function SettingsPage() {
   const navigate = useNavigate()
+  const { isClientOnly } = useOutletContext<AppShellOutletContext>()
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
-  const master = useQuery({
-    queryKey: ['master'],
-    queryFn: masterMeApi,
-    enabled: me.isSuccess,
-    retry: false,
-  })
+  const master = useMasterMe(me.isSuccess)
   const [saved, setSaved] = useState(false)
-
-  const isClientOnly =
-    me.isSuccess &&
-    master.isFetched &&
-    master.isError &&
-    master.error instanceof ApiError &&
-    master.error.status === 404
 
   const email = me.data?.email ?? ''
   const defaultState = useMemo<FormState>(
@@ -79,7 +68,7 @@ export function SettingsPage() {
     return () => window.clearTimeout(timer)
   }, [saved])
 
-  if (me.isLoading || (me.isSuccess && master.isPending)) {
+  if (me.isLoading || (me.isSuccess && !master.isFetched)) {
     return <p className="text-sm text-stone-500 dark:text-stone-400">Загрузка…</p>
   }
 
