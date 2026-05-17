@@ -41,6 +41,13 @@ def _csrf_headers(client: TestClient) -> dict[str, str]:
     return {CSRF_HEADER: token}
 
 
+def _csrf_headers_with_ip(client: TestClient) -> dict[str, str]:
+    return {
+        **_csrf_headers(client),
+        "X-Forwarded-For": f"10.50.{int(uuid.uuid4().hex[:2], 16)}.{int(uuid.uuid4().hex[2:4], 16)}",
+    }
+
+
 def _issue_csrf(client: TestClient) -> None:
     resp = client.get("/api/auth/csrf")
     assert resp.status_code == 200, resp.text
@@ -55,7 +62,7 @@ def _register_verified_master(client: TestClient, *, email: str, display_name: s
             "password": MASTER_PASSWORD,
             "master_display_name": display_name,
         },
-        headers=_csrf_headers(client),
+        headers=_csrf_headers_with_ip(client),
     )
     assert reg.status_code == 201, reg.text
     verify = client.post(
@@ -77,7 +84,7 @@ def _register_verified_client(client: TestClient, *, email: str) -> dict:
             "email": email,
             "password": CLIENT_PASSWORD,
         },
-        headers=_csrf_headers(client),
+        headers=_csrf_headers_with_ip(client),
     )
     assert reg.status_code == 201, reg.text
     verify = client.post(
@@ -145,7 +152,6 @@ def test_targeted_invitation_accept_links_existing_client_and_flags_email_mismat
     suffix = uuid.uuid4().hex[:8]
     master_email = f"master_target_{suffix}@example.com"
     client_email = f"client_target_{suffix}@example.com"
-    profile_email = f"profile_target_{suffix}@example.com"
     master_name = f"Target Invite Studio {suffix}"
 
     try:
@@ -157,7 +163,7 @@ def test_targeted_invitation_accept_links_existing_client_and_flags_email_mismat
                 json={
                     "display_name": "Stored Client",
                     "phone": "+375291110000",
-                    "email": profile_email,
+                    "email": f"profile_target_{suffix}@example.com",
                 },
                 headers=_csrf_headers(client),
             )
@@ -216,7 +222,7 @@ def test_targeted_invitation_accept_links_existing_client_and_flags_email_mismat
             detail_data = detail.json()
             assert detail_data["client"]["display_name"] == "Accepted Client"
             assert detail_data["client"]["phone"] == "+375292224455"
-            assert detail_data["client"]["email"] == profile_email
+            assert detail_data["client"]["email"] == f"profile_target_{suffix}@example.com"
             assert detail_data["client"]["user_id"] is not None
             assert detail_data["link"]["linked_account_email"] == client_email
             assert detail_data["link"]["invite_email_mismatch"] is True

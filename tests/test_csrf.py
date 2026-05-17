@@ -29,6 +29,13 @@ def _csrf_headers(client: TestClient) -> dict[str, str]:
     return {CSRF_HEADER: token}
 
 
+def _csrf_headers_with_ip(client: TestClient) -> dict[str, str]:
+    return {
+        **_csrf_headers(client),
+        "X-Forwarded-For": f"10.40.{int(uuid.uuid4().hex[:2], 16)}.{int(uuid.uuid4().hex[2:4], 16)}",
+    }
+
+
 def _issue_csrf(client: TestClient) -> None:
     resp = client.get("/api/auth/csrf")
     assert resp.status_code == 200, resp.text
@@ -49,7 +56,7 @@ def _register_verified_master(client: TestClient) -> None:
             "password": password,
             "master_display_name": "CSRF Test Studio",
         },
-        headers=_csrf_headers(client),
+        headers=_csrf_headers_with_ip(client),
     )
     assert reg.status_code == 201, reg.text
     token = mint_email_verification_token(

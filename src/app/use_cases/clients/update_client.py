@@ -87,7 +87,7 @@ class UpdateClientUseCase:
     ) -> ClientWithLinkResponse:
         with log_context(use_case="update_client", master_id=str(master_id), client_id=str(client_id)):
             patch = self._get_patch(payload)
-            link, client = self._get_link_with_client(master_id=master_id, client_id=client_id)
+            link, client = await self._get_link_with_client(master_id=master_id, client_id=client_id)
 
             self._ensure_email_modification_allowed(patch, client, link)
             self._ensure_display_name_modification_allowed(patch, client)

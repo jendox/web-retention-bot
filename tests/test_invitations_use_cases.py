@@ -204,7 +204,7 @@ async def test_accept_targeted_invitation_links_existing_client_and_flags_email_
             "profile_email": "profile@example.com",
             "account_email": "account@example.com",
             "client_display_name": "Accepted Name",
-        }
+        },
     ]
     assert invite.linked_client_id == target_client_id
     assert invite.accepted_at is not None

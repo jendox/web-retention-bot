@@ -24,6 +24,12 @@ class FakeClientRepo:
     async def get_link_with_client(self, master_id, client_id):
         return self.row
 
+    async def flush(self):
+        await self.session.flush()
+
+    async def refresh(self, obj):
+        await self.session.refresh(obj)
+
 
 async def test_update_client_rejects_email_change_when_linked_email_is_locked():
     link = SimpleNamespace(

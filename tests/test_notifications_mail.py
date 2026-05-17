@@ -34,7 +34,7 @@ def mail_settings() -> Settings:
                 "auth_log_verification_link": False,
             },
             "smtp": {"enabled": False},
-        }
+        },
     )
 
 

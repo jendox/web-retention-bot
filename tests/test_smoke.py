@@ -29,6 +29,13 @@ def _csrf_headers(client: TestClient) -> dict[str, str]:
     return {CSRF_HEADER: token}
 
 
+def _csrf_headers_with_ip(client: TestClient) -> dict[str, str]:
+    return {
+        **_csrf_headers(client),
+        "X-Forwarded-For": f"10.60.{int(uuid.uuid4().hex[:2], 16)}.{int(uuid.uuid4().hex[2:4], 16)}",
+    }
+
+
 def _issue_csrf(client: TestClient) -> None:
     resp = client.get("/api/auth/csrf")
     assert resp.status_code == 200, resp.text
@@ -55,7 +62,7 @@ def test_auth_register_verify_login_flow():
     try:
         with TestClient(app) as client:
             _issue_csrf(client)
-            reg = client.post("/api/auth/register", json=register_body, headers=_csrf_headers(client))
+            reg = client.post("/api/auth/register", json=register_body, headers=_csrf_headers_with_ip(client))
             assert reg.status_code == 201
             data = reg.json()
             assert data["email"] == email
