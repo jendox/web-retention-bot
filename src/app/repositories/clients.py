@@ -42,8 +42,21 @@ class ClientRepository(BaseRepository):
         await self.session.flush()
         return client
 
-    async def count_clients_for_master(self, master_id: UUID) -> int:
+    @staticmethod
+    def _search_filter(search: str):
+        pattern = f"%{search.lower()}%"
+        return or_(
+            func.lower(Client.display_name).like(pattern),
+            func.lower(Client.phone).like(pattern),
+            func.lower(Client.email).like(pattern),
+            func.lower(MasterClient.alias).like(pattern),
+            func.lower(MasterClient.linked_account_email).like(pattern),
+        )
+
+    async def count_clients_for_master(self, master_id: UUID, *, search: str | None = None) -> int:
         stmt = select(func.count()).select_from(MasterClient).where(MasterClient.master_id == master_id)
+        if search:
+            stmt = stmt.join(Client, MasterClient.client_id == Client.id).where(self._search_filter(search))
         n = (await self.session.execute(stmt)).scalar_one()
         return int(n)
 
@@ -53,6 +66,7 @@ class ClientRepository(BaseRepository):
         *,
         limit: int,
         offset: int,
+        search: str | None = None,
     ) -> list[tuple[MasterClient, Client]]:
         stmt = (
             select(MasterClient, Client)
@@ -62,6 +76,8 @@ class ClientRepository(BaseRepository):
             .limit(limit)
             .offset(offset)
         )
+        if search:
+            stmt = stmt.where(self._search_filter(search))
         rows = await self.session.execute(stmt)
         return list(rows.all())
 

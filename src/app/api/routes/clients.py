@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_master_profile, require_user
@@ -83,8 +83,16 @@ async def list_clients(
     pagination: Annotated[Pagination, Depends(get_pagination)],
     use_case: Annotated[ListClientsUseCase, Depends(get_list_clients_use_case)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
+    q: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            max_length=100,
+            description="Optional search by client name, alias, phone, email, or linked account email.",
+        ),
+    ] = None,
 ) -> PaginatedResponse[ClientWithLinkResponse]:
-    return await use_case(master.id, pagination)
+    return await use_case(master.id, pagination, search=q)
 
 
 @router.post(

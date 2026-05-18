@@ -4,7 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
@@ -16,6 +16,14 @@ __all__ = ["ServiceRepository", "get_service_repo"]
 
 
 class ServiceRepository(BaseRepository):
+    @staticmethod
+    def _search_filter(search: str):
+        pattern = f"%{search.lower()}%"
+        return or_(
+            func.lower(Service.name).like(pattern),
+            func.lower(Service.description).like(pattern),
+        )
+
     async def list_for_master(self, master_id: UUID) -> list[Service]:
         stmt = (
             select(Service)
@@ -25,10 +33,12 @@ class ServiceRepository(BaseRepository):
         rows = await self.session.execute(stmt)
         return list(rows.scalars())
 
-    async def count_for_master(self, master_id: UUID, *, is_active: bool | None) -> int:
+    async def count_for_master(self, master_id: UUID, *, is_active: bool | None, search: str | None = None) -> int:
         stmt = select(func.count()).select_from(Service).where(Service.master_id == master_id)
         if is_active is not None:
             stmt = stmt.where(Service.is_active == is_active)
+        if search:
+            stmt = stmt.where(self._search_filter(search))
         count = (await self.session.execute(stmt)).scalar_one()
         return int(count)
 
@@ -39,6 +49,7 @@ class ServiceRepository(BaseRepository):
         limit: int,
         offset: int,
         is_active: bool | None,
+        search: str | None = None,
     ) -> list[Service]:
         stmt = (
             select(Service)
@@ -49,6 +60,8 @@ class ServiceRepository(BaseRepository):
         )
         if is_active is not None:
             stmt = stmt.where(Service.is_active == is_active)
+        if search:
+            stmt = stmt.where(self._search_filter(search))
         rows = await self.session.execute(stmt)
         return list(rows.scalars())
 

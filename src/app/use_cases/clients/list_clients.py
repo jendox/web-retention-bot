@@ -17,12 +17,16 @@ class ListClientsUseCase:
         self,
         master_id: UUID,
         pagination: Pagination,
+        *,
+        search: str | None = None,
     ) -> PaginatedResponse[ClientWithLinkResponse]:
-        total = await self._client_repo.count_clients_for_master(master_id)
+        normalized_search = search.strip() if search and search.strip() else None
+        total = await self._client_repo.count_clients_for_master(master_id, search=normalized_search)
         rows = await self._client_repo.master_clients_with_clients_page(
             master_id,
             limit=pagination.page_size,
             offset=pagination.offset,
+            search=normalized_search,
         )
         items = [
             ClientWithLinkResponse(

@@ -40,13 +40,16 @@ export async function clientsMyMastersApi() {
   return apiFetch<ClientMyMasterItem[]>('/api/clients/me/masters')
 }
 
-export async function clientsListApi(params?: { page?: number; page_size?: number }) {
+export async function clientsListApi(params?: { page?: number; page_size?: number; q?: string }) {
   const sp = new URLSearchParams()
   if (params?.page != null) {
     sp.set('page', String(params.page))
   }
   if (params?.page_size != null) {
     sp.set('page_size', String(params.page_size))
+  }
+  if (params?.q) {
+    sp.set('q', params.q)
   }
   const qs = sp.toString()
   return apiFetch<PaginatedClients>(`/api/clients${qs ? `?${qs}` : ''}`)

@@ -1,7 +1,7 @@
 import uuid
 from datetime import time
 
-from app.use_cases.register_master import default_weekly_schedule_rules
+from app.use_cases.auth.register_master import default_weekly_schedule_rules
 
 
 def test_default_weekly_schedule_rules_are_weekdays_10_to_18():

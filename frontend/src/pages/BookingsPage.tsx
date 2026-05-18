@@ -1,104 +1,23 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { meApi } from '../api/auth'
+import { clientsGetApi, clientsListApi, type ClientWithLink } from '../api/clients'
+import { servicesListApi, type Service } from '../api/services'
 import { cn } from '../lib/forms'
 
-type ClientMode = 'accounting' | 'existing' | 'linked'
+type ClientSource = 'existing' | 'new'
 
-type MockClient = {
-  id: string
-  name: string
-  phone?: string
-  email?: string
-  kind: 'accounting' | 'linked'
-}
-
-type MockService = {
-  id: string
-  name: string
-  duration: number
-  price: string
-}
-
-type MockBooking = {
-  id: string
-  clientName: string
-  serviceName: string
-  startAt: string
-  duration: number
-  price: string
-  status: 'scheduled' | 'cancelled'
-  source: 'manual' | 'client'
-}
+const SEARCH_PAGE_SIZE = 10
+const MIN_SEARCH_LENGTH = 2
 
 const fieldClass =
   'w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none transition focus:border-stone-400 focus:ring-2 focus:ring-stone-400/15 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-100 dark:focus:border-stone-500'
 
-const clientModes: { value: ClientMode; label: string; description: string }[] = [
-  {
-    value: 'accounting',
-    label: 'Новый клиент для учета',
-    description: 'Создать карточку без входа в приложение',
-  },
-  {
-    value: 'existing',
-    label: 'Клиент из базы',
-    description: 'Выбрать уже созданную карточку',
-  },
-  {
-    value: 'linked',
-    label: 'Клиент с аккаунтом',
-    description: 'Запись для привязанного пользователя',
-  },
-]
-
-const mockClients: MockClient[] = [
-  { id: 'c1', name: 'Анна Смирнова', phone: '+375 29 111-22-33', kind: 'accounting' },
-  { id: 'c2', name: 'Мария Коваль', phone: '+375 44 555-10-10', email: 'maria@example.com', kind: 'linked' },
-  { id: 'c3', name: 'Ирина Литвин', phone: '+375 33 902-18-44', kind: 'accounting' },
-]
-
-const mockServices: MockService[] = [
-  { id: 's1', name: 'Маникюр с покрытием', duration: 90, price: '75 BYN' },
-  { id: 's2', name: 'Коррекция бровей', duration: 30, price: '25 BYN' },
-  { id: 's3', name: 'Консультация', duration: 45, price: '0 BYN' },
-]
-
-const mockSlots = ['10:00', '11:30', '13:00', '15:30', '17:00']
-
-const mockBookings: MockBooking[] = [
-  {
-    id: 'b1',
-    clientName: 'Мария Коваль',
-    serviceName: 'Маникюр с покрытием',
-    startAt: '2026-05-20T10:00:00',
-    duration: 90,
-    price: '75 BYN',
-    status: 'scheduled',
-    source: 'client',
-  },
-  {
-    id: 'b2',
-    clientName: 'Анна Смирнова',
-    serviceName: 'Коррекция бровей',
-    startAt: '2026-05-20T13:00:00',
-    duration: 30,
-    price: '25 BYN',
-    status: 'scheduled',
-    source: 'manual',
-  },
-  {
-    id: 'b3',
-    clientName: 'Ирина Литвин',
-    serviceName: 'Консультация',
-    startAt: '2026-05-21T15:30:00',
-    duration: 45,
-    price: '0 BYN',
-    status: 'cancelled',
-    source: 'manual',
-  },
+const sourceTabs: { value: ClientSource; label: string }[] = [
+  { value: 'existing', label: 'Из базы' },
+  { value: 'new', label: 'Новый' },
 ]
 
 function toDateInputValue(date: Date) {
@@ -108,34 +27,21 @@ function toDateInputValue(date: Date) {
   return `${year}-${month}-${day}`
 }
 
-function formatDateTime(value: string) {
-  const formatted = new Intl.DateTimeFormat('ru-RU', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
-  return formatted.replace(' Г.', ' г.')
+function formatMoney(service: Service) {
+  return `${service.price} ${service.currency}`
 }
 
-function formatDateLong(value: string) {
-  const [year, month, day] = value.split('-').map(Number)
-  const formatted = new Intl.DateTimeFormat('ru-RU', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(year, month - 1, day))
-  return formatted.replace(' Г.', ' г.')
+function clientDisplayName(item: ClientWithLink) {
+  return item.link.alias?.trim() || item.client.display_name
 }
 
-function IconPlus(props: { className?: string }) {
-  return (
-    <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-    </svg>
-  )
+function clientContactLine(item: ClientWithLink) {
+  const bits = [item.client.phone, item.client.email].filter(Boolean)
+  return bits.length > 0 ? bits.join(' · ') : 'контакты не указаны'
+}
+
+function cabinetLabel(item: ClientWithLink) {
+  return item.client.user_id ? 'кабинет подключен' : 'без кабинета'
 }
 
 function IconCalendarSmall(props: { className?: string }) {
@@ -146,55 +52,80 @@ function IconCalendarSmall(props: { className?: string }) {
   )
 }
 
-function IconUserPlus(props: { className?: string }) {
+function IconPlus(props: { className?: string }) {
+  return (
+    <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+    </svg>
+  )
+}
+
+function IconSearch(props: { className?: string }) {
   return (
     <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75" aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19a6 6 0 00-12 0" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 11a4 4 0 100-8 4 4 0 000 8zM19 8v6m3-3h-6" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m1.35-5.15a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z" />
     </svg>
   )
 }
 
 export function BookingsPage() {
   const navigate = useNavigate()
-  const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
-  const [clientMode, setClientMode] = useState<ClientMode>('accounting')
+  const [searchParams] = useSearchParams()
+  const prefillClientId = searchParams.get('client_id') ?? ''
+
+  const [clientSource, setClientSource] = useState<ClientSource>('existing')
+  const [clientSearch, setClientSearch] = useState('')
+  const [selectedClient, setSelectedClient] = useState<ClientWithLink | null>(null)
   const [draftName, setDraftName] = useState('')
   const [draftPhone, setDraftPhone] = useState('')
   const [draftEmail, setDraftEmail] = useState('')
-  const [selectedClientId, setSelectedClientId] = useState(mockClients[0]?.id ?? '')
-  const [selectedServiceId, setSelectedServiceId] = useState(mockServices[0]?.id ?? '')
+  const [serviceSearch, setServiceSearch] = useState('')
+  const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()))
-  const [selectedSlot, setSelectedSlot] = useState(mockSlots[0])
+  const [selectedTime, setSelectedTime] = useState('10:00')
   const [comment, setComment] = useState('')
+  const [submitNotice, setSubmitNotice] = useState(false)
+
+  const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
+  const prefilledClient = useQuery({
+    queryKey: ['client', prefillClientId],
+    queryFn: () => clientsGetApi(prefillClientId),
+    enabled: me.isSuccess && Boolean(prefillClientId),
+  })
+
+  const clientSearchTerm = clientSearch.trim()
+  const serviceSearchTerm = serviceSearch.trim()
+  const shouldSearchClients = clientSearchTerm.length >= MIN_SEARCH_LENGTH
+  const shouldSearchServices = serviceSearchTerm.length >= MIN_SEARCH_LENGTH
+
+  const clients = useQuery({
+    queryKey: ['clients', 'booking-form-search', clientSearchTerm, SEARCH_PAGE_SIZE],
+    queryFn: () => clientsListApi({ page: 1, page_size: SEARCH_PAGE_SIZE, q: clientSearchTerm }),
+    enabled: me.isSuccess && shouldSearchClients,
+  })
+  const services = useQuery({
+    queryKey: ['services', 'booking-form-search', serviceSearchTerm, SEARCH_PAGE_SIZE, 'active'],
+    queryFn: () => servicesListApi({ page: 1, page_size: SEARCH_PAGE_SIZE, is_active: true, q: serviceSearchTerm }),
+    enabled: me.isSuccess && shouldSearchServices,
+  })
 
   useEffect(() => {
     if (me.isError) navigate('/login')
   }, [me.isError, navigate])
 
-  const selectedService = mockServices.find((service) => service.id === selectedServiceId) ?? mockServices[0]
-  const selectedClient = mockClients.find((client) => client.id === selectedClientId)
-  const availableClients = mockClients.filter((client) => {
-    if (clientMode === 'linked') {
-      return client.kind === 'linked'
-    }
-    return client.kind === 'accounting'
-  })
-  const previewClientName = clientMode === 'accounting' ? draftName.trim() || 'Новый клиент' : selectedClient?.name ?? 'Клиент'
-  const canCreate =
-    selectedService != null &&
-    selectedSlot.length > 0 &&
-    (clientMode !== 'accounting' || draftName.trim().length > 0) &&
-    (clientMode === 'accounting' || selectedClient != null)
+  const prefilled = selectedClient ?? prefilledClient.data ?? null
+  const clientItems = clients.data?.items ?? []
+  const serviceItems = services.data?.items ?? []
+  const clientsError = clients.error instanceof Error ? clients.error.message : null
+  const servicesError = services.error instanceof Error ? services.error.message : null
 
-  const bookingsByDate = useMemo(() => {
-    const groups = new Map<string, MockBooking[]>()
-    for (const booking of mockBookings) {
-      const dateKey = booking.startAt.slice(0, 10)
-      groups.set(dateKey, [...(groups.get(dateKey) ?? []), booking])
-    }
-    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b))
-  }, [])
+  const previewClientName =
+    clientSource === 'new' ? draftName.trim() || 'Новый клиент' : prefilled ? clientDisplayName(prefilled) : 'Клиент'
+  const canPrepare =
+    selectedService != null &&
+    selectedDate.length > 0 &&
+    selectedTime.length > 0 &&
+    (clientSource === 'new' ? draftName.trim().length > 0 : prefilled != null)
 
   if (me.isLoading || !me.data) {
     return <p className="text-stone-500 dark:text-stone-400">Загрузка...</p>
@@ -202,93 +133,169 @@ export function BookingsPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-3xl">
-            Записи
-          </h1>
-          <p className="max-w-2xl text-sm leading-6 text-stone-600 dark:text-stone-400">
-            Моковый интерфейс создания записи. Первый сценарий - клиент для учета без аккаунта.
-          </p>
-        </div>
-        <div className="grid grid-cols-3 gap-2 rounded-xl border border-stone-200 bg-white p-2 shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
-          <div className="min-w-20 px-3 py-2">
-            <p className="text-lg font-semibold text-stone-900 dark:text-stone-50">2</p>
-            <p className="text-xs text-stone-500 dark:text-stone-400">активные</p>
-          </div>
-          <div className="min-w-20 border-x border-stone-200 px-3 py-2 dark:border-stone-700">
-            <p className="text-lg font-semibold text-stone-900 dark:text-stone-50">1</p>
-            <p className="text-xs text-stone-500 dark:text-stone-400">сегодня</p>
-          </div>
-          <div className="min-w-20 px-3 py-2">
-            <p className="text-lg font-semibold text-stone-900 dark:text-stone-50">100</p>
-            <p className="text-xs text-stone-500 dark:text-stone-400">BYN</p>
-          </div>
-        </div>
+      <header className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-3xl">
+          Новая запись
+        </h1>
+        <p className="max-w-2xl text-sm leading-6 text-stone-600 dark:text-stone-400">
+          Найдите клиента и услугу через поиск или быстро внесите нового клиента прямо из формы записи.
+        </p>
       </header>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(24rem,1.05fr)]">
-        <section className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
-          <div className="mb-4 flex items-center gap-3">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(21rem,0.72fr)]">
+        <section className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80 sm:p-5">
+          <div className="mb-5 flex items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200">
               <IconPlus className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-50">Новая запись</h2>
-              <p className="text-sm text-stone-500 dark:text-stone-400">Данные пока не сохраняются на сервере</p>
+              <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-50">Параметры записи</h2>
+              <p className="text-sm text-stone-500 dark:text-stone-400">Создание записи на сервере пока не вызывается</p>
             </div>
           </div>
 
           <div className="space-y-5">
             <div>
               <p className="mb-2 text-sm font-medium text-stone-700 dark:text-stone-300">Клиент</p>
-              <div className="grid gap-2">
-                {clientModes.map((mode) => (
+              <div className="inline-grid w-full grid-cols-2 rounded-lg bg-stone-100 p-1 dark:bg-stone-800 sm:w-auto">
+                {sourceTabs.map((tab) => (
                   <button
-                    key={mode.value}
+                    key={tab.value}
                     type="button"
                     onClick={() => {
-                      setClientMode(mode.value)
-                      const nextClient = mockClients.find((client) =>
-                        mode.value === 'linked' ? client.kind === 'linked' : client.kind === 'accounting',
-                      )
-                      if (nextClient) {
-                        setSelectedClientId(nextClient.id)
-                      }
+                      setClientSource(tab.value)
+                      setSubmitNotice(false)
                     }}
                     className={cn(
-                      'flex items-start gap-3 rounded-lg border px-3 py-3 text-left transition',
-                      clientMode === mode.value
-                        ? 'border-teal-500 bg-teal-50 dark:border-teal-600 dark:bg-teal-950/30'
-                        : 'border-stone-200 hover:bg-stone-50 dark:border-stone-700 dark:hover:bg-stone-800/60',
+                      'rounded-md px-4 py-2 text-sm font-medium transition',
+                      clientSource === tab.value
+                        ? 'bg-white text-stone-950 shadow-sm dark:bg-stone-950 dark:text-stone-50'
+                        : 'text-stone-600 hover:text-stone-950 dark:text-stone-300 dark:hover:text-white',
                     )}
                   >
-                    <span
-                      className={cn(
-                        'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border',
-                        clientMode === mode.value
-                          ? 'border-teal-600 bg-teal-600 text-white'
-                          : 'border-stone-300 dark:border-stone-600',
-                      )}
-                    >
-                      {clientMode === mode.value ? <span className="h-2 w-2 rounded-full bg-white" /> : null}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-stone-900 dark:text-stone-100">{mode.label}</span>
-                      <span className="text-xs text-stone-500 dark:text-stone-400">{mode.description}</span>
-                    </span>
+                    {tab.label}
                   </button>
                 ))}
               </div>
             </div>
 
-            {clientMode === 'accounting' ? (
+            {clientSource === 'existing' ? (
+              <div className="space-y-3">
+                {prefilled ? (
+                  <div className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-3 dark:border-teal-900/70 dark:bg-teal-950/30">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="font-medium text-stone-900 dark:text-stone-50">{clientDisplayName(prefilled)}</p>
+                        <p className="truncate text-sm text-stone-600 dark:text-stone-400">{clientContactLine(prefilled)}</p>
+                      </div>
+                      <span
+                        className={cn(
+                          'w-fit shrink-0 rounded-full px-2 py-0.5 text-xs font-medium',
+                          prefilled.client.user_id
+                            ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200'
+                            : 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300',
+                        )}
+                      >
+                        {cabinetLabel(prefilled)}
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+
+                <label className="block">
+                  <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Поиск клиента</span>
+                  <span className="relative mt-1 block">
+                    <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+                    <input
+                      value={clientSearch}
+                      onChange={(event) => {
+                        setClientSearch(event.target.value)
+                        setSelectedClient(null)
+                        setSubmitNotice(false)
+                      }}
+                      className={cn(fieldClass, 'pl-9')}
+                      placeholder="Введите минимум 2 символа"
+                    />
+                  </span>
+                </label>
+
+                {clientSearchTerm.length > 0 && !shouldSearchClients ? (
+                  <p className="text-sm text-stone-500 dark:text-stone-400">Введите еще символы для поиска по базе.</p>
+                ) : null}
+
+                {shouldSearchClients ? (
+                  <div className="max-h-72 overflow-y-auto rounded-lg border border-stone-200 dark:border-stone-700">
+                    {clients.isLoading ? (
+                      <p className="px-3 py-4 text-sm text-stone-500 dark:text-stone-400">Поиск клиентов...</p>
+                    ) : clientsError ? (
+                      <p className="px-3 py-4 text-sm text-red-700 dark:text-red-300">{clientsError}</p>
+                    ) : clientItems.length === 0 ? (
+                      <div className="space-y-3 px-3 py-4">
+                        <p className="text-sm text-stone-500 dark:text-stone-400">Клиенты не найдены</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setClientSource('new')
+                            setDraftName(clientSearchTerm)
+                            setSubmitNotice(false)
+                          }}
+                          className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-800"
+                        >
+                          Создать нового: {clientSearchTerm}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-stone-200 dark:divide-stone-800">
+                        {clientItems.map((item) => {
+                          const checked = prefilled?.client.id === item.client.id
+                          return (
+                            <button
+                              key={item.client.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedClient(item)
+                                setClientSearch(clientDisplayName(item))
+                                setSubmitNotice(false)
+                              }}
+                              className={cn(
+                                'flex w-full items-start justify-between gap-3 px-3 py-3 text-left transition',
+                                checked
+                                  ? 'bg-teal-50 dark:bg-teal-950/30'
+                                  : 'hover:bg-stone-50 dark:hover:bg-stone-800/60',
+                              )}
+                            >
+                              <span className="min-w-0">
+                                <span className="block font-medium text-stone-900 dark:text-stone-50">{clientDisplayName(item)}</span>
+                                <span className="block truncate text-sm text-stone-500 dark:text-stone-400">{clientContactLine(item)}</span>
+                              </span>
+                              <span
+                                className={cn(
+                                  'shrink-0 rounded-full px-2 py-0.5 text-xs font-medium',
+                                  item.client.user_id
+                                    ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200'
+                                    : 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300',
+                                )}
+                              >
+                                {cabinetLabel(item)}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block sm:col-span-2">
                   <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Имя клиента *</span>
                   <input
                     value={draftName}
-                    onChange={(event) => setDraftName(event.target.value)}
+                    onChange={(event) => {
+                      setDraftName(event.target.value)
+                      setSubmitNotice(false)
+                    }}
                     className={cn(fieldClass, 'mt-1')}
                     placeholder="Например, Елена Петрова"
                   />
@@ -312,38 +319,72 @@ export function BookingsPage() {
                   />
                 </label>
               </div>
-            ) : (
-              <label className="block">
-                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Выберите клиента</span>
-                <select
-                  value={selectedClientId}
-                  onChange={(event) => setSelectedClientId(event.target.value)}
-                  className={cn(fieldClass, 'mt-1')}
-                >
-                  {availableClients.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name} {client.phone ? `- ${client.phone}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
             )}
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-3">
               <label className="block">
                 <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Услуга</span>
-                <select
-                  value={selectedServiceId}
-                  onChange={(event) => setSelectedServiceId(event.target.value)}
-                  className={cn(fieldClass, 'mt-1')}
-                >
-                  {mockServices.map((service) => (
-                    <option key={service.id} value={service.id}>
-                      {service.name}
-                    </option>
-                  ))}
-                </select>
+                <span className="relative mt-1 block">
+                  <IconSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+                  <input
+                    value={serviceSearch}
+                    onChange={(event) => {
+                      setServiceSearch(event.target.value)
+                      setSelectedService(null)
+                      setSubmitNotice(false)
+                    }}
+                    className={cn(fieldClass, 'pl-9')}
+                    placeholder="Введите минимум 2 символа"
+                  />
+                </span>
               </label>
+
+              {serviceSearchTerm.length > 0 && !shouldSearchServices ? (
+                <p className="text-sm text-stone-500 dark:text-stone-400">Введите еще символы для поиска услуги.</p>
+              ) : null}
+
+              {shouldSearchServices ? (
+                <div className="max-h-64 overflow-y-auto rounded-lg border border-stone-200 dark:border-stone-700">
+                  {services.isLoading ? (
+                    <p className="px-3 py-4 text-sm text-stone-500 dark:text-stone-400">Поиск услуг...</p>
+                  ) : servicesError ? (
+                    <p className="px-3 py-4 text-sm text-red-700 dark:text-red-300">{servicesError}</p>
+                  ) : serviceItems.length === 0 ? (
+                    <p className="px-3 py-4 text-sm text-stone-500 dark:text-stone-400">Активные услуги не найдены</p>
+                  ) : (
+                    <div className="divide-y divide-stone-200 dark:divide-stone-800">
+                      {serviceItems.map((service) => {
+                        const checked = selectedService?.id === service.id
+                        return (
+                          <button
+                            key={service.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedService(service)
+                              setServiceSearch(service.name)
+                              setSubmitNotice(false)
+                            }}
+                            className={cn(
+                              'flex w-full items-start justify-between gap-3 px-3 py-3 text-left transition',
+                              checked ? 'bg-teal-50 dark:bg-teal-950/30' : 'hover:bg-stone-50 dark:hover:bg-stone-800/60',
+                            )}
+                          >
+                            <span className="min-w-0">
+                              <span className="block font-medium text-stone-900 dark:text-stone-50">{service.name}</span>
+                              <span className="block text-sm text-stone-500 dark:text-stone-400">
+                                {service.duration_min} мин · {formatMoney(service)}
+                              </span>
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-[10rem_8rem_minmax(0,1fr)]">
               <label className="block">
                 <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Дата</span>
                 <input
@@ -353,113 +394,69 @@ export function BookingsPage() {
                   className={cn(fieldClass, 'mt-1 [color-scheme:light] dark:[color-scheme:dark]')}
                 />
               </label>
+              <label className="block">
+                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Время</span>
+                <input
+                  type="time"
+                  value={selectedTime}
+                  onChange={(event) => setSelectedTime(event.target.value)}
+                  className={cn(fieldClass, 'mt-1 [color-scheme:light] dark:[color-scheme:dark]')}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Комментарий</span>
+                <input
+                  value={comment}
+                  onChange={(event) => setComment(event.target.value)}
+                  className={cn(fieldClass, 'mt-1')}
+                  placeholder="Например: впервые"
+                />
+              </label>
             </div>
 
-            <div>
-              <p className="mb-2 text-sm font-medium text-stone-700 dark:text-stone-300">Доступное время</p>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                {mockSlots.map((slot) => (
-                  <button
-                    key={slot}
-                    type="button"
-                    onClick={() => setSelectedSlot(slot)}
-                    className={cn(
-                      'rounded-lg border px-3 py-2 text-sm font-medium transition',
-                      selectedSlot === slot
-                        ? 'border-teal-600 bg-teal-100 text-teal-900 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-100'
-                        : 'border-stone-200 text-stone-700 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-200 dark:hover:bg-stone-800',
-                    )}
-                  >
-                    {slot}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <label className="block">
-              <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Комментарий</span>
-              <textarea
-                value={comment}
-                onChange={(event) => setComment(event.target.value)}
-                rows={3}
-                className={cn(fieldClass, 'mt-1 resize-y')}
-                placeholder="Например: впервые, попросила напомнить за день"
-              />
-            </label>
-
-            <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 dark:border-stone-700 dark:bg-stone-950/50">
-              <p className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">Предпросмотр</p>
-              <p className="mt-1 font-medium text-stone-900 dark:text-stone-50">{previewClientName}</p>
-              <p className="text-sm text-stone-600 dark:text-stone-400">
-                {selectedService.name} · {selectedService.duration} мин · {selectedService.price}
+            {submitNotice ? (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-100">
+                Форма собрана, но запись пока не отправляется: следующий шаг - подключить слоты и POST создания записи.
               </p>
-              <p className="text-sm text-stone-600 dark:text-stone-400">
-                {formatDateLong(selectedDate)}, {selectedSlot}
-              </p>
-            </div>
+            ) : null}
 
             <button
               type="button"
-              disabled={!canCreate}
+              disabled={!canPrepare}
+              onClick={() => setSubmitNotice(true)}
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-teal-900/15 transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-teal-500 dark:text-stone-950 dark:hover:bg-teal-400"
             >
               <IconCalendarSmall className="h-4 w-4" />
-              Создать запись
+              Подготовить запись
             </button>
           </div>
         </section>
 
-        <section className="space-y-4">
+        <aside className="space-y-4">
           <div className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-200">
-                <IconUserPlus className="h-5 w-5" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-50">Что произойдет</h2>
-                <p className="text-sm text-stone-500 dark:text-stone-400">
-                  Для нового клиента будет создана карточка в базе мастера без пользовательского аккаунта.
-                </p>
-              </div>
-            </div>
+            <p className="text-xs font-semibold uppercase text-stone-500 dark:text-stone-400">Предпросмотр</p>
+            <p className="mt-2 text-lg font-semibold text-stone-900 dark:text-stone-50">{previewClientName}</p>
+            {selectedService ? (
+              <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">
+                {selectedService.name} · {selectedService.duration_min} мин · {formatMoney(selectedService)}
+              </p>
+            ) : (
+              <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">Найдите и выберите активную услугу</p>
+            )}
+            <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">
+              {selectedDate || 'Дата не выбрана'}, {selectedTime || 'время не выбрано'}
+            </p>
           </div>
 
-          {bookingsByDate.map(([date, bookings]) => (
-            <div key={date} className="rounded-xl border border-stone-200/90 bg-white shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
-              <div className="border-b border-stone-200 px-4 py-3 dark:border-stone-700">
-                <h2 className="font-semibold text-stone-900 dark:text-stone-50">{formatDateLong(date)}</h2>
-              </div>
-              <div className="divide-y divide-stone-200 dark:divide-stone-800">
-                {bookings.map((booking) => (
-                  <div key={booking.id} className="flex items-start justify-between gap-3 px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="font-medium text-stone-900 dark:text-stone-50">{booking.clientName}</p>
-                      <p className="text-sm text-stone-600 dark:text-stone-400">{booking.serviceName}</p>
-                      <p className="text-xs text-stone-500 dark:text-stone-500">
-                        {formatDateTime(booking.startAt)} · {booking.duration} мин · {booking.price}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-col items-end gap-1">
-                      <span
-                        className={cn(
-                          'rounded-full px-2 py-0.5 text-xs font-medium',
-                          booking.status === 'scheduled'
-                            ? 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200'
-                            : 'bg-stone-200 text-stone-600 dark:bg-stone-800 dark:text-stone-300',
-                        )}
-                      >
-                        {booking.status === 'scheduled' ? 'Запланирована' : 'Отменена'}
-                      </span>
-                      <span className="text-xs text-stone-500 dark:text-stone-500">
-                        {booking.source === 'client' ? 'клиент' : 'вручную'}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+          <div className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+            <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Что уже подключено</h2>
+            <div className="mt-3 space-y-3 text-sm text-stone-600 dark:text-stone-400">
+              <p>Клиент и услуга ищутся на сервере, без показа неполного списка по умолчанию.</p>
+              <p>При переходе из таблицы клиентов клиент сразу подставляется в эту же форму.</p>
+              <p>Метка кабинета справочная и не меняет сценарий создания записи.</p>
             </div>
-          ))}
-        </section>
+          </div>
+        </aside>
       </div>
     </div>
   )

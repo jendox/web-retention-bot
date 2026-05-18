@@ -39,8 +39,16 @@ async def list_services(
         bool | None,
         Query(description="If true/false, only active / only inactive; omit for all."),
     ] = None,
+    q: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            max_length=100,
+            description="Optional search by service name or description.",
+        ),
+    ] = None,
 ) -> PaginatedResponse[ServiceOut]:
-    return await use_case(master, pagination, is_active=is_active)
+    return await use_case(master, pagination, is_active=is_active, search=q)
 
 
 @router.post(

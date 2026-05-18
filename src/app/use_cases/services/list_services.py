@@ -19,13 +19,16 @@ class ListServicesUseCase:
         pagination: Pagination,
         *,
         is_active: bool | None,
+        search: str | None = None,
     ) -> PaginatedResponse[ServiceOut]:
-        total = await self._service_repo.count_for_master(master.id, is_active=is_active)
+        normalized_search = search.strip() if search and search.strip() else None
+        total = await self._service_repo.count_for_master(master.id, is_active=is_active, search=normalized_search)
         rows = await self._service_repo.list_page_for_master(
             master.id,
             limit=pagination.page_size,
             offset=pagination.offset,
             is_active=is_active,
+            search=normalized_search,
         )
         items = [ServiceOut.model_validate(svc) for svc in rows]
         return PaginatedResponse(
