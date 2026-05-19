@@ -5,17 +5,42 @@ from uuid import UUID
 
 from fastapi import Depends
 
+from app.core.pagination import Pagination
 from app.repositories.bookings import BookingRepository, get_booking_repo
-from app.schemas.booking import BookingClientListItem, BookingOut
+from app.schemas.booking import BookingClientListItem, BookingListScope, BookingOut
+from app.schemas.pagination import PaginatedResponse
 
 
 class ListMasterBookingsUseCase:
     def __init__(self, booking_repo: BookingRepository) -> None:
         self._booking_repo = booking_repo
 
-    async def __call__(self, master_id: UUID) -> list[BookingOut]:
-        bookings = await self._booking_repo.list_for_master(master_id)
-        return [BookingOut.model_validate(booking) for booking in bookings]
+    async def __call__(
+        self,
+        master_id: UUID,
+        pagination: Pagination,
+        *,
+        scope: BookingListScope,
+        client_id: UUID | None = None,
+    ) -> PaginatedResponse[BookingOut]:
+        total = await self._booking_repo.count_for_master(
+            master_id=master_id,
+            scope=scope,
+            client_id=client_id,
+        )
+        bookings = await self._booking_repo.list_for_master_page(
+            master_id=master_id,
+            scope=scope,
+            limit=pagination.page_size,
+            offset=pagination.offset,
+            client_id=client_id,
+        )
+        return PaginatedResponse(
+            items=[BookingOut.model_validate(booking) for booking in bookings],
+            total=total,
+            page=pagination.page,
+            page_size=pagination.page_size,
+        )
 
 
 class ListClientBookingsUseCase:

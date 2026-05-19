@@ -74,12 +74,12 @@ class ReplaceMasterScheduleUseCase:
         weekly_days: list[WeeklyScheduleDay],
         date_overrides: list[ScheduleDateOverride],
     ) -> None:
-        bookings = await self._booking_repo.list_for_master(master.id)
+        bookings = await self._booking_repo.list_for_master(master_id=master.id, limit=500)
         now = datetime.now(UTC)
         conflicts = [
             booking
             for booking in bookings
-            if booking.status == BookingStatus.scheduled
+            if booking.status.blocks_calendar
             and _aware_utc(booking.start_at) >= now
             and not booking_fits_schedule(booking, weekly_days, date_overrides, master.timezone)
         ]

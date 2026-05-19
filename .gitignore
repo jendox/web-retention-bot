@@ -3,6 +3,10 @@
 .env.local
 *.log
 
+# Celery Beat (schedule DB in CWD when running make celery-beat)
+celerybeat-schedule
+celerybeat-schedule-*
+
 # Python
 __pycache__/
 *.py[cod]

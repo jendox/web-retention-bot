@@ -12,8 +12,6 @@ from app.models.master import MasterProfile
 from app.models.service import Service
 from app.repositories.bookings import BookingRepository, get_booking_repo
 from app.repositories.clients import ClientRepository, get_client_repo
-from app.repositories.invitations import InvitationRepository, get_invitation_repo
-from app.repositories.masters import MasterRepository, get_master_repo
 from app.repositories.services import ServiceRepository, get_service_repo
 from app.schemas.booking import BookingCreate, BookingOut
 from app.schemas.master import MasterProfileSchema
@@ -38,60 +36,13 @@ class CreateBookingUseCase:
         self,
         client_repo: ClientRepository,
         service_repo: ServiceRepository,
-        master_repo: MasterRepository,
-        invitation_repo: InvitationRepository,
         booking_repo: BookingRepository,
         available_slots_use_case: AvailableSlotsUseCase,
     ) -> None:
         self._client_repo = client_repo
         self._service_repo = service_repo
-        self._master_repo = master_repo
-        self._invitation_repo = invitation_repo
         self._booking_repo = booking_repo
         self._available_slots_use_case = available_slots_use_case
-
-    async def _resolve_master_id(self, payload: BookingCreate, actor_master_id: UUID | None) -> UUID:
-        if actor_master_id is not None:
-            return actor_master_id
-        if not payload.invite_token:
-            logger.warning("failed", reason="authentication_required")
-            raise CreateBookingError(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                error_message="Authentication required",
-            )
-
-        invitation = await self._invitation_repo.get_by_token(payload.invite_token)
-        if not invitation:
-            logger.warning("failed", reason="invitation_not_found")
-            raise CreateBookingError(status_code=status.HTTP_404_NOT_FOUND, error_message="Invitation not found")
-        if invitation.linked_client_id is None or invitation.accepted_at is None:
-            logger.warning("failed", reason="invitation_not_accepted", invitation_id=str(invitation.id))
-            raise CreateBookingError(
-                status_code=status.HTTP_403_FORBIDDEN,
-                error_message="Invitation must be accepted first",
-            )
-        if invitation.linked_client_id != payload.client_id:
-            logger.warning(
-                "failed",
-                reason="client_mismatch_for_invitation",
-                invitation_id=str(invitation.id),
-                linked_client_id=str(invitation.linked_client_id),
-            )
-            raise CreateBookingError(
-                status_code=status.HTTP_403_FORBIDDEN,
-                error_message="Client mismatch for invitation",
-            )
-        if invitation.expires_at < datetime.now(UTC):
-            logger.warning("failed", reason="invitation_expired", invitation_id=str(invitation.id))
-            raise CreateBookingError(status_code=status.HTTP_410_GONE, error_message="Invitation expired")
-        return invitation.master_id
-
-    async def _get_master(self, master_id: UUID) -> MasterProfile:
-        master = await self._master_repo.get_by_master_id(master_id)
-        if not master:
-            logger.error("failed", reason="master_missing", master_id=str(master_id))
-            raise CreateBookingError(status_code=status.HTTP_404_NOT_FOUND, error_message="Master profile missing")
-        return master
 
     async def _get_active_service(self, service_id: UUID, master_id: UUID) -> Service:
         service = await self._service_repo.get_for_master(service_id, master_id)
@@ -154,18 +105,16 @@ class CreateBookingUseCase:
             duration_min=service.duration_min,
             price_snapshot=service.price,
             currency_snapshot=str(service.currency),
-            status=BookingStatus.scheduled,
+            status=BookingStatus.SCHEDULED,
         )
 
-    async def __call__(self, payload: BookingCreate, *, actor_master_id: UUID | None) -> BookingOut:
+    async def __call__(self, payload: BookingCreate, *, master: MasterProfile) -> BookingOut:
         with log_context(
             use_case="create_booking",
-            actor_master_id=str(actor_master_id) if actor_master_id else None,
+            actor_master_id=str(master.id),
             client_id=str(payload.client_id),
             service_id=str(payload.service_id),
         ):
-            master_id = await self._resolve_master_id(payload, actor_master_id)
-            master = await self._get_master(master_id)
             service = await self._get_active_service(payload.service_id, master.id)
             await self._ensure_client_link_exists(master.id, payload.client_id)
 
@@ -189,16 +138,12 @@ class CreateBookingUseCase:
 def get_create_booking_use_case(
     client_repo: Annotated[ClientRepository, Depends(get_client_repo)],
     service_repo: Annotated[ServiceRepository, Depends(get_service_repo)],
-    master_repo: Annotated[MasterRepository, Depends(get_master_repo)],
-    invitation_repo: Annotated[InvitationRepository, Depends(get_invitation_repo)],
     booking_repo: Annotated[BookingRepository, Depends(get_booking_repo)],
     available_slots_use_case: Annotated[AvailableSlotsUseCase, Depends(get_available_slots_use_case)],
 ) -> CreateBookingUseCase:
     return CreateBookingUseCase(
         client_repo,
         service_repo,
-        master_repo,
-        invitation_repo,
         booking_repo,
         available_slots_use_case,
     )

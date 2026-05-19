@@ -6,12 +6,13 @@ from types import SimpleNamespace
 import pytest
 
 from app.core.currency import Currency
+from app.core.pagination import Pagination
 from app.models.booking import BookingStatus
 from app.schemas.availability import SlotOut
-from app.schemas.booking import BookingClientListItem, BookingCreate, BookingOut
+from app.schemas.booking import BookingClientListItem, BookingCreate, BookingListScope, BookingOut
 from app.use_cases.booking.available_slots import AvailableSlotsUseCase
 from app.use_cases.booking.create import CreateBookingUseCase
-from app.use_cases.booking.exceptions import AvailabilitySlotsError, CreateBookingError, UpdateBookingError
+from app.use_cases.booking.exceptions import AvailabilitySlotsError, UpdateBookingError
 from app.use_cases.booking.list import ListClientBookingsUseCase, ListMasterBookingsUseCase
 from app.use_cases.booking.update import CancelBookingUseCase, RescheduleBookingUseCase
 
@@ -27,7 +28,7 @@ def _booking(**overrides):
         "duration_min": 60,
         "price_snapshot": Decimal("50.00"),
         "currency_snapshot": "BYN",
-        "status": BookingStatus.scheduled,
+        "status": BookingStatus.SCHEDULED,
     }
     data.update(overrides)
     return SimpleNamespace(**data)
@@ -53,38 +54,36 @@ class FakeBookingRepository:
             return self.booking
         return None
 
-    async def list_for_master(self, master_id):
+    async def list_for_master(self, master_id, *, limit=500):
         return [self.booking] if self.booking and self.booking.master_id == master_id else []
+
+    async def count_for_master(self, master_id, scope, client_id=None):
+        rows = await self.list_for_master_page(
+            master_id,
+            scope=scope,
+            limit=500,
+            offset=0,
+            client_id=client_id,
+        )
+        return len(rows)
+
+    async def list_for_master_page(self, master_id, scope, limit, offset, client_id=None):
+        rows = [self.booking] if self.booking and self.booking.master_id == master_id else []
+        if client_id is not None:
+            rows = [b for b in rows if b.client_id == client_id]
+        return rows[offset : offset + limit]
+
+    async def complete_past_scheduled(self):
+        if self.booking and self.booking.status == BookingStatus.SCHEDULED:
+            self.booking.status = BookingStatus.COMPLETED
+            return 1
+        return 0
 
     async def list_with_details_for_linked_user(self, user_id):
         return [(self.booking, "Master", "Service")] if self.booking else []
 
     async def flush(self):
         self.flushed = True
-
-
-async def test_create_booking_requires_authentication_or_invite_token():
-    use_case = CreateBookingUseCase(
-        client_repo=SimpleNamespace(),
-        service_repo=SimpleNamespace(),
-        master_repo=SimpleNamespace(),
-        invitation_repo=SimpleNamespace(),
-        booking_repo=SimpleNamespace(),
-        available_slots_use_case=SimpleNamespace(),
-    )
-
-    with pytest.raises(CreateBookingError) as exc_info:
-        await use_case(
-            BookingCreate(
-                client_id=uuid.uuid4(),
-                service_id=uuid.uuid4(),
-                start_at=datetime(2026, 5, 20, 10, 0, tzinfo=UTC),
-            ),
-            actor_master_id=None,
-        )
-
-    assert exc_info.value.status_code == 401
-    assert exc_info.value.error_message == "Authentication required"
 
 
 async def test_create_booking_creates_snapshot_when_slot_is_available():
@@ -111,16 +110,6 @@ async def test_create_booking_creates_snapshot_when_slot_is_available():
                 is_active=True,
             )
 
-    class FakeMasterRepository:
-        async def get_by_master_id(self, requested_master_id):
-            assert requested_master_id == master_id
-            return SimpleNamespace(
-                id=master_id,
-                display_name="Master",
-                public_slug=None,
-                timezone="UTC",
-            )
-
     class FakeAvailableSlotsUseCase:
         async def __call__(self, *, master_id, service_id, calendar_day):
             return [SlotOut(start_at=start_at)]
@@ -129,15 +118,18 @@ async def test_create_booking_creates_snapshot_when_slot_is_available():
     use_case = CreateBookingUseCase(
         client_repo=FakeClientRepository(),
         service_repo=FakeServiceRepository(),
-        master_repo=FakeMasterRepository(),
-        invitation_repo=SimpleNamespace(),
         booking_repo=booking_repo,
         available_slots_use_case=FakeAvailableSlotsUseCase(),
     )
 
     result = await use_case(
         BookingCreate(client_id=client_id, service_id=service_id, start_at=start_at),
-        actor_master_id=master_id,
+        master=SimpleNamespace(
+            id=master_id,
+            display_name="Master",
+            public_slug=None,
+            timezone="UTC",
+        ),
     )
 
     assert isinstance(result, BookingOut)
@@ -156,7 +148,7 @@ async def test_cancel_booking_marks_booking_cancelled_and_flushes():
 
     await use_case(master_id=master_id, booking_id=booking.id)
 
-    assert booking.status == BookingStatus.cancelled
+    assert booking.status == BookingStatus.CANCELLED
     assert booking_repo.flushed is True
 
 
@@ -194,10 +186,15 @@ async def test_list_booking_use_cases_return_response_schemas():
     booking = _booking(master_id=master_id)
     booking_repo = FakeBookingRepository(booking)
 
-    master_result = await ListMasterBookingsUseCase(booking_repo)(master_id)
+    master_result = await ListMasterBookingsUseCase(booking_repo)(
+        master_id,
+        Pagination(page=1, page_size=10),
+        scope=BookingListScope.UPCOMING,
+    )
     client_result = await ListClientBookingsUseCase(booking_repo)(uuid.uuid4())
 
-    assert master_result == [BookingOut.model_validate(booking)]
+    assert master_result.items == [BookingOut.model_validate(booking)]
+    assert master_result.total == 1
     assert client_result == [
         BookingClientListItem(
             **BookingOut.model_validate(booking).model_dump(),

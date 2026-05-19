@@ -18,8 +18,12 @@ backend-migrate:
 backend-run:
 	uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir src
 
+# Celery: beat only enqueues periodic tasks; worker executes them (both terminals required).
 celery-worker:
 	PYTHONPATH=src uv run celery -A app.worker.celery_app worker -l info
+
+celery-beat:
+	PYTHONPATH=src uv run celery -A app.worker.celery_app beat -l info
 
 backend-test:
 	uv run pytest

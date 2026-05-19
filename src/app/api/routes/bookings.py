@@ -3,13 +3,21 @@ from __future__ import annotations
 from typing import Annotated, NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
-from app.api.deps import optional_master_profile, require_master_profile, require_user
+from app.api.deps import require_master_profile, require_user
+from app.core.pagination import Pagination, get_pagination
 from app.models.master import MasterProfile
 from app.models.user import User
-from app.schemas.booking import BookingClientListItem, BookingCreate, BookingOut, BookingReschedule
+from app.schemas.booking import (
+    BookingClientListItem,
+    BookingCreate,
+    BookingListScope,
+    BookingOut,
+    BookingReschedule,
+)
 from app.schemas.errors import ErrorDetail
+from app.schemas.pagination import PaginatedResponse
 from app.use_cases.booking import (
     BookingsError,
     CancelBookingUseCase,
@@ -57,9 +65,13 @@ async def list_my_bookings_as_client(
 
 @router.get(
     path="",
-    summary="Current master's bookings",
-    description="Returns upcoming and historical bookings owned by the current master.",
-    response_model=list[BookingOut],
+    summary="Current master's bookings (paginated)",
+    description=(
+        "Returns a paginated slice of the master's bookings. "
+        "`scope=upcoming` — active scheduled visits (`SCHEDULED`, not ended yet). "
+        "`scope=history` — completed, cancelled, no-show, and past visits still awaiting auto-complete."
+    ),
+    response_model=PaginatedResponse[BookingOut],
     status_code=status.HTTP_200_OK,
     response_description="Bookings owned by the current master.",
     responses={
@@ -75,17 +87,23 @@ async def list_my_bookings_as_client(
 )
 async def list_bookings(
     master: Annotated[MasterProfile, Depends(require_master_profile)],
+    pagination: Annotated[Pagination, Depends(get_pagination)],
+    scope: Annotated[
+        BookingListScope,
+        Query(description="`upcoming` for active visits; `history` for archive."),
+    ],
     use_case: Annotated[ListMasterBookingsUseCase, Depends(get_list_master_bookings_use_case)],
-) -> list[BookingOut]:
-    return await use_case(master.id)
+    client_id: Annotated[UUID | None, Query(description="Optional filter by client.")] = None,
+) -> PaginatedResponse[BookingOut]:
+    return await use_case(master.id, pagination, scope=scope, client_id=client_id)
 
 
 @router.post(
     path="",
     summary="Create a booking",
     description=(
-        "Creates a booking for an available service slot. Authenticated masters can create bookings directly; "
-        "client-side booking requires an accepted invitation token."
+        "Creates a booking for an available service slot. The current authenticated master can create bookings "
+        "only for clients linked to their profile."
     ),
     response_model=BookingOut,
     status_code=status.HTTP_201_CREATED,
@@ -97,34 +115,25 @@ async def list_bookings(
         },
         status.HTTP_401_UNAUTHORIZED: {
             "model": ErrorDetail,
-            "description": "Authentication or invitation token is required.",
-        },
-        status.HTTP_403_FORBIDDEN: {
-            "model": ErrorDetail,
-            "description": "Invitation is not accepted or does not belong to the requested client.",
+            "description": "Missing or invalid master session.",
         },
         status.HTTP_404_NOT_FOUND: {
             "model": ErrorDetail,
-            "description": "Invitation, master profile, or service was not found.",
+            "description": "Master profile or service was not found.",
         },
         status.HTTP_409_CONFLICT: {
             "model": ErrorDetail,
             "description": "Another scheduled booking overlaps the requested time.",
         },
-        status.HTTP_410_GONE: {
-            "model": ErrorDetail,
-            "description": "Invitation has expired.",
-        },
     },
 )
 async def post_booking(
     payload: BookingCreate,
-    master: Annotated[MasterProfile | None, Depends(optional_master_profile)],
+    master: Annotated[MasterProfile, Depends(require_master_profile)],
     use_case: Annotated[CreateBookingUseCase, Depends(get_create_booking_use_case)],
 ) -> BookingOut:
     try:
-        actor_id = master.id if master else None
-        return await use_case(payload, actor_master_id=actor_id)
+        return await use_case(payload, master=master)
     except BookingsError as error:
         _raise_http_error(error)
 

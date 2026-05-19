@@ -84,7 +84,7 @@ def test_booking_fits_schedule_detects_booking_cut_by_new_hours():
         master_id=master_id,
         start_at=datetime(2026, 5, 23, 14, 0, tzinfo=UTC),
         end_at=datetime(2026, 5, 23, 15, 0, tzinfo=UTC),
-        status=BookingStatus.scheduled,
+        status=BookingStatus.SCHEDULED,
     )
     weekly_day = WeeklyScheduleDay(
         master_id=master_id,
@@ -150,12 +150,13 @@ async def test_replace_schedule_rejects_changes_that_cut_existing_future_booking
         master_id=master_id,
         start_at=datetime(2026, 6, 1, 13, 0, tzinfo=UTC),
         end_at=datetime(2026, 6, 1, 14, 0, tzinfo=UTC),
-        status=BookingStatus.scheduled,
+        status=BookingStatus.SCHEDULED,
     )
+    expected_master_id = master_id
 
     class FakeBookingRepository:
-        async def list_for_master(self, requested_master_id):
-            assert requested_master_id == master_id
+        async def list_for_master(self, *, master_id, limit=500):
+            assert master_id == expected_master_id
             return [booking]
 
     class FakeScheduleRepository:
@@ -197,10 +198,11 @@ async def test_replace_schedule_rejects_changes_that_cut_existing_future_booking
 
 async def test_replace_schedule_replaces_models_flushes_and_returns_snapshot():
     master_id = uuid.uuid4()
+    expected_master_id = master_id
 
     class FakeBookingRepository:
-        async def list_for_master(self, requested_master_id):
-            assert requested_master_id == master_id
+        async def list_for_master(self, *, master_id, limit=500):
+            assert master_id == expected_master_id
             return []
 
     class FakeScheduleRepository:

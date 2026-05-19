@@ -42,7 +42,13 @@ class CancelBookingUseCase:
                     status_code=status.HTTP_404_NOT_FOUND,
                     error_message="Booking not found",
                 )
-            booking.status = BookingStatus.cancelled
+            if not booking.status.blocks_calendar:
+                logger.warning("failed", reason="booking_not_active")
+                raise UpdateBookingError(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    error_message="Active booking not found",
+                )
+            booking.status = BookingStatus.CANCELLED
             await self._booking_repo.flush()
             logger.info("cancelled")
 
@@ -61,7 +67,7 @@ class RescheduleBookingUseCase:
     async def __call__(self, *, master: MasterProfile, booking_id: UUID, start_at: datetime) -> BookingOut:
         with log_context(use_case="reschedule_booking", master_id=str(master.id), booking_id=str(booking_id)):
             booking = await self._booking_repo.get_for_master(booking_id, master.id)
-            if not booking or booking.status != BookingStatus.scheduled:
+            if not booking or not booking.status.blocks_calendar:
                 logger.warning("failed", reason="active_booking_not_found")
                 raise UpdateBookingError(
                     status_code=status.HTTP_404_NOT_FOUND,

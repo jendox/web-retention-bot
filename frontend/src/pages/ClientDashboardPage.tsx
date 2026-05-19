@@ -12,6 +12,7 @@ import {
   IconOverview,
   IconUsers,
 } from '../components/layout/navIcons'
+import { blocksCalendar, BookingStatus, isBookingUpcoming } from '../lib/bookingStatus'
 import { cn } from '../lib/forms'
 import { ClientDemoBookingModal } from '../components/client/ClientDemoBookingModal'
 import {
@@ -122,7 +123,7 @@ function VisitRow({ b, i }: { b: BookingClientListItem; i: number }) {
         <p className="font-medium text-stone-900 dark:text-stone-100">{b.master_display_name}</p>
         <p className="text-xs text-stone-500 dark:text-stone-500">
           {b.service_name} · {b.duration_min} мин · {b.price_snapshot} {b.currency_snapshot}
-          {b.status === 'cancelled' ? (
+          {b.status === BookingStatus.CANCELLED ? (
             <span className="ml-2 rounded-md bg-stone-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-stone-700 dark:bg-stone-700 dark:text-stone-200">
               отменена
             </span>
@@ -135,9 +136,9 @@ function VisitRow({ b, i }: { b: BookingClientListItem; i: number }) {
 
 function computeVisitStats(bookings: BookingClientListItem[]) {
   const nowInner = new Date()
-  const scheduled = bookings.filter((b) => b.status === 'scheduled')
+  const scheduled = bookings.filter((b) => blocksCalendar(b.status))
   const upcoming = scheduled
-    .filter((b) => new Date(b.start_at) >= nowInner)
+    .filter((b) => isBookingUpcoming(b, nowInner))
     .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
   const next = upcoming[0]
   const monthStart = startOfMonth(nowInner)
@@ -256,15 +257,17 @@ export function ClientDashboardPage() {
     const list = [...bookings]
     if (visitFilter === 'upcoming') {
       return list
-        .filter((b) => b.status === 'scheduled' && new Date(b.start_at) >= now)
+        .filter((b) => isBookingUpcoming(b, now))
         .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
     }
     if (visitFilter === 'past') {
       return list
-        .filter((b) => b.status === 'scheduled' && new Date(b.start_at) < now)
+        .filter((b) => b.status !== BookingStatus.CANCELLED && !isBookingUpcoming(b, now))
         .sort((a, b) => new Date(b.start_at).getTime() - new Date(a.start_at).getTime())
     }
-    return list.filter((b) => b.status === 'cancelled').sort((a, b) => new Date(b.start_at).getTime() - new Date(a.start_at).getTime())
+    return list
+      .filter((b) => b.status === BookingStatus.CANCELLED)
+      .sort((a, b) => new Date(b.start_at).getTime() - new Date(a.start_at).getTime())
   }, [bookings, visitFilter])
 
   const dataLoading = !useMocks && (bookingsLive.isLoading || myMastersLive.isLoading)

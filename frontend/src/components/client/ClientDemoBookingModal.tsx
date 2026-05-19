@@ -85,7 +85,7 @@ export function ClientDemoBookingModal({
       duration_min: selectedService.duration_min,
       price_snapshot: selectedService.price,
       currency_snapshot: selectedService.currency,
-      status: 'scheduled',
+      status: 'SCHEDULED',
       master_display_name: selectedMaster.display_name,
       service_name: selectedService.name,
     }

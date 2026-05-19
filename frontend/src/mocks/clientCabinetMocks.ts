@@ -49,7 +49,7 @@ export function mockFreeSlotsForMaster(
   maxSlots = 14,
   slotDurationMin = 60,
 ): string[] {
-  const booked = existing.filter((b) => b.master_id === masterId && b.status === 'scheduled')
+  const booked = existing.filter((b) => b.master_id === masterId && b.status === 'SCHEDULED')
 
   function overlaps(iso: string, durationMin: number) {
     const start = new Date(iso).getTime()
@@ -122,7 +122,7 @@ export function buildClientCabinetMocks(now = new Date()) {
       duration_min: 90,
       price_snapshot: '120.00',
       currency_snapshot: 'BYN',
-      status: 'scheduled',
+      status: 'SCHEDULED',
       master_display_name: 'Студия «Линия»',
       service_name: 'Окрашивание корней',
     },
@@ -136,7 +136,7 @@ export function buildClientCabinetMocks(now = new Date()) {
       duration_min: 60,
       price_snapshot: '85.00',
       currency_snapshot: 'BYN',
-      status: 'scheduled',
+      status: 'SCHEDULED',
       master_display_name: 'Ирина Лебедева',
       service_name: 'Маникюр с покрытием',
     },
@@ -150,7 +150,7 @@ export function buildClientCabinetMocks(now = new Date()) {
       duration_min: 45,
       price_snapshot: '55.00',
       currency_snapshot: 'BYN',
-      status: 'scheduled',
+      status: 'SCHEDULED',
       master_display_name: 'Студия «Линия»',
       service_name: 'Стрижка и укладка',
     },
@@ -164,7 +164,7 @@ export function buildClientCabinetMocks(now = new Date()) {
       duration_min: 60,
       price_snapshot: '90.00',
       currency_snapshot: 'BYN',
-      status: 'scheduled',
+      status: 'SCHEDULED',
       master_display_name: 'Ирина Лебедева',
       service_name: 'Наращивание коррекция',
     },
@@ -178,7 +178,7 @@ export function buildClientCabinetMocks(now = new Date()) {
       duration_min: 30,
       price_snapshot: '40.00',
       currency_snapshot: 'BYN',
-      status: 'scheduled',
+      status: 'SCHEDULED',
       master_display_name: 'Студия «Линия»',
       service_name: 'Тонирование уход',
     },
@@ -192,7 +192,7 @@ export function buildClientCabinetMocks(now = new Date()) {
       duration_min: 60,
       price_snapshot: '95.00',
       currency_snapshot: 'BYN',
-      status: 'cancelled',
+      status: 'CANCELLED',
       master_display_name: 'Студия «Линия»',
       service_name: 'Сложное окрашивание',
     },

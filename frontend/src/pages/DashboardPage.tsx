@@ -9,6 +9,7 @@ import { invitationsCreateApi } from '../api/invitations'
 import { useMasterMe } from '../hooks/useMasterMe'
 import { servicesListApi } from '../api/services'
 import { IconBriefcase, IconChevronRight, IconClipboard, IconUsers } from '../components/layout/navIcons'
+import { blocksCalendar } from '../lib/bookingStatus'
 import { cn } from '../lib/forms'
 import { ALLOWED_PAGE_SIZES } from '../lib/pagination'
 
@@ -110,10 +111,19 @@ export function DashboardPage() {
     queryFn: () => clientsListApi({ page: 1, page_size: CLIENTS_PAGE_SIZE_CAP }),
     enabled: me.isSuccess,
   })
-  const bookings = useQuery({ queryKey: ['bookings'], queryFn: bookingsListApi, enabled: me.isSuccess })
+  const bookings = useQuery({
+    queryKey: ['bookings', 'upcoming', 1, CLIENTS_PAGE_SIZE_CAP],
+    queryFn: () => bookingsListApi({ scope: 'upcoming', page: 1, page_size: CLIENTS_PAGE_SIZE_CAP }),
+    enabled: me.isSuccess,
+  })
   const servicesActive = useQuery({
     queryKey: ['services', 'dashboard-summary', 1, CLIENTS_PAGE_SIZE_CAP, 'active'],
     queryFn: () => servicesListApi({ page: 1, page_size: CLIENTS_PAGE_SIZE_CAP, is_active: true }),
+    enabled: me.isSuccess,
+  })
+  const servicesForNames = useQuery({
+    queryKey: ['services', 'dashboard-booking-names', 1, CLIENTS_PAGE_SIZE_CAP],
+    queryFn: () => servicesListApi({ page: 1, page_size: CLIENTS_PAGE_SIZE_CAP }),
     enabled: me.isSuccess,
   })
 
@@ -153,10 +163,18 @@ export function DashboardPage() {
     return m
   }, [clients.data])
 
+  const serviceNameById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const service of servicesForNames.data?.items ?? []) {
+      m.set(service.id, service.name)
+    }
+    return m
+  }, [servicesForNames.data])
+
   const stats = useMemo(() => {
     const nowInner = new Date()
-    const list = bookings.data ?? []
-    const scheduled = list.filter((b) => b.status === 'scheduled')
+    const list = bookings.data?.items ?? []
+    const scheduled = list.filter((b) => blocksCalendar(b.status))
     const today = scheduled.filter((b) => isSameLocalDay(b.start_at, nowInner))
     today.sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
     const nextToday = today[0]
@@ -269,10 +287,10 @@ export function DashboardPage() {
           <div className="mb-4 flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-50">Ближайшие записи</h2>
             <Link
-              to="/schedule"
+              to="/bookings"
               className="text-sm font-medium text-teal-700 hover:text-teal-600 dark:text-teal-400 dark:hover:text-teal-300"
             >
-              Расписание →
+              Записи →
             </Link>
           </div>
           {stats.upcoming.length === 0 ? (
@@ -296,7 +314,8 @@ export function DashboardPage() {
                       {clientNameById.get(b.client_id) ?? 'Клиент'}
                     </p>
                     <p className="text-xs text-stone-500 dark:text-stone-500">
-                      Услуга · {b.duration_min} мин · {b.price_snapshot} {b.currency_snapshot}
+                      {serviceNameById.get(b.service_id) ?? 'Услуга'} · {b.duration_min} мин · {b.price_snapshot}{' '}
+                      {b.currency_snapshot}
                     </p>
                   </div>
                 </li>

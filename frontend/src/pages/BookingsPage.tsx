@@ -1,19 +1,31 @@
-import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { availabilityApi } from '../api/availability'
 import { meApi } from '../api/auth'
-import { clientsGetApi, clientsListApi, type ClientWithLink } from '../api/clients'
+import {
+  bookingsCancelApi,
+  bookingsCreateApi,
+  bookingsListApi,
+  bookingsRescheduleApi,
+  type Booking,
+  type BookingListScope,
+} from '../api/bookings'
+import { clientsCreateApi, clientsGetApi, clientsListApi, type ClientWithLink } from '../api/clients'
 import { servicesListApi, type Service } from '../api/services'
 import { useMasterMe } from '../hooks/useMasterMe'
+import { getUserFacingError } from '../lib/apiErrors'
 import { cn } from '../lib/forms'
+import { blocksCalendar, bookingStatusLabel } from '../lib/bookingStatus'
+import { ALLOWED_PAGE_SIZES, parsePage, parsePageSize, type PageSize } from '../lib/pagination'
 
 type ClientSource = 'existing' | 'new'
 
 const SEARCH_PAGE_SIZE = 10
 const MIN_SEARCH_LENGTH = 2
 const BOOKING_MAX_ADVANCE_DAYS = 90
+const BOOKING_LOOKUP_PAGE_SIZE = ALLOWED_PAGE_SIZES[ALLOWED_PAGE_SIZES.length - 1]
 
 const fieldClass =
   'w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none transition focus:border-stone-400 focus:ring-2 focus:ring-stone-400/15 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-100 dark:focus:border-stone-500'
@@ -22,6 +34,15 @@ const sourceTabs: { value: ClientSource; label: string }[] = [
   { value: 'existing', label: 'Из базы' },
   { value: 'new', label: 'Новый' },
 ]
+
+const listScopeTabs: { value: BookingListScope; label: string }[] = [
+  { value: 'upcoming', label: 'Текущие' },
+  { value: 'history', label: 'История' },
+]
+
+function parseListScope(param: string | null): BookingListScope {
+  return param === 'history' ? 'history' : 'upcoming'
+}
 
 function toDateInputValue(date: Date) {
   const year = date.getFullYear()
@@ -36,8 +57,42 @@ function addDays(date: Date, days: number) {
   return next
 }
 
+const dateLongFormatter = new Intl.DateTimeFormat('ru-RU', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+})
+
+function formatDateLong(date: Date) {
+  return dateLongFormatter.format(date)
+}
+
+function formatPreviewDate(dateInput: string) {
+  if (!dateInput) {
+    return 'Дата не выбрана'
+  }
+  const [year, month, day] = dateInput.split('-').map(Number)
+  return formatDateLong(new Date(year, month - 1, day))
+}
+
 function formatSlotTime(value: string) {
   return new Intl.DateTimeFormat('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
+function formatBookingDateTime(value: string) {
+  const date = new Date(value)
+  return `${formatDateLong(date)}, ${formatSlotTime(value)}`
+}
+
+function formatSlotFull(value: string) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(value))
@@ -84,10 +139,77 @@ function IconSearch(props: { className?: string }) {
   )
 }
 
+function IconReschedule(props: { className?: string }) {
+  return (
+    <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3M5 11h14M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 16h5.5a2.5 2.5 0 000-5H13m0 0l2-2m-2 2l2 2" />
+    </svg>
+  )
+}
+
+function IconTrash(props: { className?: string }) {
+  return (
+    <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+      />
+    </svg>
+  )
+}
+
+function IconCheckCircle(props: { className?: string }) {
+  return (
+    <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  )
+}
+
 export function BookingsPage() {
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
   const prefillClientId = searchParams.get('client_id') ?? ''
+  const listScope = parseListScope(searchParams.get('scope'))
+  const page = parsePage(searchParams.get('page'))
+  const pageSize = parsePageSize(searchParams.get('page_size'))
+
+  const setListScope = (scope: BookingListScope) => {
+    setSearchParams((prev) => {
+      const n = new URLSearchParams(prev)
+      n.set('scope', scope)
+      n.set('page', '1')
+      n.set('page_size', String(pageSize))
+      return n
+    })
+  }
+
+  const setPage = (p: number) => {
+    setSearchParams((prev) => {
+      const n = new URLSearchParams(prev)
+      n.set('page', String(p))
+      n.set('page_size', String(pageSize))
+      if (!n.get('scope')) {
+        n.set('scope', listScope)
+      }
+      return n
+    })
+  }
+
+  const setPageSize = (ps: PageSize) => {
+    setSearchParams((prev) => {
+      const n = new URLSearchParams(prev)
+      n.set('page', '1')
+      n.set('page_size', String(ps))
+      if (!n.get('scope')) {
+        n.set('scope', listScope)
+      }
+      return n
+    })
+  }
 
   const [clientSource, setClientSource] = useState<ClientSource>('existing')
   const [clientSearch, setClientSearch] = useState('')
@@ -99,8 +221,18 @@ export function BookingsPage() {
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()))
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
-  const [comment, setComment] = useState('')
-  const [submitNotice, setSubmitNotice] = useState(false)
+  const [bookingSuccess, setBookingSuccess] = useState<{
+    booking: Booking
+    clientName: string
+    serviceName: string
+  } | null>(null)
+  const bookingSuccessRef = useRef<HTMLDivElement>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [rescheduleBooking, setRescheduleBooking] = useState<Booking | null>(null)
+  const [rescheduleDate, setRescheduleDate] = useState(() => toDateInputValue(new Date()))
+  const [rescheduleSlot, setRescheduleSlot] = useState<string | null>(null)
+  const [bookingActionError, setBookingActionError] = useState<string | null>(null)
+  const [pendingCancel, setPendingCancel] = useState<Booking | null>(null)
 
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
   const master = useMasterMe(me.isSuccess)
@@ -122,10 +254,25 @@ export function BookingsPage() {
     queryFn: () => clientsListApi({ page: 1, page_size: SEARCH_PAGE_SIZE, q: clientSearchTerm }),
     enabled: me.isSuccess && shouldSearchClients,
   })
+  const clientLookup = useQuery({
+    queryKey: ['clients', 'booking-list-lookup', 1, BOOKING_LOOKUP_PAGE_SIZE],
+    queryFn: () => clientsListApi({ page: 1, page_size: BOOKING_LOOKUP_PAGE_SIZE }),
+    enabled: me.isSuccess,
+  })
   const services = useQuery({
     queryKey: ['services', 'booking-form-search', serviceSearchTerm, SEARCH_PAGE_SIZE, 'active'],
     queryFn: () => servicesListApi({ page: 1, page_size: SEARCH_PAGE_SIZE, is_active: true, q: serviceSearchTerm }),
     enabled: me.isSuccess && shouldSearchServices,
+  })
+  const serviceLookup = useQuery({
+    queryKey: ['services', 'booking-list-lookup', 1, BOOKING_LOOKUP_PAGE_SIZE],
+    queryFn: () => servicesListApi({ page: 1, page_size: BOOKING_LOOKUP_PAGE_SIZE }),
+    enabled: me.isSuccess,
+  })
+  const bookings = useQuery({
+    queryKey: ['bookings', listScope, page, pageSize],
+    queryFn: () => bookingsListApi({ scope: listScope, page, page_size: pageSize }),
+    enabled: me.isSuccess,
   })
   const prefilled = selectedClient ?? prefilledClient.data ?? null
   const clientReady = clientSource === 'new' ? draftName.trim().length > 0 : prefilled != null
@@ -140,15 +287,174 @@ export function BookingsPage() {
     enabled: me.isSuccess && Boolean(master.data?.id) && clientReady && Boolean(selectedService?.id) && Boolean(selectedDate),
   })
 
+  const rescheduleSlots = useQuery({
+    queryKey: ['availability', 'reschedule', master.data?.id, rescheduleBooking?.service_id, rescheduleDate],
+    queryFn: () =>
+      availabilityApi({
+        master_id: master.data?.id ?? '',
+        service_id: rescheduleBooking?.service_id ?? '',
+        date: rescheduleDate,
+      }),
+    enabled: me.isSuccess && Boolean(master.data?.id) && Boolean(rescheduleBooking?.service_id) && Boolean(rescheduleDate),
+  })
+
+  const resetBookingFormAfterCreate = () => {
+    setSelectedSlot(null)
+    setSelectedService(null)
+    setServiceSearch('')
+    setSelectedDate(toDateInputValue(new Date()))
+    setDraftName('')
+    setDraftPhone('')
+    setDraftEmail('')
+    if (!prefillClientId) {
+      setSelectedClient(null)
+      setClientSearch('')
+    }
+  }
+
+  const ensureUpcomingListVisible = () => {
+    if (listScope === 'upcoming' && page === 1) {
+      return
+    }
+    setSearchParams((prev) => {
+      const n = new URLSearchParams(prev)
+      n.set('scope', 'upcoming')
+      n.set('page', '1')
+      n.set('page_size', String(pageSize))
+      return n
+    })
+  }
+
+  const createBooking = useMutation({
+    mutationFn: async () => {
+      if (!selectedService || !selectedSlot) {
+        throw new Error('Выберите услугу и свободное время.')
+      }
+
+      let clientId = prefilled?.client.id ?? null
+      if (clientSource === 'new') {
+        const displayName = draftName.trim()
+        if (!displayName) {
+          throw new Error('Укажите имя клиента.')
+        }
+        const client = await clientsCreateApi({
+          display_name: displayName,
+          phone: draftPhone.trim() || undefined,
+          email: draftEmail.trim() || undefined,
+        })
+        clientId = client.client.id
+      }
+
+      if (!clientId) {
+        throw new Error('Выберите клиента.')
+      }
+
+      return bookingsCreateApi({
+        client_id: clientId,
+        service_id: selectedService.id,
+        start_at: selectedSlot,
+      })
+    },
+    onSuccess: (booking) => {
+      const clientName =
+        clientSource === 'new'
+          ? draftName.trim() || 'Новый клиент'
+          : prefilled
+            ? clientDisplayName(prefilled)
+            : 'Клиент'
+      const serviceName = selectedService?.name ?? 'Услуга'
+
+      setBookingSuccess({ booking, clientName, serviceName })
+      setSubmitError(null)
+      resetBookingFormAfterCreate()
+      setRescheduleBooking(null)
+      setRescheduleSlot(null)
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur()
+      }
+      ensureUpcomingListVisible()
+      void queryClient.invalidateQueries({ queryKey: ['bookings'] })
+      void queryClient.invalidateQueries({ queryKey: ['clients'] })
+      void queryClient.invalidateQueries({ queryKey: ['availability'] })
+    },
+    onError: (error) => {
+      setBookingSuccess(null)
+      setSubmitError(getUserFacingError(error))
+    },
+  })
+
+  const cancelBooking = useMutation({
+    mutationFn: (bookingId: string) => bookingsCancelApi(bookingId),
+    onSuccess: async () => {
+      setBookingActionError(null)
+      setRescheduleBooking(null)
+      setPendingCancel(null)
+      await queryClient.invalidateQueries({ queryKey: ['bookings'] })
+    },
+    onError: (error) => setBookingActionError(getUserFacingError(error)),
+  })
+
+  const reschedule = useMutation({
+    mutationFn: async () => {
+      if (!rescheduleBooking || !rescheduleSlot) {
+        throw new Error('Выберите новое время.')
+      }
+      return bookingsRescheduleApi(rescheduleBooking.id, rescheduleSlot)
+    },
+    onSuccess: async () => {
+      setBookingActionError(null)
+      setRescheduleBooking(null)
+      setRescheduleSlot(null)
+      await queryClient.invalidateQueries({ queryKey: ['bookings'] })
+      await queryClient.invalidateQueries({ queryKey: ['availability'] })
+    },
+    onError: (error) => setBookingActionError(getUserFacingError(error)),
+  })
+
   useEffect(() => {
     if (me.isError) navigate('/login')
   }, [me.isError, navigate])
+
+  useEffect(() => {
+    setRescheduleBooking(null)
+    setRescheduleSlot(null)
+    setBookingActionError(null)
+  }, [listScope])
+
+  useEffect(() => {
+    if (!bookingSuccess) {
+      return
+    }
+    bookingSuccessRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const timer = window.setTimeout(() => setBookingSuccess(null), 12_000)
+    return () => window.clearTimeout(timer)
+  }, [bookingSuccess])
 
   const clientItems = clients.data?.items ?? []
   const serviceItems = services.data?.items ?? []
   const clientsError = clients.error instanceof Error ? clients.error.message : null
   const servicesError = services.error instanceof Error ? services.error.message : null
   const slotsError = slots.error instanceof Error ? slots.error.message : null
+  const bookingsError = bookings.error instanceof Error ? getUserFacingError(bookings.error) : null
+  const rescheduleSlotsError = rescheduleSlots.error instanceof Error ? getUserFacingError(rescheduleSlots.error) : null
+  const clientNameById = new Map(
+    (clientLookup.data?.items ?? []).map((item) => [item.client.id, clientDisplayName(item)] as const),
+  )
+  const serviceNameById = new Map((serviceLookup.data?.items ?? []).map((service) => [service.id, service.name] as const))
+  const bookingItems = Array.isArray(bookings.data?.items) ? bookings.data.items : []
+  const bookingsListLoading = bookings.isPending && !bookings.data
+  const bookingsTotal = bookings.data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(bookingsTotal / pageSize))
+
+  useEffect(() => {
+    if (!bookings.isSuccess || !bookings.data) {
+      return
+    }
+    const tp = Math.max(1, Math.ceil(bookings.data.total / pageSize))
+    if (page > tp) {
+      setPage(tp)
+    }
+  }, [bookings.isSuccess, bookings.data, page, pageSize])
 
   const previewClientName =
     clientSource === 'new' ? draftName.trim() || 'Новый клиент' : prefilled ? clientDisplayName(prefilled) : 'Клиент'
@@ -173,6 +479,27 @@ export function BookingsPage() {
         </p>
       </header>
 
+      {bookingSuccess ? (
+        <div
+          ref={bookingSuccessRef}
+          role="status"
+          className="scroll-mt-4 rounded-xl border border-teal-200/90 bg-teal-50/90 p-4 dark:border-teal-900/50 dark:bg-teal-950/40"
+        >
+          <div className="flex gap-3">
+            <IconCheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-teal-700 dark:text-teal-300" />
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-teal-950 dark:text-teal-50">Запись создана</p>
+              <p className="mt-1 text-sm text-teal-900/90 dark:text-teal-100/90">
+                {bookingSuccess.clientName} · {bookingSuccess.serviceName}
+              </p>
+              <p className="mt-0.5 text-sm font-medium text-teal-800 dark:text-teal-200">
+                {formatBookingDateTime(bookingSuccess.booking.start_at)} · {bookingSuccess.booking.duration_min} мин
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(21rem,0.72fr)]">
         <section className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80 sm:p-5">
           <div className="mb-5 flex items-center gap-3">
@@ -181,7 +508,7 @@ export function BookingsPage() {
             </div>
             <div>
               <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-50">Параметры записи</h2>
-              <p className="text-sm text-stone-500 dark:text-stone-400">Создание записи на сервере пока не вызывается</p>
+              <p className="text-sm text-stone-500 dark:text-stone-400">Выберите клиента, услугу и свободное время</p>
             </div>
           </div>
 
@@ -196,7 +523,8 @@ export function BookingsPage() {
                     onClick={() => {
                       setClientSource(tab.value)
                       setSelectedSlot(null)
-                      setSubmitNotice(false)
+                      setBookingSuccess(null)
+                      setSubmitError(null)
                     }}
                     className={cn(
                       'rounded-md px-4 py-2 text-sm font-medium transition',
@@ -244,7 +572,8 @@ export function BookingsPage() {
                         setClientSearch(event.target.value)
                         setSelectedClient(null)
                         setSelectedSlot(null)
-                        setSubmitNotice(false)
+                        setBookingSuccess(null)
+                        setSubmitError(null)
                       }}
                       className={cn(fieldClass, 'pl-9')}
                       placeholder="Введите минимум 2 символа"
@@ -271,7 +600,8 @@ export function BookingsPage() {
                             setClientSource('new')
                             setDraftName(clientSearchTerm)
                             setSelectedSlot(null)
-                            setSubmitNotice(false)
+                            setBookingSuccess(null)
+                            setSubmitError(null)
                           }}
                           className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-800"
                         >
@@ -290,7 +620,8 @@ export function BookingsPage() {
                                 setSelectedClient(item)
                                 setClientSearch(clientDisplayName(item))
                                 setSelectedSlot(null)
-                                setSubmitNotice(false)
+                                setBookingSuccess(null)
+                                setSubmitError(null)
                               }}
                               className={cn(
                                 'flex w-full items-start justify-between gap-3 px-3 py-3 text-left transition',
@@ -330,7 +661,8 @@ export function BookingsPage() {
                     onChange={(event) => {
                       setDraftName(event.target.value)
                       setSelectedSlot(null)
-                      setSubmitNotice(false)
+                      setBookingSuccess(null)
+                      setSubmitError(null)
                     }}
                     className={cn(fieldClass, 'mt-1')}
                     placeholder="Например, Елена Петрова"
@@ -369,7 +701,8 @@ export function BookingsPage() {
                       setServiceSearch(event.target.value)
                       setSelectedService(null)
                       setSelectedSlot(null)
-                      setSubmitNotice(false)
+                      setBookingSuccess(null)
+                      setSubmitError(null)
                     }}
                     className={cn(fieldClass, 'pl-9')}
                     placeholder="Введите минимум 2 символа"
@@ -401,7 +734,8 @@ export function BookingsPage() {
                               setSelectedService(service)
                               setServiceSearch(service.name)
                               setSelectedSlot(null)
-                              setSubmitNotice(false)
+                              setBookingSuccess(null)
+                              setSubmitError(null)
                             }}
                             className={cn(
                               'flex w-full items-start justify-between gap-3 px-3 py-3 text-left transition',
@@ -436,7 +770,8 @@ export function BookingsPage() {
                     onChange={(event) => {
                       setSelectedDate(event.target.value)
                       setSelectedSlot(null)
-                      setSubmitNotice(false)
+                      setBookingSuccess(null)
+                      setSubmitError(null)
                     }}
                     className={cn(fieldClass, 'mt-1 [color-scheme:light] dark:[color-scheme:dark]')}
                   />
@@ -458,7 +793,8 @@ export function BookingsPage() {
                           type="button"
                           onClick={() => {
                             setSelectedSlot(slot.start_at)
-                            setSubmitNotice(false)
+                            setBookingSuccess(null)
+                            setSubmitError(null)
                           }}
                           className={cn(
                             'rounded-lg border px-3 py-2 text-sm font-medium transition',
@@ -476,34 +812,20 @@ export function BookingsPage() {
               </div>
             ) : null}
 
-            {clientReady && selectedService ? (
-            <div className="grid gap-3">
-              <label className="block">
-                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Комментарий</span>
-                <input
-                  value={comment}
-                  onChange={(event) => setComment(event.target.value)}
-                  className={cn(fieldClass, 'mt-1')}
-                  placeholder="Например: впервые"
-                />
-              </label>
-            </div>
-            ) : null}
-
-            {submitNotice ? (
-              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-100">
-                Форма собрана, но запись пока не отправляется: следующий шаг - подключить слоты и POST создания записи.
+            {submitError ? (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/35 dark:text-red-100">
+                {submitError}
               </p>
             ) : null}
 
             <button
               type="button"
-              disabled={!canPrepare}
-              onClick={() => setSubmitNotice(true)}
+              disabled={!canPrepare || createBooking.isPending}
+              onClick={() => createBooking.mutate()}
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-teal-900/15 transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-teal-500 dark:text-stone-950 dark:hover:bg-teal-400"
             >
               <IconCalendarSmall className="h-4 w-4" />
-              Записать
+              {createBooking.isPending ? 'Создаем...' : 'Записать'}
             </button>
           </div>
         </section>
@@ -523,21 +845,346 @@ export function BookingsPage() {
             )}
             {selectedService ? (
               <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">
-                {selectedDate || 'Дата не выбрана'}, {selectedSlot ? formatSlotTime(selectedSlot) : 'слот не выбран'}
+                {formatPreviewDate(selectedDate)},{' '}
+                {selectedSlot ? formatSlotTime(selectedSlot) : 'время не выбрано'}
               </p>
             ) : null}
           </div>
-
-          <div className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
-            <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Что уже подключено</h2>
-            <div className="mt-3 space-y-3 text-sm text-stone-600 dark:text-stone-400">
-              <p>Клиент и услуга ищутся на сервере, без показа неполного списка по умолчанию.</p>
-              <p>При переходе из таблицы клиентов клиент сразу подставляется в эту же форму.</p>
-              <p>Метка кабинета справочная и не меняет сценарий создания записи.</p>
-            </div>
-          </div>
         </aside>
       </div>
+
+      <section
+        id="bookings-list-section"
+        className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80 sm:p-5"
+      >
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-50">Записи</h2>
+            <p className="text-sm text-stone-500 dark:text-stone-400">
+              {listScope === 'upcoming'
+                ? 'Предстоящие и активные визиты.'
+                : 'Прошедшие, завершённые и отменённые.'}
+            </p>
+          </div>
+          <div className="inline-grid w-full grid-cols-2 rounded-lg bg-stone-100 p-1 dark:bg-stone-800 sm:w-auto">
+            {listScopeTabs.map((tab) => (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => setListScope(tab.value)}
+                className={cn(
+                  'rounded-md px-4 py-2 text-sm font-medium transition',
+                  listScope === tab.value
+                    ? 'bg-white text-stone-950 shadow-sm dark:bg-stone-950 dark:text-stone-50'
+                    : 'text-stone-600 hover:text-stone-950 dark:text-stone-300 dark:hover:text-white',
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {bookingsListLoading ? (
+          <p className="text-sm text-stone-500 dark:text-stone-400">Загружаем записи...</p>
+        ) : bookingsError ? (
+          <p className="text-sm text-red-700 dark:text-red-300">{bookingsError}</p>
+        ) : bookingItems.length === 0 ? (
+          <p className="text-sm text-stone-500 dark:text-stone-400">
+            {listScope === 'upcoming' ? 'Нет предстоящих записей.' : 'История пуста.'}
+          </p>
+        ) : (
+          <>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-stone-200 text-sm dark:divide-stone-800">
+              <thead>
+                <tr className="text-left text-xs font-semibold uppercase text-stone-500 dark:text-stone-400">
+                  <th className="py-2 pr-4">Время</th>
+                  <th className="py-2 pr-4">Клиент</th>
+                  <th className="py-2 pr-4">Услуга</th>
+                  <th className="py-2 pr-4">Стоимость</th>
+                  <th className="py-2 pr-4">Статус</th>
+                  <th className="py-2 text-right">
+                    <span className="sr-only">Действия</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
+                {bookingItems.map((booking) => (
+                  <tr key={booking.id} className="text-stone-700 dark:text-stone-200">
+                    <td className="whitespace-nowrap py-3 pr-4 font-medium text-stone-900 dark:text-stone-50">
+                      {formatSlotFull(booking.start_at)}
+                    </td>
+                    <td className="py-3 pr-4">{clientNameById.get(booking.client_id) ?? 'Клиент'}</td>
+                    <td className="py-3 pr-4">
+                      <span className="font-medium text-stone-900 dark:text-stone-50">
+                        {serviceNameById.get(booking.service_id) ?? 'Услуга'}
+                      </span>
+                      <span className="ml-2 text-stone-500 dark:text-stone-400">{booking.duration_min} мин</span>
+                    </td>
+                    <td className="whitespace-nowrap py-3 pr-4">
+                      {booking.price_snapshot} {booking.currency_snapshot}
+                    </td>
+                    <td className="whitespace-nowrap py-3 pr-4">
+                      <span
+                        className={cn(
+                          'rounded-full px-2 py-0.5 text-xs font-medium',
+                          blocksCalendar(booking.status)
+                            ? 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200'
+                            : 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300',
+                        )}
+                      >
+                        {bookingStatusLabel(booking.status)}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap py-3 text-right">
+                      {blocksCalendar(booking.status) ? (
+                        <div className="flex justify-end gap-2">
+	                          <button
+	                            type="button"
+	                            onClick={() => {
+	                              setBookingActionError(null)
+	                              setRescheduleBooking(booking)
+	                              setRescheduleDate(toDateInputValue(new Date(booking.start_at)))
+	                              setRescheduleSlot(null)
+	                            }}
+	                            className="rounded-lg p-2 text-stone-500 transition hover:bg-teal-50 hover:text-teal-700 dark:text-stone-400 dark:hover:bg-teal-950/40 dark:hover:text-teal-300"
+	                            aria-label={`Перенести запись клиента ${clientNameById.get(booking.client_id) ?? 'Клиент'}`}
+	                            title="Перенести запись"
+	                          >
+	                            <IconReschedule className="h-5 w-5" />
+	                          </button>
+	                          <button
+	                            type="button"
+	                            disabled={cancelBooking.isPending}
+	                            onClick={() => {
+	                              cancelBooking.reset()
+	                              setPendingCancel(booking)
+	                            }}
+	                            className="rounded-lg p-2 text-stone-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
+	                            aria-label={`Отменить запись клиента ${clientNameById.get(booking.client_id) ?? 'Клиент'}`}
+	                            title="Отменить запись"
+	                          >
+	                            <IconTrash className="h-5 w-5" />
+	                          </button>
+                        </div>
+                      ) : null}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-3 flex flex-col gap-3 border-t border-stone-200 bg-stone-50/50 px-1 pt-3 dark:border-stone-700 dark:bg-stone-950/30 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <p className="text-sm text-stone-600 dark:text-stone-400">
+              Страница {page} из {totalPages}
+              <span className="text-stone-400 dark:text-stone-500"> · </span>
+              всего {bookingsTotal}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-400">
+                <span className="whitespace-nowrap">На странице</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value) as PageSize)}
+                  className="rounded-lg border border-stone-300 bg-white px-2 py-1.5 text-stone-900 shadow-sm dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </label>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  disabled={page <= 1}
+                  onClick={() => setPage(page - 1)}
+                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 enabled:hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-stone-600 dark:text-stone-200 dark:enabled:hover:bg-stone-800"
+                >
+                  Назад
+                </button>
+                <button
+                  type="button"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage(page + 1)}
+                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 enabled:hover:bg-stone-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-stone-600 dark:text-stone-200 dark:enabled:hover:bg-stone-800"
+                >
+                  Вперёд
+                </button>
+              </div>
+            </div>
+          </div>
+          </>
+        )}
+
+        {bookingActionError ? (
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/60 dark:bg-red-950/35 dark:text-red-100">
+            {bookingActionError}
+          </p>
+        ) : null}
+
+      </section>
+
+      {pendingCancel ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/45 p-4 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cancel-booking-title"
+          onClick={(event) => {
+            if (event.target === event.currentTarget && !cancelBooking.isPending) {
+              setPendingCancel(null)
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-6 shadow-xl dark:border-stone-700 dark:bg-stone-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="cancel-booking-title" className="text-lg font-semibold text-stone-900 dark:text-stone-50">
+              Отменить запись?
+            </h2>
+            <p className="mt-3 text-sm text-stone-600 dark:text-stone-400">
+              Запись клиента «{clientNameById.get(pendingCancel.client_id) ?? 'Клиент'}» на{' '}
+              {formatSlotFull(pendingCancel.start_at)} будет отменена.
+            </p>
+            {cancelBooking.isError ? (
+              <p className="mt-3 text-sm text-red-700 dark:text-red-300" role="alert">
+                {getUserFacingError(cancelBooking.error)}
+              </p>
+            ) : null}
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                disabled={cancelBooking.isPending}
+                onClick={() => setPendingCancel(null)}
+                className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-800"
+              >
+                Оставить
+              </button>
+              <button
+                type="button"
+                disabled={cancelBooking.isPending}
+                onClick={() => cancelBooking.mutate(pendingCancel.id)}
+                className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-50 dark:bg-rose-600 dark:hover:bg-rose-500"
+              >
+                {cancelBooking.isPending ? 'Отмена...' : 'Отменить запись'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {rescheduleBooking ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/45 p-4 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reschedule-booking-title"
+          onClick={(event) => {
+            if (event.target === event.currentTarget && !reschedule.isPending) {
+              setRescheduleBooking(null)
+              setRescheduleSlot(null)
+            }
+          }}
+        >
+          <div
+            className="flex max-h-[min(90vh,44rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-xl dark:border-stone-700 dark:bg-stone-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="border-b border-stone-200 px-6 py-5 dark:border-stone-700">
+              <h2 id="reschedule-booking-title" className="text-lg font-semibold text-stone-900 dark:text-stone-50">
+                Перенос записи
+              </h2>
+              <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">
+                {clientNameById.get(rescheduleBooking.client_id) ?? 'Клиент'} ·{' '}
+                {serviceNameById.get(rescheduleBooking.service_id) ?? 'Услуга'}
+              </p>
+              <p className="text-sm text-stone-500 dark:text-stone-400">
+                Сейчас: {formatBookingDateTime(rescheduleBooking.start_at)}
+              </p>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
+              <label className="block max-w-xs">
+                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Новая дата</span>
+                <input
+                  type="date"
+                  value={rescheduleDate}
+                  min={todayValue}
+                  max={maxDateValue}
+                  onChange={(event) => {
+                    setRescheduleDate(event.target.value)
+                    setRescheduleSlot(null)
+                  }}
+                  className={cn(fieldClass, 'mt-1 [color-scheme:light] dark:[color-scheme:dark]')}
+                />
+              </label>
+
+              <div>
+                <p className="mb-2 text-sm font-medium text-stone-700 dark:text-stone-300">Новое время</p>
+                {rescheduleSlots.isLoading ? (
+                  <p className="text-sm text-stone-500 dark:text-stone-400">Ищем свободные слоты...</p>
+                ) : rescheduleSlotsError ? (
+                  <p className="text-sm text-red-700 dark:text-red-300">{rescheduleSlotsError}</p>
+                ) : (rescheduleSlots.data?.length ?? 0) === 0 ? (
+                  <p className="text-sm text-stone-500 dark:text-stone-400">На эту дату свободного времени нет.</p>
+                ) : (
+                  <div className="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto sm:grid-cols-4 md:grid-cols-5">
+                    {rescheduleSlots.data?.map((slot) => (
+                      <button
+                        key={slot.start_at}
+                        type="button"
+                        disabled={reschedule.isPending}
+                        onClick={() => {
+                          reschedule.reset()
+                          setRescheduleSlot(slot.start_at)
+                        }}
+                        className={cn(
+                          'rounded-lg border px-2 py-2 text-sm font-medium transition',
+                          rescheduleSlot === slot.start_at
+                            ? 'border-teal-600 bg-teal-100 text-teal-900 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-100'
+                            : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200',
+                        )}
+                      >
+                        {formatSlotTime(slot.start_at)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {reschedule.isError ? (
+                <p className="text-sm text-red-700 dark:text-red-300" role="alert">
+                  {getUserFacingError(reschedule.error)}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex flex-wrap justify-end gap-2 border-t border-stone-200 px-6 py-5 dark:border-stone-700">
+              <button
+                type="button"
+                disabled={reschedule.isPending}
+                onClick={() => {
+                  setRescheduleBooking(null)
+                  setRescheduleSlot(null)
+                }}
+                className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-800"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={reschedule.isPending || !rescheduleSlot}
+                onClick={() => reschedule.mutate()}
+                className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-500 disabled:opacity-50 dark:bg-teal-600 dark:hover:bg-teal-500"
+              >
+                {reschedule.isPending ? 'Переносим...' : 'Сохранить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -1,22 +1,25 @@
-"""Booking shapes."""
+from __future__ import annotations
 
+import enum
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class BookingListScope(enum.StrEnum):
+    UPCOMING = "upcoming"
+    HISTORY = "history"
 
 
 class BookingCreate(BaseModel):
     client_id: UUID
     service_id: UUID
     start_at: datetime
-    invite_token: str | None = Field(default=None, description="Required for guest bookings after invite")
 
 
 class BookingOut(BaseModel):
-    model_config = {"from_attributes": True}
-
     id: UUID
     master_id: UUID
     client_id: UUID
@@ -27,6 +30,10 @@ class BookingOut(BaseModel):
     price_snapshot: Decimal
     currency_snapshot: str
     status: str
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
 
 
 class BookingClientListItem(BookingOut):

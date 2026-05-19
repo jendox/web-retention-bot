@@ -1,5 +1,12 @@
 import { apiFetch } from './client'
 
+export type PaginatedBookings = {
+  items: Booking[]
+  total: number
+  page: number
+  page_size: number
+}
+
 export type Booking = {
   id: string
   master_id: string
@@ -18,19 +25,33 @@ export type BookingClientListItem = Booking & {
   service_name: string
 }
 
+export type BookingListScope = 'upcoming' | 'history'
+
 export async function bookingsMyListApi() {
   return apiFetch<BookingClientListItem[]>('/api/bookings/me')
 }
 
-export async function bookingsListApi() {
-  return apiFetch<Booking[]>('/api/bookings')
+export async function bookingsListApi(params: {
+  scope: BookingListScope
+  page: number
+  page_size: number
+  client_id?: string
+}) {
+  const q = new URLSearchParams({
+    scope: params.scope,
+    page: String(params.page),
+    page_size: String(params.page_size),
+  })
+  if (params.client_id) {
+    q.set('client_id', params.client_id)
+  }
+  return apiFetch<PaginatedBookings>(`/api/bookings?${q}`)
 }
 
 export async function bookingsCreateApi(body: {
   client_id: string
   service_id: string
   start_at: string
-  invite_token?: string | null
 }) {
   return apiFetch<Booking>('/api/bookings', { method: 'POST', body: JSON.stringify(body) })
 }

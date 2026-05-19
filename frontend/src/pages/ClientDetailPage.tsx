@@ -1,12 +1,16 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { meApi } from '../api/auth'
+import { bookingsListApi, type Booking } from '../api/bookings'
 import { clientsGetApi, clientsPatchApi } from '../api/clients'
+import { servicesListApi } from '../api/services'
+import { bookingStatusLabel } from '../lib/bookingStatus'
 import { cn } from '../lib/forms'
 import { getUserFacingError } from '../lib/apiErrors'
+import { ALLOWED_PAGE_SIZES } from '../lib/pagination'
 import { queryClient } from '../lib/query'
 
 const fieldClass =
@@ -17,6 +21,7 @@ const sectionCard =
 
 const sectionTitle = 'text-base font-semibold text-stone-900 dark:text-stone-50'
 const sectionHint = 'mt-1 text-sm text-stone-500 dark:text-stone-400'
+const LOOKUP_PAGE_SIZE = ALLOWED_PAGE_SIZES[ALLOWED_PAGE_SIZES.length - 1]
 
 type FormValues = {
   display_name: string
@@ -66,43 +71,6 @@ function NameStatus({ locked }: { locked: boolean }) {
   )
 }
 
-/** Заглушки до подключения API списка записей по клиенту */
-const MOCK_UPCOMING_BOOKINGS = [
-  {
-    id: 'mock-u1',
-    service: 'Стрижка и укладка',
-    startAt: '2026-05-20T14:00:00',
-    price: '3 200 ₽',
-  },
-  {
-    id: 'mock-u2',
-    service: 'Тонировка',
-    startAt: '2026-05-28T11:30:00',
-    price: '4 500 ₽',
-  },
-]
-
-const MOCK_PAST_BOOKINGS = [
-  {
-    id: 'mock-p1',
-    service: 'Стрижка',
-    startAt: '2026-04-02T16:00:00',
-    price: '2 800 ₽',
-  },
-  {
-    id: 'mock-p2',
-    service: 'Окрашивание',
-    startAt: '2026-03-15T10:00:00',
-    price: '8 900 ₽',
-  },
-  {
-    id: 'mock-p3',
-    service: 'Консультация',
-    startAt: '2026-02-01T12:00:00',
-    price: '0 ₽',
-  },
-]
-
 function formatBookingWhen(isoLocal: string) {
   const d = new Date(isoLocal)
   if (Number.isNaN(d.getTime())) {
@@ -115,6 +83,10 @@ function formatBookingWhen(isoLocal: string) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(d)
+}
+
+function bookingPrice(booking: Booking) {
+  return `${booking.price_snapshot} ${booking.currency_snapshot}`
 }
 
 export function ClientDetailPage() {
@@ -130,6 +102,23 @@ export function ClientDetailPage() {
     queryFn: () => clientsGetApi(clientId),
     enabled: me.isSuccess && Boolean(clientId),
     retry: false,
+  })
+  const bookingsUpcoming = useQuery({
+    queryKey: ['bookings', 'upcoming', clientId, 1, LOOKUP_PAGE_SIZE],
+    queryFn: () =>
+      bookingsListApi({ scope: 'upcoming', page: 1, page_size: LOOKUP_PAGE_SIZE, client_id: clientId }),
+    enabled: me.isSuccess && Boolean(clientId),
+  })
+  const bookingsHistory = useQuery({
+    queryKey: ['bookings', 'history', clientId, 1, LOOKUP_PAGE_SIZE],
+    queryFn: () =>
+      bookingsListApi({ scope: 'history', page: 1, page_size: LOOKUP_PAGE_SIZE, client_id: clientId }),
+    enabled: me.isSuccess && Boolean(clientId),
+  })
+  const services = useQuery({
+    queryKey: ['services', 'client-detail-booking-names', 1, LOOKUP_PAGE_SIZE],
+    queryFn: () => servicesListApi({ page: 1, page_size: LOOKUP_PAGE_SIZE }),
+    enabled: me.isSuccess,
   })
 
   useEffect(() => {
@@ -190,6 +179,23 @@ export function ClientDetailPage() {
       setShowSavedNotice(true)
     },
   })
+
+  const serviceNameById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const service of services.data?.items ?? []) {
+      m.set(service.id, service.name)
+    }
+    return m
+  }, [services.data])
+  const clientBookings = useMemo(
+    () => ({
+      upcoming: bookingsUpcoming.data?.items ?? [],
+      history: bookingsHistory.data?.items ?? [],
+    }),
+    [bookingsHistory.data, bookingsUpcoming.data],
+  )
+  const bookingsLoading = bookingsUpcoming.isLoading || bookingsHistory.isLoading
+  const bookingsError = bookingsUpcoming.error ?? bookingsHistory.error
 
   if (me.isLoading || detail.isLoading) {
     return (
@@ -410,36 +416,60 @@ export function ClientDetailPage() {
 
       <div className={sectionCard}>
         <h2 className={sectionTitle}>Текущие записи</h2>
-        <p className={sectionHint}>
-          Пример оформления — данные пока тестовые, позже подтянем из расписания.
-        </p>
-        <ul className="mt-4 divide-y divide-stone-100 dark:divide-stone-800">
-          {MOCK_UPCOMING_BOOKINGS.map((b) => (
-            <li key={b.id} className="flex flex-wrap items-baseline justify-between gap-2 py-3 first:pt-0">
-              <div>
-                <p className="font-medium text-stone-900 dark:text-stone-100">{b.service}</p>
-                <p className="text-sm text-stone-500 dark:text-stone-400">{formatBookingWhen(b.startAt)}</p>
-              </div>
-              <span className="text-sm font-medium text-stone-700 dark:text-stone-300">{b.price}</span>
-            </li>
-          ))}
-        </ul>
+        <p className={sectionHint}>Будущие активные записи этого клиента.</p>
+        {bookingsLoading ? (
+          <p className="mt-4 text-sm text-stone-500 dark:text-stone-400">Загружаем записи...</p>
+        ) : bookingsError ? (
+          <p className="mt-4 text-sm text-red-700 dark:text-red-300">{getUserFacingError(bookingsError)}</p>
+        ) : clientBookings.upcoming.length === 0 ? (
+          <p className="mt-4 text-sm text-stone-500 dark:text-stone-400">Активных будущих записей нет.</p>
+        ) : (
+          <ul className="mt-4 divide-y divide-stone-100 dark:divide-stone-800">
+            {clientBookings.upcoming.map((booking) => (
+              <li key={booking.id} className="flex flex-wrap items-baseline justify-between gap-2 py-3 first:pt-0">
+                <div>
+                  <p className="font-medium text-stone-900 dark:text-stone-100">
+                    {serviceNameById.get(booking.service_id) ?? 'Услуга'}
+                  </p>
+                  <p className="text-sm text-stone-500 dark:text-stone-400">
+                    {formatBookingWhen(booking.start_at)} · {booking.duration_min} мин
+                  </p>
+                </div>
+                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                  {bookingPrice(booking)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className={sectionCard}>
         <h2 className={sectionTitle}>История записей</h2>
-        <p className={sectionHint}>Тоже заглушка — для проверки верстки списка прошлых визитов.</p>
-        <ul className="mt-4 divide-y divide-stone-100 dark:divide-stone-800">
-          {MOCK_PAST_BOOKINGS.map((b) => (
-            <li key={b.id} className="flex flex-wrap items-baseline justify-between gap-2 py-3 first:pt-0">
-              <div>
-                <p className="font-medium text-stone-700 dark:text-stone-200">{b.service}</p>
-                <p className="text-sm text-stone-500 dark:text-stone-400">{formatBookingWhen(b.startAt)}</p>
-              </div>
-              <span className="text-sm text-stone-600 dark:text-stone-400">{b.price}</span>
-            </li>
-          ))}
-        </ul>
+        <p className={sectionHint}>Прошедшие и отмененные записи этого клиента.</p>
+        {bookingsLoading ? (
+          <p className="mt-4 text-sm text-stone-500 dark:text-stone-400">Загружаем историю...</p>
+        ) : bookingsError ? (
+          <p className="mt-4 text-sm text-red-700 dark:text-red-300">{getUserFacingError(bookingsError)}</p>
+        ) : clientBookings.history.length === 0 ? (
+          <p className="mt-4 text-sm text-stone-500 dark:text-stone-400">Истории записей пока нет.</p>
+        ) : (
+          <ul className="mt-4 divide-y divide-stone-100 dark:divide-stone-800">
+            {clientBookings.history.map((booking) => (
+              <li key={booking.id} className="flex flex-wrap items-baseline justify-between gap-2 py-3 first:pt-0">
+                <div>
+                  <p className="font-medium text-stone-700 dark:text-stone-200">
+                    {serviceNameById.get(booking.service_id) ?? 'Услуга'}
+                  </p>
+                  <p className="text-sm text-stone-500 dark:text-stone-400">
+                    {formatBookingWhen(booking.start_at)} · {bookingStatusLabel(booking.status)}
+                  </p>
+                </div>
+                <span className="text-sm text-stone-600 dark:text-stone-400">{bookingPrice(booking)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   )

@@ -58,6 +58,8 @@ class SmtpSettings(BaseModel):
 class Booking(BaseModel):
     availability_slot_step_minutes: int = Field(default=15)
     max_advance_days: int = Field(default=30)
+    #: How often Celery Beat runs `bookings.complete_past_scheduled` (minutes).
+    complete_past_interval_minutes: int = Field(default=5, ge=1, le=60)
 
 
 class Settings(BaseSettings):

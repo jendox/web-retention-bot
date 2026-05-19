@@ -399,14 +399,8 @@ export function ClientsPage() {
                   <th className="px-4 py-3 font-semibold text-stone-700 dark:text-stone-300">Email</th>
                   <th className="px-4 py-3 font-semibold text-stone-700 dark:text-stone-300">Телефон</th>
                   <th className="hidden px-4 py-3 font-semibold text-stone-500 md:table-cell">Псевдоним</th>
-                  <th className="w-10 px-1 py-3 text-center font-semibold text-stone-500">
-                    <span className="sr-only">Записать</span>
-                  </th>
-                  <th className="w-10 px-1 py-3 text-center font-semibold text-stone-500">
-                    <span className="sr-only">Пригласить</span>
-                  </th>
-                  <th className="w-14 px-2 py-3 text-right font-semibold text-stone-500">
-                    <span className="sr-only">Удалить</span>
+                  <th className="w-32 px-4 py-3 text-right font-semibold text-stone-500">
+                    <span className="sr-only">Действия</span>
                   </th>
                 </tr>
               </thead>
@@ -449,59 +443,53 @@ export function ClientsPage() {
                       {row.link.alias ?? '—'}
                     </td>
                     <td
-                      className="px-1 py-2 text-center"
+                      className="px-4 py-2"
                       onClick={(e) => e.stopPropagation()}
                       onKeyDown={(e) => e.stopPropagation()}
                     >
-                      <button
-                        type="button"
-                        title="Создать запись для клиента"
-                        onClick={() => navigate(`/bookings?client_id=${row.client.id}`)}
-                        className="rounded-lg p-2 text-stone-500 transition hover:bg-teal-50 hover:text-teal-700 dark:text-stone-400 dark:hover:bg-teal-950/40 dark:hover:text-teal-300"
-                        aria-label={`Создать запись для клиента ${row.client.display_name}`}
-                      >
-                        <IconCalendarSmall className="h-5 w-5" />
-                      </button>
-                    </td>
-                    <td
-                      className="px-1 py-2 text-center"
-                      onClick={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => e.stopPropagation()}
-                    >
-                      <button
-                        type="button"
-                        disabled={Boolean(row.client.user_id)}
-                        title={
-                          row.client.user_id
-                            ? 'У клиента уже есть вход'
-                            : 'Ссылка для этой карточки клиента'
-                        }
-                        onClick={() =>
-                          openInviteModal({
-                            kind: 'client',
-                            clientId: row.client.id,
-                            name: row.client.display_name,
-                          })
-                        }
-                        className="rounded-lg p-2 text-teal-600 transition enabled:hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-teal-400 dark:enabled:hover:bg-teal-950/40"
-                        aria-label={`Пригласить клиента ${row.client.display_name}`}
-                      >
-                        <IconLinkInvite className="h-5 w-5" />
-                      </button>
-                    </td>
-                    <td className="px-2 py-2 text-right" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          remove.reset()
-                          setPendingDelete(row)
-                        }}
-                        className="rounded-lg p-2 text-stone-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
-                        aria-label={`Удалить клиента ${row.client.display_name}`}
-                        title="Удалить клиента"
-                      >
-                        <IconTrash className="h-5 w-5" />
-                      </button>
+                      <div className="flex justify-end gap-1">
+                        <button
+                          type="button"
+                          title="Создать запись для клиента"
+                          onClick={() => navigate(`/bookings?client_id=${row.client.id}`)}
+                          className="rounded-lg p-2 text-stone-500 transition hover:bg-teal-50 hover:text-teal-700 dark:text-stone-400 dark:hover:bg-teal-950/40 dark:hover:text-teal-300"
+                          aria-label={`Создать запись для клиента ${row.client.display_name}`}
+                        >
+                          <IconCalendarSmall className="h-5 w-5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={Boolean(row.client.user_id)}
+                          title={
+                            row.client.user_id
+                              ? 'У клиента уже есть вход'
+                              : 'Ссылка для этой карточки клиента'
+                          }
+                          onClick={() =>
+                            openInviteModal({
+                              kind: 'client',
+                              clientId: row.client.id,
+                              name: row.client.display_name,
+                            })
+                          }
+                          className="rounded-lg p-2 text-teal-600 transition enabled:hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-teal-400 dark:enabled:hover:bg-teal-950/40"
+                          aria-label={`Пригласить клиента ${row.client.display_name}`}
+                        >
+                          <IconLinkInvite className="h-5 w-5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            remove.reset()
+                            setPendingDelete(row)
+                          }}
+                          className="rounded-lg p-2 text-stone-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
+                          aria-label={`Удалить клиента ${row.client.display_name}`}
+                          title="Удалить клиента"
+                        >
+                          <IconTrash className="h-5 w-5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
