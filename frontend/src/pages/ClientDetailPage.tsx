@@ -8,6 +8,11 @@ import { bookingsListApi, type Booking } from '../api/bookings'
 import { clientsGetApi, clientsPatchApi } from '../api/clients'
 import { servicesListApi } from '../api/services'
 import { bookingStatusBadgeClass, bookingStatusLabel } from '../lib/bookingStatus'
+import {
+  formatClientVisitStats,
+  formatNoShowCount,
+  shouldWarnFrequentNoShows,
+} from '../lib/clientNoShow'
 import { cn } from '../lib/forms'
 import { getUserFacingError } from '../lib/apiErrors'
 import { ALLOWED_PAGE_SIZES } from '../lib/pagination'
@@ -248,6 +253,30 @@ export function ClientDetailPage() {
           <span className="font-medium text-stone-800 dark:text-stone-200">{invitationLabel}</span>
         </p>
       </div>
+
+        {detail.data && shouldWarnFrequentNoShows(detail.data.booking_stats) ? (
+          <div
+            className="rounded-xl border border-rose-200/90 bg-rose-50/90 p-4 text-sm text-rose-950 shadow-sm dark:border-rose-900/50 dark:bg-rose-950/35 dark:text-rose-100"
+            role="status"
+          >
+            <p className="font-medium">Частые неявки</p>
+            <p className="mt-1 text-rose-900/90 dark:text-rose-200">
+              У клиента {formatNoShowCount(detail.data.booking_stats!.no_show_count)} по вашим записям
+              {detail.data.booking_stats!.completed_count > 0
+                ? ` (${formatClientVisitStats(detail.data.booking_stats!)})`
+                : ''}
+              . Имеет смысл уточнить контакт или подтвердить визит перед новой записью.
+            </p>
+          </div>
+        ) : detail.data?.booking_stats && detail.data.booking_stats.no_show_count > 0 ? (
+          <div
+            className="rounded-xl border border-stone-200/90 bg-stone-50/90 p-4 text-sm text-stone-800 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/50 dark:text-stone-200"
+            role="status"
+          >
+            <p className="font-medium text-stone-900 dark:text-stone-100">Записи</p>
+            <p className="mt-1 text-stone-600 dark:text-stone-400">{formatClientVisitStats(detail.data.booking_stats)}</p>
+          </div>
+        ) : null}
 
         {detail.data?.link.invite_email_mismatch ? (
           <div

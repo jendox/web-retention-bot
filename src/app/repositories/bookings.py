@@ -155,6 +155,46 @@ class BookingRepository(BaseRepository):
         rows = await self.session.execute(stmt)
         return list(rows.scalars())
 
+    async def no_show_counts_by_client_ids(
+        self,
+        *,
+        master_id: UUID,
+        client_ids: list[UUID],
+    ) -> dict[UUID, int]:
+        if not client_ids:
+            return {}
+        stmt = (
+            select(Booking.client_id, func.count())
+            .where(
+                Booking.master_id == master_id,
+                Booking.client_id.in_(client_ids),
+                Booking.status == BookingStatus.NO_SHOW,
+            )
+            .group_by(Booking.client_id)
+        )
+        rows = await self.session.execute(stmt)
+        return {client_id: int(count) for client_id, count in rows.all()}
+
+    async def completed_counts_by_client_ids(
+        self,
+        *,
+        master_id: UUID,
+        client_ids: list[UUID],
+    ) -> dict[UUID, int]:
+        if not client_ids:
+            return {}
+        stmt = (
+            select(Booking.client_id, func.count())
+            .where(
+                Booking.master_id == master_id,
+                Booking.client_id.in_(client_ids),
+                Booking.status == BookingStatus.COMPLETED,
+            )
+            .group_by(Booking.client_id)
+        )
+        rows = await self.session.execute(stmt)
+        return {client_id: int(count) for client_id, count in rows.all()}
+
     async def list_with_details_for_linked_user(self, user_id: UUID) -> list[tuple[Booking, str, str]]:
         stmt = (
             select(Booking, MasterProfile.display_name, Service.name)

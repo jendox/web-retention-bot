@@ -1,5 +1,10 @@
 import { apiFetch } from './client'
 
+export type ClientBookingStats = {
+  no_show_count: number
+  completed_count: number
+}
+
 export type ClientWithLink = {
   client: {
     id: string
@@ -16,6 +21,7 @@ export type ClientWithLink = {
     linked_account_email?: string | null
     invite_email_mismatch?: boolean
   }
+  booking_stats?: ClientBookingStats
 }
 
 export type PaginatedClients = {

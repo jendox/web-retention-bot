@@ -73,8 +73,16 @@ class ClientMyMasterItem(BaseModel):
     alias: str | None = None
 
 
+class ClientBookingStatsOut(BaseModel):
+    """Сводка по записям клиента у текущего мастера (для предупреждений о неявках)."""
+
+    no_show_count: int = 0
+    completed_count: int = 0
+
+
 class ClientWithLinkResponse(BaseModel):
     """Одна связка «клиент + привязка мастера» — как в списке и при создании."""
 
     client: ClientSchema
     link: MasterClientOut
+    booking_stats: ClientBookingStatsOut = Field(default_factory=ClientBookingStatsOut)

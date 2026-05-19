@@ -77,7 +77,7 @@ async def test_update_client_rejects_email_change_when_linked_email_is_locked():
         email="client@example.com",
         user_id=uuid.uuid4(),
     )
-    use_case = UpdateClientUseCase(FakeClientRepo((link, client)))
+    use_case = UpdateClientUseCase(FakeClientRepo((link, client)), FakeBookingRepo())
 
     with pytest.raises(ClientEmailLockedError):
         await use_case(
@@ -105,7 +105,7 @@ async def test_update_client_allows_mismatch_email_fix_and_clears_flag():
         email="old@example.com",
         user_id=uuid.uuid4(),
     )
-    use_case = UpdateClientUseCase(FakeClientRepo((link, client)))
+    use_case = UpdateClientUseCase(FakeClientRepo((link, client)), FakeBookingRepo())
 
     out = await use_case(
         uuid.uuid4(),
@@ -135,7 +135,7 @@ async def test_update_client_rejects_name_change_when_client_is_linked():
         email="client@example.com",
         user_id=uuid.uuid4(),
     )
-    use_case = UpdateClientUseCase(FakeClientRepo((link, client)))
+    use_case = UpdateClientUseCase(FakeClientRepo((link, client)), FakeBookingRepo())
 
     with pytest.raises(ClientNameLockedError):
         await use_case(
@@ -147,9 +147,17 @@ async def test_update_client_rejects_name_change_when_client_is_linked():
     assert client.display_name == "Client"
 
 
+class FakeBookingRepo:
+    async def no_show_counts_by_client_ids(self, *, master_id, client_ids):
+        return {}
+
+    async def completed_counts_by_client_ids(self, *, master_id, client_ids):
+        return {}
+
+
 async def test_list_clients_normalizes_search_and_passes_it_to_repo():
     repo = FakeListClientRepo()
-    use_case = ListClientsUseCase(repo)
+    use_case = ListClientsUseCase(repo, FakeBookingRepo())
     pagination = SimpleNamespace(page=1, page_size=10, offset=0)
 
     out = await use_case(uuid.uuid4(), pagination, search="  Anna  ")
@@ -158,3 +166,19 @@ async def test_list_clients_normalizes_search_and_passes_it_to_repo():
     assert repo.page_search == "Anna"
     assert out.total == 1
     assert out.items[0].client.display_name == "Anna Client"
+    assert out.items[0].booking_stats.no_show_count == 0
+
+
+class FakeBookingRepoWithNoShows(FakeBookingRepo):
+    async def no_show_counts_by_client_ids(self, *, master_id, client_ids):
+        return {client_ids[0]: 3}
+
+
+async def test_list_clients_attaches_no_show_stats():
+    repo = FakeListClientRepo()
+    use_case = ListClientsUseCase(repo, FakeBookingRepoWithNoShows())
+    pagination = SimpleNamespace(page=1, page_size=10, offset=0)
+
+    out = await use_case(uuid.uuid4(), pagination)
+
+    assert out.items[0].booking_stats.no_show_count == 3

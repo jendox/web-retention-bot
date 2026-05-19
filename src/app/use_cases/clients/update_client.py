@@ -5,9 +5,11 @@ from fastapi import Depends
 
 from app.core.structured_logging import get_logger, log_context
 from app.models.client import Client, MasterClient
+from app.repositories.bookings import BookingRepository, get_booking_repo
 from app.repositories.clients import ClientRepository, get_client_repo
 from app.schemas.client import ClientSchema, ClientUpdate, ClientWithLinkResponse, MasterClientOut
 
+from .enrich_booking_stats import enrich_clients_with_booking_stats
 from .exceptions import ClientEmailLockedError, ClientNameLockedError, ClientNotFoundError, ClientNothingToUpdateError
 
 _CLIENT_FIELDS = frozenset({"display_name", "phone", "email"})
@@ -17,8 +19,9 @@ logger = get_logger("app.client")
 
 
 class UpdateClientUseCase:
-    def __init__(self, client_repo: ClientRepository) -> None:
+    def __init__(self, client_repo: ClientRepository, booking_repo: BookingRepository) -> None:
         self._client_repo = client_repo
+        self._booking_repo = booking_repo
 
     @staticmethod
     def _get_patch(payload: ClientUpdate) -> dict[str, Any]:
@@ -101,13 +104,20 @@ class UpdateClientUseCase:
             await self._client_repo.refresh(link)
             logger.info("updated", fields=sorted(patch.keys()), invite_email_mismatch_cleared=mismatch_cleared)
 
-            return ClientWithLinkResponse(
+            response = ClientWithLinkResponse(
                 client=ClientSchema.model_validate(client),
                 link=MasterClientOut.model_validate(link),
             )
+            await enrich_clients_with_booking_stats(
+                self._booking_repo,
+                master_id=master_id,
+                items=[response],
+            )
+            return response
 
 
 def get_update_client_use_case(
     client_repo: Annotated[ClientRepository, Depends(get_client_repo)],
+    booking_repo: Annotated[BookingRepository, Depends(get_booking_repo)],
 ) -> UpdateClientUseCase:
-    return UpdateClientUseCase(client_repo)
+    return UpdateClientUseCase(client_repo, booking_repo)

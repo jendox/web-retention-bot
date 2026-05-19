@@ -8,6 +8,7 @@ import { ApiError } from '../api/client'
 import { clientsCreateApi, clientsDeleteApi, clientsListApi, type ClientWithLink } from '../api/clients'
 import { invitationsCreateApi } from '../api/invitations'
 import { getUserFacingError } from '../lib/apiErrors'
+import { formatNoShowCount, shouldWarnFrequentNoShows } from '../lib/clientNoShow'
 import { cn } from '../lib/forms'
 import { parsePage, parsePageSize, type PageSize } from '../lib/pagination'
 import { queryClient } from '../lib/query'
@@ -420,7 +421,18 @@ export function ClientsPage() {
                     tabIndex={0}
                   >
                     <td className="px-4 py-3 font-medium text-stone-900 dark:text-stone-100">
-                      {row.client.display_name}
+                      <div className="flex items-center gap-2">
+                        <span>{row.client.display_name}</span>
+                        {shouldWarnFrequentNoShows(row.booking_stats) ? (
+                          <span
+                            className="inline-flex shrink-0 items-center justify-center text-rose-600 dark:text-rose-400"
+                            title={`Частые неявки: ${formatNoShowCount(row.booking_stats!.no_show_count)}`}
+                            aria-label={`Частые неявки: ${formatNoShowCount(row.booking_stats!.no_show_count)}`}
+                          >
+                            <IconWarning className="h-4 w-4" />
+                          </span>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-stone-600 dark:text-stone-400">
                       <div className="flex items-center gap-2">
