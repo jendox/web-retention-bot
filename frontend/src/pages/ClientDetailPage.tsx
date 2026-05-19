@@ -7,7 +7,7 @@ import { meApi } from '../api/auth'
 import { bookingsListApi, type Booking } from '../api/bookings'
 import { clientsGetApi, clientsPatchApi } from '../api/clients'
 import { servicesListApi } from '../api/services'
-import { bookingStatusLabel } from '../lib/bookingStatus'
+import { bookingStatusBadgeClass, bookingStatusLabel } from '../lib/bookingStatus'
 import { cn } from '../lib/forms'
 import { getUserFacingError } from '../lib/apiErrors'
 import { ALLOWED_PAGE_SIZES } from '../lib/pagination'
@@ -462,7 +462,15 @@ export function ClientDetailPage() {
                     {serviceNameById.get(booking.service_id) ?? 'Услуга'}
                   </p>
                   <p className="text-sm text-stone-500 dark:text-stone-400">
-                    {formatBookingWhen(booking.start_at)} · {bookingStatusLabel(booking.status)}
+                    {formatBookingWhen(booking.start_at)}
+                    <span
+                      className={cn(
+                        'ml-2 inline-flex rounded-full px-2 py-0.5 text-xs font-medium',
+                        bookingStatusBadgeClass(booking.status),
+                      )}
+                    >
+                      {bookingStatusLabel(booking.status)}
+                    </span>
                   </p>
                 </div>
                 <span className="text-sm text-stone-600 dark:text-stone-400">{bookingPrice(booking)}</span>

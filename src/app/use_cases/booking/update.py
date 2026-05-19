@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import Depends, status
 
 from app.core.structured_logging import get_logger, log_context
-from app.models.booking import BookingStatus
+from app.models.booking import BookingStatus, booking_needs_attendance_confirmation
 from app.models.master import MasterProfile
 from app.repositories.bookings import BookingRepository, get_booking_repo
 from app.repositories.services import ServiceRepository, get_service_repo
@@ -120,6 +120,41 @@ class RescheduleBookingUseCase:
             return BookingOut.model_validate(booking)
 
 
+class MarkBookingAttendanceUseCase:
+    def __init__(self, booking_repo: BookingRepository) -> None:
+        self._booking_repo = booking_repo
+
+    async def __call__(self, *, master_id: UUID, booking_id: UUID, attended: bool) -> BookingOut:
+        with log_context(
+            use_case="mark_booking_attendance",
+            master_id=str(master_id),
+            booking_id=str(booking_id),
+            attended=attended,
+        ):
+            booking = await self._booking_repo.get_for_master(booking_id, master_id)
+            if not booking:
+                logger.warning("failed", reason="booking_not_found")
+                raise UpdateBookingError(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    error_message="Booking not found",
+                )
+            if not booking_needs_attendance_confirmation(booking):
+                logger.warning("failed", reason="attendance_not_pending", status=booking.status.value)
+                raise UpdateBookingError(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    error_message="Attendance already marked or booking is not awaiting confirmation",
+                )
+            now = datetime.now(UTC)
+            if attended:
+                booking.attendance_confirmed_at = now
+            else:
+                booking.status = BookingStatus.NO_SHOW
+                booking.attendance_confirmed_at = now
+            await self._booking_repo.flush()
+            logger.info("marked", status=booking.status.value)
+            return BookingOut.model_validate(booking)
+
+
 def get_cancel_booking_use_case(
     booking_repo: Annotated[BookingRepository, Depends(get_booking_repo)],
 ) -> CancelBookingUseCase:
@@ -132,3 +167,9 @@ def get_reschedule_booking_use_case(
     available_slots_use_case: Annotated[AvailableSlotsUseCase, Depends(get_available_slots_use_case)],
 ) -> RescheduleBookingUseCase:
     return RescheduleBookingUseCase(booking_repo, service_repo, available_slots_use_case)
+
+
+def get_mark_booking_attendance_use_case(
+    booking_repo: Annotated[BookingRepository, Depends(get_booking_repo)],
+) -> MarkBookingAttendanceUseCase:
+    return MarkBookingAttendanceUseCase(booking_repo)

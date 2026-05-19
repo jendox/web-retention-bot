@@ -32,6 +32,8 @@ const DETAIL_RU: Record<string, string> = {
   'Overlapping booking exists': 'На это время уже есть запись.',
   'Booking not found': 'Запись не найдена.',
   'Active booking not found': 'Активная запись не найдена.',
+  'Attendance already marked or booking is not awaiting confirmation':
+    'Явка уже отмечена или запись не ждёт подтверждения.',
   'Too many requests': 'Слишком много попыток. Попробуйте позже.',
   'Schedule intervals must not overlap.': 'Интервалы рабочего времени не должны пересекаться.',
   'Schedule interval start_time must be before end_time.': 'Начало интервала должно быть раньше окончания.',

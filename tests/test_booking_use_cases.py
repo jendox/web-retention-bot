@@ -7,14 +7,18 @@ import pytest
 
 from app.core.currency import Currency
 from app.core.pagination import Pagination
-from app.models.booking import BookingStatus
+from app.models.booking import BookingStatus, booking_needs_attendance_confirmation
 from app.schemas.availability import SlotOut
 from app.schemas.booking import BookingClientListItem, BookingCreate, BookingListScope, BookingOut
 from app.use_cases.booking.available_slots import AvailableSlotsUseCase
 from app.use_cases.booking.create import CreateBookingUseCase
 from app.use_cases.booking.exceptions import AvailabilitySlotsError, UpdateBookingError
 from app.use_cases.booking.list import ListClientBookingsUseCase, ListMasterBookingsUseCase
-from app.use_cases.booking.update import CancelBookingUseCase, RescheduleBookingUseCase
+from app.use_cases.booking.update import (
+    CancelBookingUseCase,
+    MarkBookingAttendanceUseCase,
+    RescheduleBookingUseCase,
+)
 
 
 def _booking(**overrides):
@@ -29,6 +33,7 @@ def _booking(**overrides):
         "price_snapshot": Decimal("50.00"),
         "currency_snapshot": "BYN",
         "status": BookingStatus.SCHEDULED,
+        "attendance_confirmed_at": None,
     }
     data.update(overrides)
     return SimpleNamespace(**data)
@@ -57,20 +62,23 @@ class FakeBookingRepository:
     async def list_for_master(self, master_id, *, limit=500):
         return [self.booking] if self.booking and self.booking.master_id == master_id else []
 
-    async def count_for_master(self, master_id, scope, client_id=None):
+    async def count_for_master(self, master_id, scope, client_id=None, service_id=None):
         rows = await self.list_for_master_page(
             master_id,
             scope=scope,
             limit=500,
             offset=0,
             client_id=client_id,
+            service_id=service_id,
         )
         return len(rows)
 
-    async def list_for_master_page(self, master_id, scope, limit, offset, client_id=None):
+    async def list_for_master_page(self, master_id, scope, limit, offset, client_id=None, service_id=None):
         rows = [self.booking] if self.booking and self.booking.master_id == master_id else []
         if client_id is not None:
             rows = [b for b in rows if b.client_id == client_id]
+        if service_id is not None:
+            rows = [b for b in rows if b.service_id == service_id]
         return rows[offset : offset + limit]
 
     async def complete_past_scheduled(self):
@@ -138,6 +146,42 @@ async def test_create_booking_creates_snapshot_when_slot_is_available():
     assert result.service_id == service_id
     assert result.end_at == start_at + timedelta(minutes=45)
     assert booking_repo.created is not None
+
+
+async def test_mark_attendance_attended_confirms_completed():
+    master_id = uuid.uuid4()
+    past = datetime.now(UTC) - timedelta(hours=2)
+    booking = _booking(
+        master_id=master_id,
+        status=BookingStatus.COMPLETED,
+        start_at=past,
+        end_at=past + timedelta(minutes=60),
+    )
+    assert booking_needs_attendance_confirmation(booking)
+    use_case = MarkBookingAttendanceUseCase(FakeBookingRepository(booking))
+
+    result = await use_case(master_id=master_id, booking_id=booking.id, attended=True)
+
+    assert result.status == BookingStatus.COMPLETED
+    assert booking.attendance_confirmed_at is not None
+    assert not booking_needs_attendance_confirmation(booking)
+
+
+async def test_mark_attendance_no_show_updates_status():
+    master_id = uuid.uuid4()
+    past = datetime.now(UTC) - timedelta(hours=2)
+    booking = _booking(
+        master_id=master_id,
+        status=BookingStatus.COMPLETED,
+        start_at=past,
+        end_at=past + timedelta(minutes=60),
+    )
+    use_case = MarkBookingAttendanceUseCase(FakeBookingRepository(booking))
+
+    result = await use_case(master_id=master_id, booking_id=booking.id, attended=False)
+
+    assert result.status == BookingStatus.NO_SHOW
+    assert booking.attendance_confirmed_at is not None
 
 
 async def test_cancel_booking_marks_booking_cancelled_and_flushes():

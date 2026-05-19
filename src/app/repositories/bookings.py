@@ -75,6 +75,7 @@ class BookingRepository(BaseRepository):
         master_id: UUID,
         scope: BookingListScope,
         client_id: UUID | None = None,
+        service_id: UUID | None = None,
     ) -> int:
         now = datetime.now(UTC)
         stmt = select(func.count()).select_from(Booking).where(
@@ -83,6 +84,8 @@ class BookingRepository(BaseRepository):
         )
         if client_id is not None:
             stmt = stmt.where(Booking.client_id == client_id)
+        if service_id is not None:
+            stmt = stmt.where(Booking.service_id == service_id)
         result = await self.session.execute(stmt)
         return int(result.scalar_one())
 
@@ -94,6 +97,7 @@ class BookingRepository(BaseRepository):
         limit: int,
         offset: int,
         client_id: UUID | None = None,
+        service_id: UUID | None = None,
     ) -> list[Booking]:
         now = datetime.now(UTC)
         order = Booking.start_at.asc() if scope == BookingListScope.UPCOMING else Booking.start_at.desc()
@@ -109,6 +113,8 @@ class BookingRepository(BaseRepository):
         )
         if client_id is not None:
             stmt = stmt.where(Booking.client_id == client_id)
+        if service_id is not None:
+            stmt = stmt.where(Booking.service_id == service_id)
         rows = await self.session.execute(stmt)
         return list(rows.scalars())
 

@@ -14,8 +14,10 @@ from app.use_cases.booking.list import (
 )
 from app.use_cases.booking.update import (
     CancelBookingUseCase,
+    MarkBookingAttendanceUseCase,
     RescheduleBookingUseCase,
     get_cancel_booking_use_case,
+    get_mark_booking_attendance_use_case,
     get_reschedule_booking_use_case,
 )
 
@@ -28,6 +30,7 @@ __all__ = [
     "CreateBookingUseCase",
     "ListClientBookingsUseCase",
     "ListMasterBookingsUseCase",
+    "MarkBookingAttendanceUseCase",
     "RescheduleBookingUseCase",
     "UpdateBookingError",
     "get_available_slots_use_case",
@@ -35,5 +38,6 @@ __all__ = [
     "get_create_booking_use_case",
     "get_list_client_bookings_use_case",
     "get_list_master_bookings_use_case",
+    "get_mark_booking_attendance_use_case",
     "get_reschedule_booking_use_case",
 ]

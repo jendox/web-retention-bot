@@ -8,6 +8,7 @@ import {
   bookingsCancelApi,
   bookingsCreateApi,
   bookingsListApi,
+  bookingsMarkAttendanceApi,
   bookingsRescheduleApi,
   type Booking,
   type BookingListScope,
@@ -17,7 +18,12 @@ import { servicesListApi, type Service } from '../api/services'
 import { useMasterMe } from '../hooks/useMasterMe'
 import { getUserFacingError } from '../lib/apiErrors'
 import { cn } from '../lib/forms'
-import { blocksCalendar, bookingStatusLabel } from '../lib/bookingStatus'
+import {
+  blocksCalendar,
+  bookingStatusBadgeClass,
+  bookingStatusLabel,
+  needsAttendanceConfirmation,
+} from '../lib/bookingStatus'
 import { ALLOWED_PAGE_SIZES, parsePage, parsePageSize, type PageSize } from '../lib/pagination'
 
 type ClientSource = 'existing' | 'new'
@@ -168,14 +174,41 @@ function IconCheckCircle(props: { className?: string }) {
   )
 }
 
+function IconThumbUp(props: { className?: string }) {
+  return (
+    <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M7.493 18.75c-.425 0-.82-.236-1.023-.544l-1.09-1.637a.75.75 0 00-1.049-.15l-.194.145a.75.75 0 01-.824 0l-.194-.145a.75.75 0 00-1.049.15l-1.09 1.637A1.125 1.125 0 013.75 18.75H3v-7.82a3 3 0 011.183-2.39l5.48-4.035a1.125 1.125 0 011.678 0l5.48 4.035A3 3 0 0121 10.93V18.75h-.75zM12 4.5v12.75"
+      />
+    </svg>
+  )
+}
+
+function IconXCircle(props: { className?: string }) {
+  return (
+    <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+      />
+    </svg>
+  )
+}
+
 export function BookingsPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const prefillClientId = searchParams.get('client_id') ?? ''
+  const listClientId = searchParams.get('list_client_id') ?? ''
+  const listServiceId = searchParams.get('list_service_id') ?? ''
   const listScope = parseListScope(searchParams.get('scope'))
   const page = parsePage(searchParams.get('page'))
   const pageSize = parsePageSize(searchParams.get('page_size'))
+  const listFiltersActive = Boolean(listClientId || listServiceId)
 
   const setListScope = (scope: BookingListScope) => {
     setSearchParams((prev) => {
@@ -207,6 +240,42 @@ export function BookingsPage() {
       if (!n.get('scope')) {
         n.set('scope', listScope)
       }
+      return n
+    })
+  }
+
+  const setListClientId = (clientId: string) => {
+    setSearchParams((prev) => {
+      const n = new URLSearchParams(prev)
+      n.set('page', '1')
+      if (clientId) {
+        n.set('list_client_id', clientId)
+      } else {
+        n.delete('list_client_id')
+      }
+      return n
+    })
+  }
+
+  const setListServiceId = (serviceId: string) => {
+    setSearchParams((prev) => {
+      const n = new URLSearchParams(prev)
+      n.set('page', '1')
+      if (serviceId) {
+        n.set('list_service_id', serviceId)
+      } else {
+        n.delete('list_service_id')
+      }
+      return n
+    })
+  }
+
+  const clearListFilters = () => {
+    setSearchParams((prev) => {
+      const n = new URLSearchParams(prev)
+      n.delete('list_client_id')
+      n.delete('list_service_id')
+      n.set('page', '1')
       return n
     })
   }
@@ -270,8 +339,15 @@ export function BookingsPage() {
     enabled: me.isSuccess,
   })
   const bookings = useQuery({
-    queryKey: ['bookings', listScope, page, pageSize],
-    queryFn: () => bookingsListApi({ scope: listScope, page, page_size: pageSize }),
+    queryKey: ['bookings', listScope, page, pageSize, listClientId, listServiceId],
+    queryFn: () =>
+      bookingsListApi({
+        scope: listScope,
+        page,
+        page_size: pageSize,
+        client_id: listClientId || undefined,
+        service_id: listServiceId || undefined,
+      }),
     enabled: me.isSuccess,
   })
   const prefilled = selectedClient ?? prefilledClient.data ?? null
@@ -411,6 +487,16 @@ export function BookingsPage() {
     onError: (error) => setBookingActionError(getUserFacingError(error)),
   })
 
+  const markAttendance = useMutation({
+    mutationFn: ({ bookingId, attended }: { bookingId: string; attended: boolean }) =>
+      bookingsMarkAttendanceApi(bookingId, attended),
+    onSuccess: async () => {
+      setBookingActionError(null)
+      await queryClient.invalidateQueries({ queryKey: ['bookings'] })
+    },
+    onError: (error) => setBookingActionError(getUserFacingError(error)),
+  })
+
   useEffect(() => {
     if (me.isError) navigate('/login')
   }, [me.isError, navigate])
@@ -441,6 +527,12 @@ export function BookingsPage() {
     (clientLookup.data?.items ?? []).map((item) => [item.client.id, clientDisplayName(item)] as const),
   )
   const serviceNameById = new Map((serviceLookup.data?.items ?? []).map((service) => [service.id, service.name] as const))
+  const listClientOptions = [...(clientLookup.data?.items ?? [])].sort((a, b) =>
+    clientDisplayName(a).localeCompare(clientDisplayName(b), 'ru'),
+  )
+  const listServiceOptions = [...(serviceLookup.data?.items ?? [])].sort((a, b) =>
+    a.name.localeCompare(b.name, 'ru'),
+  )
   const bookingItems = Array.isArray(bookings.data?.items) ? bookings.data.items : []
   const bookingsListLoading = bookings.isPending && !bookings.data
   const bookingsTotal = bookings.data?.total ?? 0
@@ -885,13 +977,59 @@ export function BookingsPage() {
           </div>
         </div>
 
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+          <label className="block min-w-[12rem] flex-1 sm:max-w-xs">
+            <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Клиент</span>
+            <select
+              value={listClientId}
+              onChange={(event) => setListClientId(event.target.value)}
+              className={cn(fieldClass, 'mt-1')}
+            >
+              <option value="">Все клиенты</option>
+              {listClientOptions.map((item) => (
+                <option key={item.client.id} value={item.client.id}>
+                  {clientDisplayName(item)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block min-w-[12rem] flex-1 sm:max-w-xs">
+            <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Услуга</span>
+            <select
+              value={listServiceId}
+              onChange={(event) => setListServiceId(event.target.value)}
+              className={cn(fieldClass, 'mt-1')}
+            >
+              <option value="">Все услуги</option>
+              {listServiceOptions.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {listFiltersActive ? (
+            <button
+              type="button"
+              onClick={clearListFilters}
+              className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-800"
+            >
+              Сбросить фильтры
+            </button>
+          ) : null}
+        </div>
+
         {bookingsListLoading ? (
           <p className="text-sm text-stone-500 dark:text-stone-400">Загружаем записи...</p>
         ) : bookingsError ? (
           <p className="text-sm text-red-700 dark:text-red-300">{bookingsError}</p>
         ) : bookingItems.length === 0 ? (
           <p className="text-sm text-stone-500 dark:text-stone-400">
-            {listScope === 'upcoming' ? 'Нет предстоящих записей.' : 'История пуста.'}
+            {listFiltersActive
+              ? 'Нет записей по выбранным фильтрам.'
+              : listScope === 'upcoming'
+                ? 'Нет предстоящих записей.'
+                : 'История пуста.'}
           </p>
         ) : (
           <>
@@ -929,46 +1067,80 @@ export function BookingsPage() {
                       <span
                         className={cn(
                           'rounded-full px-2 py-0.5 text-xs font-medium',
-                          blocksCalendar(booking.status)
-                            ? 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200'
-                            : 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300',
+                          bookingStatusBadgeClass(booking.status),
                         )}
                       >
                         {bookingStatusLabel(booking.status)}
                       </span>
                     </td>
                     <td className="whitespace-nowrap py-3 text-right">
-                      {blocksCalendar(booking.status) ? (
-                        <div className="flex justify-end gap-2">
-	                          <button
-	                            type="button"
-	                            onClick={() => {
-	                              setBookingActionError(null)
-	                              setRescheduleBooking(booking)
-	                              setRescheduleDate(toDateInputValue(new Date(booking.start_at)))
-	                              setRescheduleSlot(null)
-	                            }}
-	                            className="rounded-lg p-2 text-stone-500 transition hover:bg-teal-50 hover:text-teal-700 dark:text-stone-400 dark:hover:bg-teal-950/40 dark:hover:text-teal-300"
-	                            aria-label={`Перенести запись клиента ${clientNameById.get(booking.client_id) ?? 'Клиент'}`}
-	                            title="Перенести запись"
-	                          >
-	                            <IconReschedule className="h-5 w-5" />
-	                          </button>
-	                          <button
-	                            type="button"
-	                            disabled={cancelBooking.isPending}
-	                            onClick={() => {
-	                              cancelBooking.reset()
-	                              setPendingCancel(booking)
-	                            }}
-	                            className="rounded-lg p-2 text-stone-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
-	                            aria-label={`Отменить запись клиента ${clientNameById.get(booking.client_id) ?? 'Клиент'}`}
-	                            title="Отменить запись"
-	                          >
-	                            <IconTrash className="h-5 w-5" />
-	                          </button>
-                        </div>
-                      ) : null}
+                      <div className="flex justify-end gap-2">
+                        {blocksCalendar(booking.status) ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBookingActionError(null)
+                                setRescheduleBooking(booking)
+                                setRescheduleDate(toDateInputValue(new Date(booking.start_at)))
+                                setRescheduleSlot(null)
+                              }}
+                              className="rounded-lg p-2 text-stone-500 transition hover:bg-teal-50 hover:text-teal-700 dark:text-stone-400 dark:hover:bg-teal-950/40 dark:hover:text-teal-300"
+                              aria-label={`Перенести запись клиента ${clientNameById.get(booking.client_id) ?? 'Клиент'}`}
+                              title="Перенести запись"
+                            >
+                              <IconReschedule className="h-5 w-5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={cancelBooking.isPending}
+                              onClick={() => {
+                                cancelBooking.reset()
+                                setPendingCancel(booking)
+                              }}
+                              className="rounded-lg p-2 text-stone-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
+                              aria-label={`Отменить запись клиента ${clientNameById.get(booking.client_id) ?? 'Клиент'}`}
+                              title="Отменить запись"
+                            >
+                              <IconTrash className="h-5 w-5" />
+                            </button>
+                          </>
+                        ) : null}
+                        {listScope === 'history' && needsAttendanceConfirmation(booking) ? (
+                          <div
+                            className="inline-flex shrink-0 overflow-hidden rounded-lg border border-stone-200/90 dark:border-stone-700"
+                            role="group"
+                            aria-label="Отметить явку"
+                          >
+                            <button
+                              type="button"
+                              disabled={markAttendance.isPending}
+                              onClick={() => {
+                                markAttendance.reset()
+                                markAttendance.mutate({ bookingId: booking.id, attended: true })
+                              }}
+                              className="border-r border-stone-200/90 p-1.5 text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50 dark:border-stone-700 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                              aria-label={`Клиент ${clientNameById.get(booking.client_id) ?? 'Клиент'} пришел`}
+                              title="Пришел"
+                            >
+                              <IconThumbUp className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={markAttendance.isPending}
+                              onClick={() => {
+                                markAttendance.reset()
+                                markAttendance.mutate({ bookingId: booking.id, attended: false })
+                              }}
+                              className="p-1.5 text-amber-800 transition hover:bg-amber-50 disabled:opacity-50 dark:text-amber-400 dark:hover:bg-amber-950/50"
+                              aria-label={`Клиент ${clientNameById.get(booking.client_id) ?? 'Клиент'} не пришел`}
+                              title="Не пришел"
+                            >
+                              <IconXCircle className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}

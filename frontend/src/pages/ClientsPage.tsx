@@ -451,7 +451,9 @@ export function ClientsPage() {
                         <button
                           type="button"
                           title="Создать запись для клиента"
-                          onClick={() => navigate(`/bookings?client_id=${row.client.id}`)}
+                          onClick={() =>
+                            navigate(`/bookings?client_id=${row.client.id}&list_client_id=${row.client.id}`)
+                          }
                           className="rounded-lg p-2 text-stone-500 transition hover:bg-teal-50 hover:text-teal-700 dark:text-stone-400 dark:hover:bg-teal-950/40 dark:hover:text-teal-300"
                           aria-label={`Создать запись для клиента ${row.client.display_name}`}
                         >

@@ -30,10 +30,15 @@ class BookingOut(BaseModel):
     price_snapshot: Decimal
     currency_snapshot: str
     status: str
+    attendance_confirmed_at: datetime | None = None
 
     model_config = ConfigDict(
         from_attributes=True,
     )
+
+
+class BookingAttendanceMark(BaseModel):
+    attended: bool = Field(description="True if the client attended; false for no-show.")
 
 
 class BookingClientListItem(BookingOut):

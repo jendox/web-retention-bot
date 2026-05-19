@@ -10,6 +10,7 @@ from app.core.pagination import Pagination, get_pagination
 from app.models.master import MasterProfile
 from app.models.user import User
 from app.schemas.booking import (
+    BookingAttendanceMark,
     BookingClientListItem,
     BookingCreate,
     BookingListScope,
@@ -24,11 +25,13 @@ from app.use_cases.booking import (
     CreateBookingUseCase,
     ListClientBookingsUseCase,
     ListMasterBookingsUseCase,
+    MarkBookingAttendanceUseCase,
     RescheduleBookingUseCase,
     get_cancel_booking_use_case,
     get_create_booking_use_case,
     get_list_client_bookings_use_case,
     get_list_master_bookings_use_case,
+    get_mark_booking_attendance_use_case,
     get_reschedule_booking_use_case,
 )
 
@@ -94,8 +97,15 @@ async def list_bookings(
     ],
     use_case: Annotated[ListMasterBookingsUseCase, Depends(get_list_master_bookings_use_case)],
     client_id: Annotated[UUID | None, Query(description="Optional filter by client.")] = None,
+    service_id: Annotated[UUID | None, Query(description="Optional filter by service.")] = None,
 ) -> PaginatedResponse[BookingOut]:
-    return await use_case(master.id, pagination, scope=scope, client_id=client_id)
+    return await use_case(
+        master.id,
+        pagination,
+        scope=scope,
+        client_id=client_id,
+        service_id=service_id,
+    )
 
 
 @router.post(
@@ -203,5 +213,42 @@ async def post_reschedule(
 ) -> BookingOut:
     try:
         return await use_case(master=master, booking_id=booking_id, start_at=payload.start_at)
+    except BookingsError as error:
+        _raise_http_error(error)
+
+
+@router.post(
+    path="/{booking_id}/attendance",
+    summary="Mark visit attendance",
+    description=(
+        "For completed visits awaiting confirmation: mark the client as attended "
+        "(keeps `COMPLETED`) or as no-show (`NO_SHOW`)."
+    ),
+    response_model=BookingOut,
+    status_code=status.HTTP_200_OK,
+    response_description="Booking updated with attendance outcome.",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ErrorDetail,
+            "description": "Booking is not awaiting attendance confirmation.",
+        },
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDetail,
+            "description": "Missing or invalid session cookie.",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorDetail,
+            "description": "Booking not found.",
+        },
+    },
+)
+async def post_attendance(
+    booking_id: UUID,
+    payload: BookingAttendanceMark,
+    master: Annotated[MasterProfile, Depends(require_master_profile)],
+    use_case: Annotated[MarkBookingAttendanceUseCase, Depends(get_mark_booking_attendance_use_case)],
+) -> BookingOut:
+    try:
+        return await use_case(master_id=master.id, booking_id=booking_id, attended=payload.attended)
     except BookingsError as error:
         _raise_http_error(error)

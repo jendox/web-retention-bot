@@ -22,11 +22,13 @@ class ListMasterBookingsUseCase:
         *,
         scope: BookingListScope,
         client_id: UUID | None = None,
+        service_id: UUID | None = None,
     ) -> PaginatedResponse[BookingOut]:
         total = await self._booking_repo.count_for_master(
             master_id=master_id,
             scope=scope,
             client_id=client_id,
+            service_id=service_id,
         )
         bookings = await self._booking_repo.list_for_master_page(
             master_id=master_id,
@@ -34,6 +36,7 @@ class ListMasterBookingsUseCase:
             limit=pagination.page_size,
             offset=pagination.offset,
             client_id=client_id,
+            service_id=service_id,
         )
         return PaginatedResponse(
             items=[BookingOut.model_validate(booking) for booking in bookings],

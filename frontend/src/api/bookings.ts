@@ -18,6 +18,7 @@ export type Booking = {
   price_snapshot: string
   currency_snapshot: string
   status: string
+  attendance_confirmed_at?: string | null
 }
 
 export type BookingClientListItem = Booking & {
@@ -36,6 +37,7 @@ export async function bookingsListApi(params: {
   page: number
   page_size: number
   client_id?: string
+  service_id?: string
 }) {
   const q = new URLSearchParams({
     scope: params.scope,
@@ -44,6 +46,9 @@ export async function bookingsListApi(params: {
   })
   if (params.client_id) {
     q.set('client_id', params.client_id)
+  }
+  if (params.service_id) {
+    q.set('service_id', params.service_id)
   }
   return apiFetch<PaginatedBookings>(`/api/bookings?${q}`)
 }
@@ -64,5 +69,12 @@ export async function bookingsRescheduleApi(id: string, start_at: string) {
   return apiFetch<Booking>(`/api/bookings/${id}/reschedule`, {
     method: 'POST',
     body: JSON.stringify({ start_at }),
+  })
+}
+
+export async function bookingsMarkAttendanceApi(id: string, attended: boolean) {
+  return apiFetch<Booking>(`/api/bookings/${id}/attendance`, {
+    method: 'POST',
+    body: JSON.stringify({ attended }),
   })
 }

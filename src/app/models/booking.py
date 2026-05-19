@@ -17,6 +17,24 @@ if TYPE_CHECKING:
     from app.models.service import Service
 
 
+def booking_needs_attendance_confirmation(
+    booking: "Booking",
+    now: datetime | None = None,
+) -> bool:
+    if booking.status is not BookingStatus.COMPLETED:
+        return False
+    if booking.attendance_confirmed_at is not None:
+        return False
+    if now is None:
+        now = datetime.now(UTC)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
+    end_at = booking.end_at
+    if end_at.tzinfo is None:
+        end_at = end_at.replace(tzinfo=UTC)
+    return end_at < now
+
+
 class BookingStatus(enum.StrEnum):
     SCHEDULED = "SCHEDULED"
     COMPLETED = "COMPLETED"
@@ -59,6 +77,11 @@ class Booking(TimeStampedModel):
         ),
         default=BookingStatus.SCHEDULED,
     )
+    #: Set when the master confirms attendance (visited); null until marked in history.
+    attendance_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     master: Mapped["MasterProfile"] = relationship("MasterProfile", back_populates="bookings")
     client: Mapped["Client"] = relationship("Client", back_populates="bookings")
@@ -73,3 +96,6 @@ class Booking(TimeStampedModel):
 
     def is_history(self, now: datetime | None = None) -> bool:
         return not self.is_upcoming(now)
+
+    def needs_attendance_confirmation(self, now: datetime | None = None) -> bool:
+        return booking_needs_attendance_confirmation(self, now=now)
