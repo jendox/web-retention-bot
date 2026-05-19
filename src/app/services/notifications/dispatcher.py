@@ -21,11 +21,15 @@ from app.repositories.notifications import (
     UserNotificationCreate,
     UserNotificationRepository,
 )
+from app.services.notifications.channel_policy import delivery_channels_for_user
 from app.services.notifications.mail_render import email_verification_user_notification_copy
+from app.services.notifications.recipients import BookingClientRecipient
+from app.services.notifications.booking_mail import deliver_booking_created_email
 from app.services.notifications.registration_mail import deliver_email_verification
 from app.services.notifications.tasks import process_notification_delivery
 
-EMAIL_VERIFY_DEDUP_PREFIX = "email_verify:user:"
+EMAIL_VERIFY_DEDUP = "email_verify:user:{user_id}"
+BOOKING_CREATED_DEDUP = "booking_created:booking:{booking_id}"
 
 logger = get_logger("app.notifications.dispatcher")
 
@@ -37,14 +41,70 @@ class EmailVerificationDispatchResult:
     delivery: NotificationDelivery
 
 
+@dataclass(frozen=True)
+class BookingEmailContext:
+    title: str
+    body: str
+    link_url: str | None
+    payload: dict[str, str]
+
+
 class NotificationDispatcher:
     """Single entry: persist notification graph and optionally enqueue external delivery."""
 
     def __init__(self, settings: Settings, session: AsyncSession) -> None:
         self._settings = settings
+        self._session = session
         self._notification_event_repo = NotificationEventRepository(session)
         self._user_notification_repo = UserNotificationRepository(session)
         self._notification_delivery_repo = NotificationDeliveryRepository(session)
+
+    async def _deliver_eager(self, user_note: UserNotification) -> None:
+        payload = user_note.payload or {}
+        to_email = payload.get("to_email")
+        if not to_email:
+            raise ValueError("missing to_email in notification payload")
+
+        if user_note.event_type is NotificationEventType.EMAIL_VERIFICATION:
+            if not user_note.recipient_user_id:
+                raise ValueError("missing recipient_user_id for email verification")
+            await deliver_email_verification(
+                settings=self._settings,
+                user_id=user_note.recipient_user_id,
+                to_email=to_email,
+            )
+            return
+
+        if user_note.event_type is NotificationEventType.BOOKING_CREATED:
+            await deliver_booking_created_email(
+                settings=self._settings,
+                session=self._session,
+                booking_id=UUID(payload["booking_id"]),
+                to_email=to_email,
+            )
+            return
+
+        raise ValueError(f"unsupported eager event type: {user_note.event_type.value}")
+
+    async def _enqueue_delivery(
+        self,
+        *,
+        event: NotificationEvent,
+        delivery: NotificationDelivery,
+        user_note: UserNotification,
+    ) -> None:
+        if self._settings.notifications.eager_deliveries:
+            await self._deliver_eager(user_note)
+            delivery.sent_at = datetime.now(UTC)
+            delivery.status = DeliveryStatus.SENT
+            logger.info("sent_eagerly", event_id=str(event.id), delivery_id=str(delivery.id))
+        else:
+            process_notification_delivery.apply_async(
+                args=[str(delivery.id)],
+                countdown=2,
+                headers={"parent_request_id": get_request_id()},
+            )
+            logger.info("queued", event_id=str(event.id), delivery_id=str(delivery.id))
 
     async def dispatch_email_verification(
         self,
@@ -72,7 +132,7 @@ class NotificationDispatcher:
                     title=note_title,
                     body=note_body,
                     payload=payload,
-                    dedup_key=f"{EMAIL_VERIFY_DEDUP_PREFIX}{user_id}",
+                    dedup_key=EMAIL_VERIFY_DEDUP.format(user_id=user_id),
                 ),
             )
 
@@ -85,22 +145,7 @@ class NotificationDispatcher:
                 ),
             )
 
-            if self._settings.notifications.eager_deliveries:
-                await deliver_email_verification(
-                    settings=self._settings,
-                    user_id=user_id,
-                    to_email=to_email,
-                )
-                delivery.sent_at = datetime.now(UTC)
-                delivery.status = DeliveryStatus.SENT
-                logger.info("sent_eagerly", event_id=str(event.id), delivery_id=str(delivery.id))
-            else:
-                process_notification_delivery.apply_async(
-                    args=[str(delivery.id)],
-                    countdown=2,
-                    headers={"parent_request_id": get_request_id()},
-                )
-                logger.info("queued", event_id=str(event.id), delivery_id=str(delivery.id))
+            await self._enqueue_delivery(event=event, delivery=delivery, user_note=user_note)
 
             return EmailVerificationDispatchResult(event=event, user_notification=user_note, delivery=delivery)
 
@@ -154,6 +199,60 @@ class NotificationDispatcher:
                 ),
             )
             logger.info("created", event_id=str(event.id))
+
+    async def dispatch_booking_created(
+        self,
+        *,
+        booking_id: UUID,
+        master_profile_id: UUID,
+        client_id: UUID,
+        recipient: BookingClientRecipient,
+        email_ctx: BookingEmailContext,
+    ) -> None:
+        with log_context(notification="dispatch_booking_created", channel="email"):
+            payload = {
+                **email_ctx.payload,
+                "booking_id": str(booking_id),
+                "to_email": recipient.email,
+            }
+            event = await self._notification_event_repo.create(
+                NotificationEventCreate(
+                    type=NotificationEventType.BOOKING_CREATED,
+                    target_user_id=recipient.user_id,
+                    master_profile_id=master_profile_id,
+                    client_id=client_id,
+                    booking_id=booking_id,
+                    payload=payload,
+                )
+            )
+
+            user_note = await self._user_notification_repo.create(
+                UserNotificationCreate(
+                    event_id=event.id,
+                    recipient_user_id=recipient.user_id,
+                    recipient_client_id=client_id,
+                    event_type=NotificationEventType.BOOKING_CREATED,
+                    title=email_ctx.title,
+                    body=email_ctx.body,
+                    link_url=email_ctx.link_url,
+                    payload=payload,
+                    dedup_key=BOOKING_CREATED_DEDUP.format(booking_id=booking_id),
+                ),
+            )
+
+            for channel in delivery_channels_for_user(
+                user_id=recipient.user_id,
+                event_type=NotificationEventType.BOOKING_CREATED,
+            ):
+                delivery = await self._notification_delivery_repo.create(
+                    NotificationDeliveryCreate(
+                        user_notification_id=user_note.id,
+                        channel=channel,
+                        status=DeliveryStatus.PENDING,
+                        scheduled_at=datetime.now(UTC),
+                    ),
+                )
+                await self._enqueue_delivery(event=event, delivery=delivery, user_note=user_note)
 
 
 def get_notification_dispatcher(

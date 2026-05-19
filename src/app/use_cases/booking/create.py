@@ -13,8 +13,12 @@ from app.models.service import Service
 from app.repositories.bookings import BookingRepository, get_booking_repo
 from app.repositories.clients import ClientRepository, get_client_repo
 from app.repositories.services import ServiceRepository, get_service_repo
+from app.repositories.users import UserRepository, get_user_repo
 from app.schemas.booking import BookingCreate, BookingOut
 from app.schemas.master import MasterProfileSchema
+from app.services.notifications.dispatcher import BookingEmailContext, NotificationDispatcher, get_notification_dispatcher
+from app.services.notifications.mail_render import booking_created_in_app_copy
+from app.services.notifications.recipients import resolve_booking_client_recipient
 from app.use_cases.booking.available_slots import (
     AvailableSlotsUseCase,
     get_available_slots_use_case,
@@ -34,15 +38,19 @@ def _normalize_start_at(start_at: datetime) -> datetime:
 class CreateBookingUseCase:
     def __init__(
         self,
+        user_repo: UserRepository,
         client_repo: ClientRepository,
         service_repo: ServiceRepository,
         booking_repo: BookingRepository,
         available_slots_use_case: AvailableSlotsUseCase,
+        dispatcher: NotificationDispatcher,
     ) -> None:
+        self._user_repo = user_repo
         self._client_repo = client_repo
         self._service_repo = service_repo
         self._booking_repo = booking_repo
         self._available_slots_use_case = available_slots_use_case
+        self._dispatcher = dispatcher
 
     async def _get_active_service(self, service_id: UUID, master_id: UUID) -> Service:
         service = await self._service_repo.get_for_master(service_id, master_id)
@@ -132,18 +140,47 @@ class CreateBookingUseCase:
                 start_at=booking.start_at.isoformat(),
                 end_at=booking.end_at.isoformat(),
             )
+
+            client = await self._client_repo.get_client(payload.client_id)
+            if client is not None and client.user_id is not None:
+                user = await self._user_repo.get_by_id(client.user_id)
+                recipient = resolve_booking_client_recipient(client, user)
+                if recipient is not None:
+                    title, body, link_url = booking_created_in_app_copy(
+                        master_display_name=master.display_name,
+                        service_name=service.name,
+                        start_at=created.start_at,
+                        master_timezone=master.timezone,
+                    )
+                    await self._dispatcher.dispatch_booking_created(
+                        booking_id=created.id,
+                        master_profile_id=master.id,
+                        client_id=client.id,
+                        recipient=recipient,
+                        email_ctx=BookingEmailContext(
+                            title=title,
+                            body=body,
+                            link_url=link_url,
+                            payload={},
+                        ),
+                    )
+
             return BookingOut.model_validate(created)
 
 
 def get_create_booking_use_case(
+    user_repo: Annotated[UserRepository, Depends(get_user_repo)],
     client_repo: Annotated[ClientRepository, Depends(get_client_repo)],
     service_repo: Annotated[ServiceRepository, Depends(get_service_repo)],
     booking_repo: Annotated[BookingRepository, Depends(get_booking_repo)],
     available_slots_use_case: Annotated[AvailableSlotsUseCase, Depends(get_available_slots_use_case)],
+    dispatcher: Annotated[NotificationDispatcher, Depends(get_notification_dispatcher)],
 ) -> CreateBookingUseCase:
     return CreateBookingUseCase(
+        user_repo,
         client_repo,
         service_repo,
         booking_repo,
         available_slots_use_case,
+        dispatcher,
     )

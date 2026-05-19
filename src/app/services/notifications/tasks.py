@@ -14,6 +14,7 @@ from app.models.notifications import NotificationEventType
 from app.models.notifications.enums import DeliveryChannel, DeliveryStatus
 from app.models.notifications.models import NotificationDelivery
 from app.repositories.notifications import NotificationDeliveryRepository
+from app.services.notifications.booking_mail import BookingNotificationSkip, deliver_booking_created_email
 from app.services.notifications.registration_mail import deliver_email_verification
 
 logger = get_logger("app.notifications.tasks")
@@ -57,8 +58,44 @@ async def _process_email_verification_notification(
     logger.info("sent")
 
 
+async def _process_booking_created_email(
+    settings: Settings,
+    deliver: NotificationDelivery,
+) -> None:
+    user_note = deliver.user_notification
+    payload = user_note.payload or {}
+    booking_id = UUID(payload["booking_id"])
+    to_email = payload.get("to_email")
+    if not to_email:
+        deliver.status = DeliveryStatus.FAILED
+        deliver.error_message = "missing to_email"
+        return
+
+    deliver.status = DeliveryStatus.SENDING
+    try:
+        async with worker_db_session() as session:
+            await deliver_booking_created_email(
+                settings=settings,
+                session=session,
+                booking_id=booking_id,
+                to_email=to_email,
+            )
+    except BookingNotificationSkip as exc:
+        deliver.status = DeliveryStatus.SKIPPED
+        deliver.error_message = str(exc)
+        return
+    except Exception as exc:
+        deliver.status = DeliveryStatus.FAILED
+        deliver.error_message = str(exc)[:2048]
+        return
+
+    deliver.status = DeliveryStatus.SENT
+    deliver.sent_at = datetime.now(UTC)
+
+
 NOTIFICATION_HANDLERS: dict[NotificationEventType, Callable] = {
     NotificationEventType.EMAIL_VERIFICATION: _process_email_verification_notification,
+    NotificationEventType.BOOKING_CREATED: _process_booking_created_email,
 }
 
 

@@ -85,7 +85,7 @@ async def test_deliver_email_verification_passes_url_from_security_to_notify(mai
 
 async def test_notify_email_verification_does_not_connect_smtp_when_disabled(mail_settings: Settings) -> None:
     url = "https://frontend.test/verify-email?token=t"
-    with patch("app.services.notifications.registration_mail.aiosmtplib.SMTP") as smtp_ctor:
+    with patch("app.services.notifications.email_send.aiosmtplib.SMTP") as smtp_ctor:
         await notify_email_verification(
             settings=mail_settings,
             to_email="a@b.c",

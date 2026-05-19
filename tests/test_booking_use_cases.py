@@ -2,6 +2,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -106,6 +107,9 @@ async def test_create_booking_creates_snapshot_when_slot_is_available():
             assert requested_client_id == client_id
             return True
 
+        async def get_client(self, requested_client_id):
+            return None
+
     class FakeServiceRepository:
         async def get_for_master(self, requested_service_id, requested_master_id):
             assert requested_service_id == service_id
@@ -122,12 +126,19 @@ async def test_create_booking_creates_snapshot_when_slot_is_available():
         async def __call__(self, *, master_id, service_id, calendar_day):
             return [SlotOut(start_at=start_at)]
 
+    class FakeUserRepository:
+        async def get_by_id(self, _user_id):
+            return None
+
     booking_repo = FakeBookingRepository()
+    dispatcher = SimpleNamespace(dispatch_booking_created=AsyncMock())
     use_case = CreateBookingUseCase(
+        user_repo=FakeUserRepository(),
         client_repo=FakeClientRepository(),
         service_repo=FakeServiceRepository(),
         booking_repo=booking_repo,
         available_slots_use_case=FakeAvailableSlotsUseCase(),
+        dispatcher=dispatcher,
     )
 
     result = await use_case(
