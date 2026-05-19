@@ -176,7 +176,7 @@ function scheduleToWeekRules(schedule: SchedulePayload | undefined) {
     return initialWeek
   }
   return initialWeek.map((day) => {
-    const saved = schedule.weekly_rules.find((rule) => rule.weekday === day.weekday)
+    const saved = schedule.weekly_days.find((rule) => rule.weekday === day.weekday)
     if (!saved) {
       return {
         ...day,
@@ -186,7 +186,7 @@ function scheduleToWeekRules(schedule: SchedulePayload | undefined) {
     }
     return {
       ...day,
-      isWorking: saved.intervals.length > 0,
+      isWorking: !saved.is_closed,
       ranges: saved.intervals.map((interval) => ({ start: interval.start_time, end: interval.end_time })),
     }
   })
@@ -194,8 +194,8 @@ function scheduleToWeekRules(schedule: SchedulePayload | undefined) {
 
 function scheduleToOverrides(schedule: SchedulePayload | undefined) {
   return (
-    schedule?.overrides.map((override) => ({
-      date: override.override_date,
+    schedule?.date_overrides.map((override) => ({
+      date: override.schedule_date,
       isWorking: !override.is_closed,
       ranges: override.intervals.map((interval) => ({ start: interval.start_time, end: interval.end_time })),
       note: override.note ?? undefined,
@@ -205,17 +205,19 @@ function scheduleToOverrides(schedule: SchedulePayload | undefined) {
 
 function buildSchedulePayload(weekRules: WeekdayRule[], overrides: DayOverride[]): SchedulePayload {
   return {
-    weekly_rules: weekRules.map((rule) => ({
+    weekly_days: weekRules.map((rule) => ({
       weekday: rule.weekday,
+      is_closed: !rule.isWorking,
       intervals: rule.isWorking
         ? rule.ranges.map((range) => ({
           start_time: range.start,
           end_time: range.end,
         }))
         : [],
+      note: null,
     })),
-    overrides: overrides.map((override) => ({
-      override_date: override.date,
+    date_overrides: overrides.map((override) => ({
+      schedule_date: override.date,
       is_closed: !override.isWorking,
       intervals: override.isWorking
         ? override.ranges.map((range) => ({

@@ -2,15 +2,18 @@ import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
+import { availabilityApi } from '../api/availability'
 import { meApi } from '../api/auth'
 import { clientsGetApi, clientsListApi, type ClientWithLink } from '../api/clients'
 import { servicesListApi, type Service } from '../api/services'
+import { useMasterMe } from '../hooks/useMasterMe'
 import { cn } from '../lib/forms'
 
 type ClientSource = 'existing' | 'new'
 
 const SEARCH_PAGE_SIZE = 10
 const MIN_SEARCH_LENGTH = 2
+const BOOKING_MAX_ADVANCE_DAYS = 90
 
 const fieldClass =
   'w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none transition focus:border-stone-400 focus:ring-2 focus:ring-stone-400/15 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-100 dark:focus:border-stone-500'
@@ -25,6 +28,19 @@ function toDateInputValue(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
+function formatSlotTime(value: string) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
 }
 
 function formatMoney(service: Service) {
@@ -82,11 +98,12 @@ export function BookingsPage() {
   const [serviceSearch, setServiceSearch] = useState('')
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()))
-  const [selectedTime, setSelectedTime] = useState('10:00')
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null)
   const [comment, setComment] = useState('')
   const [submitNotice, setSubmitNotice] = useState(false)
 
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
+  const master = useMasterMe(me.isSuccess)
   const prefilledClient = useQuery({
     queryKey: ['client', prefillClientId],
     queryFn: () => clientsGetApi(prefillClientId),
@@ -97,6 +114,8 @@ export function BookingsPage() {
   const serviceSearchTerm = serviceSearch.trim()
   const shouldSearchClients = clientSearchTerm.length >= MIN_SEARCH_LENGTH
   const shouldSearchServices = serviceSearchTerm.length >= MIN_SEARCH_LENGTH
+  const todayValue = toDateInputValue(new Date())
+  const maxDateValue = toDateInputValue(addDays(new Date(), BOOKING_MAX_ADVANCE_DAYS))
 
   const clients = useQuery({
     queryKey: ['clients', 'booking-form-search', clientSearchTerm, SEARCH_PAGE_SIZE],
@@ -108,24 +127,36 @@ export function BookingsPage() {
     queryFn: () => servicesListApi({ page: 1, page_size: SEARCH_PAGE_SIZE, is_active: true, q: serviceSearchTerm }),
     enabled: me.isSuccess && shouldSearchServices,
   })
+  const prefilled = selectedClient ?? prefilledClient.data ?? null
+  const clientReady = clientSource === 'new' ? draftName.trim().length > 0 : prefilled != null
+  const slots = useQuery({
+    queryKey: ['availability', master.data?.id, selectedService?.id, selectedDate],
+    queryFn: () =>
+      availabilityApi({
+        master_id: master.data?.id ?? '',
+        service_id: selectedService?.id ?? '',
+        date: selectedDate,
+      }),
+    enabled: me.isSuccess && Boolean(master.data?.id) && clientReady && Boolean(selectedService?.id) && Boolean(selectedDate),
+  })
 
   useEffect(() => {
     if (me.isError) navigate('/login')
   }, [me.isError, navigate])
 
-  const prefilled = selectedClient ?? prefilledClient.data ?? null
   const clientItems = clients.data?.items ?? []
   const serviceItems = services.data?.items ?? []
   const clientsError = clients.error instanceof Error ? clients.error.message : null
   const servicesError = services.error instanceof Error ? services.error.message : null
+  const slotsError = slots.error instanceof Error ? slots.error.message : null
 
   const previewClientName =
     clientSource === 'new' ? draftName.trim() || 'Новый клиент' : prefilled ? clientDisplayName(prefilled) : 'Клиент'
   const canPrepare =
     selectedService != null &&
     selectedDate.length > 0 &&
-    selectedTime.length > 0 &&
-    (clientSource === 'new' ? draftName.trim().length > 0 : prefilled != null)
+    selectedSlot != null &&
+    clientReady
 
   if (me.isLoading || !me.data) {
     return <p className="text-stone-500 dark:text-stone-400">Загрузка...</p>
@@ -164,6 +195,7 @@ export function BookingsPage() {
                     type="button"
                     onClick={() => {
                       setClientSource(tab.value)
+                      setSelectedSlot(null)
                       setSubmitNotice(false)
                     }}
                     className={cn(
@@ -211,6 +243,7 @@ export function BookingsPage() {
                       onChange={(event) => {
                         setClientSearch(event.target.value)
                         setSelectedClient(null)
+                        setSelectedSlot(null)
                         setSubmitNotice(false)
                       }}
                       className={cn(fieldClass, 'pl-9')}
@@ -237,6 +270,7 @@ export function BookingsPage() {
                           onClick={() => {
                             setClientSource('new')
                             setDraftName(clientSearchTerm)
+                            setSelectedSlot(null)
                             setSubmitNotice(false)
                           }}
                           className="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-800"
@@ -255,6 +289,7 @@ export function BookingsPage() {
                               onClick={() => {
                                 setSelectedClient(item)
                                 setClientSearch(clientDisplayName(item))
+                                setSelectedSlot(null)
                                 setSubmitNotice(false)
                               }}
                               className={cn(
@@ -294,6 +329,7 @@ export function BookingsPage() {
                     value={draftName}
                     onChange={(event) => {
                       setDraftName(event.target.value)
+                      setSelectedSlot(null)
                       setSubmitNotice(false)
                     }}
                     className={cn(fieldClass, 'mt-1')}
@@ -321,6 +357,7 @@ export function BookingsPage() {
               </div>
             )}
 
+            {clientReady ? (
             <div className="space-y-3">
               <label className="block">
                 <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Услуга</span>
@@ -331,6 +368,7 @@ export function BookingsPage() {
                     onChange={(event) => {
                       setServiceSearch(event.target.value)
                       setSelectedService(null)
+                      setSelectedSlot(null)
                       setSubmitNotice(false)
                     }}
                     className={cn(fieldClass, 'pl-9')}
@@ -362,6 +400,7 @@ export function BookingsPage() {
                             onClick={() => {
                               setSelectedService(service)
                               setServiceSearch(service.name)
+                              setSelectedSlot(null)
                               setSubmitNotice(false)
                             }}
                             className={cn(
@@ -383,26 +422,62 @@ export function BookingsPage() {
                 </div>
               ) : null}
             </div>
+            ) : null}
 
-            <div className="grid gap-3 sm:grid-cols-[10rem_8rem_minmax(0,1fr)]">
-              <label className="block">
-                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Дата</span>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(event) => setSelectedDate(event.target.value)}
-                  className={cn(fieldClass, 'mt-1 [color-scheme:light] dark:[color-scheme:dark]')}
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Время</span>
-                <input
-                  type="time"
-                  value={selectedTime}
-                  onChange={(event) => setSelectedTime(event.target.value)}
-                  className={cn(fieldClass, 'mt-1 [color-scheme:light] dark:[color-scheme:dark]')}
-                />
-              </label>
+            {clientReady && selectedService ? (
+              <div className="space-y-3 rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-stone-700 dark:bg-stone-950/40">
+                <label className="block max-w-xs">
+                  <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Дата</span>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    min={todayValue}
+                    max={maxDateValue}
+                    onChange={(event) => {
+                      setSelectedDate(event.target.value)
+                      setSelectedSlot(null)
+                      setSubmitNotice(false)
+                    }}
+                    className={cn(fieldClass, 'mt-1 [color-scheme:light] dark:[color-scheme:dark]')}
+                  />
+                </label>
+
+                <div>
+                  <p className="mb-2 text-sm font-medium text-stone-700 dark:text-stone-300">Свободное время</p>
+                  {slots.isLoading ? (
+                    <p className="text-sm text-stone-500 dark:text-stone-400">Считаем свободные слоты...</p>
+                  ) : slotsError ? (
+                    <p className="text-sm text-red-700 dark:text-red-300">{slotsError}</p>
+                  ) : (slots.data?.length ?? 0) === 0 ? (
+                    <p className="text-sm text-stone-500 dark:text-stone-400">На эту дату свободного времени нет.</p>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                      {slots.data?.map((slot) => (
+                        <button
+                          key={slot.start_at}
+                          type="button"
+                          onClick={() => {
+                            setSelectedSlot(slot.start_at)
+                            setSubmitNotice(false)
+                          }}
+                          className={cn(
+                            'rounded-lg border px-3 py-2 text-sm font-medium transition',
+                            selectedSlot === slot.start_at
+                              ? 'border-teal-600 bg-teal-100 text-teal-900 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-100'
+                              : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200 dark:hover:bg-stone-800',
+                          )}
+                        >
+                          {formatSlotTime(slot.start_at)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            {clientReady && selectedService ? (
+            <div className="grid gap-3">
               <label className="block">
                 <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Комментарий</span>
                 <input
@@ -413,6 +488,7 @@ export function BookingsPage() {
                 />
               </label>
             </div>
+            ) : null}
 
             {submitNotice ? (
               <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-100">
@@ -427,7 +503,7 @@ export function BookingsPage() {
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-3 text-sm font-semibold text-white shadow-sm shadow-teal-900/15 transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-teal-500 dark:text-stone-950 dark:hover:bg-teal-400"
             >
               <IconCalendarSmall className="h-4 w-4" />
-              Подготовить запись
+              Записать
             </button>
           </div>
         </section>
@@ -441,11 +517,15 @@ export function BookingsPage() {
                 {selectedService.name} · {selectedService.duration_min} мин · {formatMoney(selectedService)}
               </p>
             ) : (
-              <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">Найдите и выберите активную услугу</p>
+              <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+                {clientReady ? 'Найдите и выберите активную услугу' : 'Сначала выберите клиента'}
+              </p>
             )}
-            <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">
-              {selectedDate || 'Дата не выбрана'}, {selectedTime || 'время не выбрано'}
-            </p>
+            {selectedService ? (
+              <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">
+                {selectedDate || 'Дата не выбрана'}, {selectedSlot ? formatSlotTime(selectedSlot) : 'слот не выбран'}
+              </p>
+            ) : null}
           </div>
 
           <div className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">

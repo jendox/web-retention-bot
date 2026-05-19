@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from app.models.booking import Booking
     from app.models.client import MasterClient
     from app.models.invitation import Invitation
-    from app.models.schedule import WeeklyScheduleRule, WorkdayOverride
+    from app.models.schedule import ScheduleDateOverride, WeeklyScheduleDay
     from app.models.service import Service
     from app.models.user import User
 
@@ -38,13 +38,13 @@ class MasterProfile(TimeStampedModel):
 
     user: Mapped[User] = relationship("User", back_populates="master_profile")
 
-    weekly_rules: Mapped[list[WeeklyScheduleRule]] = relationship(
-        "WeeklyScheduleRule",
+    weekly_schedule_days: Mapped[list[WeeklyScheduleDay]] = relationship(
+        "WeeklyScheduleDay",
         back_populates="master",
         cascade="all, delete-orphan",
     )
-    workday_overrides: Mapped[list[WorkdayOverride]] = relationship(
-        "WorkdayOverride",
+    schedule_date_overrides: Mapped[list[ScheduleDateOverride]] = relationship(
+        "ScheduleDateOverride",
         back_populates="master",
         cascade="all, delete-orphan",
     )

@@ -1,17 +1,28 @@
-"""Booking queries."""
+from __future__ import annotations
 
+from typing import Annotated
 from uuid import UUID
 
+from fastapi import Depends
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import get_db_session
 from app.models.booking import Booking, BookingStatus
 from app.models.client import Client
 from app.models.master import MasterProfile
 from app.models.service import Service
 from app.repositories.base import BaseRepository
 
+__all__ = ["BookingRepository", "get_booking_repo"]
+
 
 class BookingRepository(BaseRepository):
+    async def create(self, booking: Booking) -> Booking:
+        self.session.add(booking)
+        await self.session.flush()
+        return booking
+
     async def has_conflict(
         self,
         master_id: UUID,
@@ -74,3 +85,9 @@ class BookingRepository(BaseRepository):
         )
         rows = await self.session.execute(stmt)
         return [(row[0], row[1], row[2]) for row in rows.all()]
+
+
+def get_booking_repo(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> BookingRepository:
+    return BookingRepository(session)

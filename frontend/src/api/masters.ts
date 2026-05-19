@@ -18,9 +18,9 @@ export type ScheduleInterval = {
 }
 
 export type SchedulePayload = {
-  weekly_rules: { weekday: number; intervals: ScheduleInterval[] }[]
-  overrides: {
-    override_date: string
+  weekly_days: { weekday: number; is_closed: boolean; intervals: ScheduleInterval[]; note?: string | null }[]
+  date_overrides: {
+    schedule_date: string
     is_closed: boolean
     intervals: ScheduleInterval[]
     note?: string | null

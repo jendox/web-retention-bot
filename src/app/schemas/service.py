@@ -28,9 +28,7 @@ class ServiceUpdate(BaseModel):
     sort_order: int | None = None
 
 
-class ServiceOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class ServiceSchema(BaseModel):
     id: UUID
     master_id: UUID
     name: str
@@ -40,3 +38,7 @@ class ServiceOut(BaseModel):
     currency: Currency
     is_active: bool
     sort_order: int
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )

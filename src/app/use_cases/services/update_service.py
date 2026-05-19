@@ -7,7 +7,7 @@ from app.core.structured_logging import get_logger, log_context
 from app.models.master import MasterProfile
 from app.models.service import Service
 from app.repositories.services import ServiceRepository, get_service_repo
-from app.schemas.service import ServiceOut, ServiceUpdate
+from app.schemas.service import ServiceSchema, ServiceUpdate
 
 from .exceptions import ServiceNotFoundError
 
@@ -46,7 +46,7 @@ class UpdateServiceUseCase:
         master: MasterProfile,
         service_id: UUID,
         payload: ServiceUpdate,
-    ) -> ServiceOut:
+    ) -> ServiceSchema:
         with log_context(use_case="update_service", master_id=str(master.id), service_id=str(service_id)):
             patch = payload.model_dump(exclude_unset=True)
             service = await self._get_service(service_id, master.id)
@@ -56,7 +56,7 @@ class UpdateServiceUseCase:
             await self._service_repo.flush()
             await self._service_repo.refresh(service)
             logger.info("updated", fields=sorted(patch.keys()))
-            return ServiceOut.model_validate(service)
+            return ServiceSchema.model_validate(service)
 
 
 def get_update_service_use_case(

@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.schemas.service import ServiceOut
+from app.schemas.service import ServiceSchema
 
 DEFAULT_INVITATION_TOKEN_EXPIRES_HOURS = 72
 
@@ -45,7 +45,7 @@ class InvitationLandingResponse(BaseModel):
     expires_at: datetime
     accepted_at: datetime | None
     linked_client_id: UUID | None
-    services: list[ServiceOut]
+    services: list[ServiceSchema]
     invite_kind: Literal["open", "client"] = "open"
     master_record_has_email: bool = False
 

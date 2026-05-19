@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.database import get_db_session
+from app.core.database import Base, get_db_session
 from app.models.master import MasterProfile
 from app.repositories.base import BaseRepository
 
@@ -43,6 +43,12 @@ class MasterRepository(BaseRepository):
         self.session.add(profile)
         await self.session.flush()
         return profile
+
+    async def flush(self) -> None:
+        await self.session.flush()
+
+    async def refresh(self, obj: Base) -> None:
+        await self.session.refresh(obj)
 
 
 def get_master_repo(

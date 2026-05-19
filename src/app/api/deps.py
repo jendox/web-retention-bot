@@ -11,15 +11,14 @@ from app.models.master import MasterProfile
 from app.models.user import User
 from app.repositories.masters import MasterRepository
 from app.repositories.users import UserRepository
-from app.services.sessions import SessionStore
+from app.services.sessions import SessionStore, get_session_store
 
-
-async def get_redis(request: Request):
-    return request.app.state.redis
-
-
-def get_session_store(redis=Depends(get_redis)) -> SessionStore:
-    return SessionStore(redis)
+__all__ = [
+    "current_user_optional",
+    "optional_master_profile",
+    "require_master_profile",
+    "require_user",
+]
 
 
 async def get_optional_user_id(
@@ -66,13 +65,3 @@ async def require_master_profile(profile: MasterProfile | None = Depends(optiona
     if not profile:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Master profile not found")
     return profile
-
-
-__all__ = [
-    "SessionStore",
-    "current_user_optional",
-    "get_session_store",
-    "optional_master_profile",
-    "require_master_profile",
-    "require_user",
-]

@@ -55,10 +55,14 @@ class SmtpSettings(BaseModel):
     from_email: str = Field(default="noreply@localhost")
 
 
+class Booking(BaseModel):
+    availability_slot_step_minutes: int = Field(default=15)
+    max_advance_days: int = Field(default=30)
+
+
 class Settings(BaseSettings):
     app_env: str = "development"
     cors_origins: str = "http://localhost:5173"
-    AVAILABILITY_SLOT_STEP_MINUTES: int = 15
 
     infra: InfraSettings = Field(default_factory=InfraSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
@@ -66,6 +70,7 @@ class Settings(BaseSettings):
     celery: CelerySettings = Field(default_factory=CelerySettings)
     notifications: NotificationSettings = Field(default_factory=NotificationSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
+    booking: Booking = Field(default_factory=Booking)
 
     model_config = SettingsConfigDict(
         env_file=".env",

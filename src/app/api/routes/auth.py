@@ -1,11 +1,8 @@
-import secrets
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from app.api.deps import SessionStore, get_session_store, require_user
-from app.core.config import Settings, get_settings
+from app.api.deps import require_user
 from app.core.verification_token import EmailVerificationTokenError
 from app.models.user import User
 from app.schemas.auth import (
@@ -21,6 +18,7 @@ from app.services.notifications.dispatcher import (
     NotificationDispatcher,
     get_notification_dispatcher,
 )
+from app.services.sessions import SessionManager, get_session_manager
 from app.use_cases.auth import (
     EmailNotVerifiedError,
     InactiveUserError,
@@ -39,41 +37,6 @@ from app.use_cases.auth import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _attach_csrf_cookie(settings: Settings, response: Response) -> str:
-    token = secrets.token_urlsafe(32)
-    response.set_cookie(
-        key=settings.session.csrf_cookie_name,
-        value=token,
-        httponly=False,
-        samesite="lax",
-        secure=settings.session.cookie_secure,
-        max_age=settings.session.ttl_seconds,
-        path="/",
-    )
-    return token
-
-
-async def _attach_session(settings: Settings, response: Response, store: SessionStore, user_id: UUID) -> None:
-    token = await store.create(user_id, settings.session.ttl_seconds)
-    response.set_cookie(
-        key=settings.session.cookie_name,
-        value=token,
-        httponly=True,
-        samesite="lax",
-        secure=settings.session.cookie_secure,
-        max_age=settings.session.ttl_seconds,
-        path="/",
-    )
-    _attach_csrf_cookie(settings, response)
-
-
-async def _clear_session(response: Response, store: SessionStore, cookie_value: str | None) -> None:
-    await store.destroy(cookie_value)
-    settings = get_settings()
-    response.delete_cookie(settings.session.cookie_name, path="/")
-    response.delete_cookie(settings.session.csrf_cookie_name, path="/")
-
-
 @router.get(
     path="/csrf",
     summary="Issue a CSRF token",
@@ -83,9 +46,11 @@ async def _clear_session(response: Response, store: SessionStore, cookie_value: 
     ),
     response_description="CSRF token issued.",
 )
-async def csrf_token(request: Request, response: Response) -> dict[str, str]:
-    settings = request.app.state.settings
-    token = _attach_csrf_cookie(settings, response)
+async def csrf_token(
+    response: Response,
+    session_manager: Annotated[SessionManager, Depends(get_session_manager)],
+) -> dict[str, str]:
+    token = session_manager.set_csrf_cookie(response)
     return {"csrf_token": token}
 
 
@@ -176,12 +141,12 @@ async def verify_email(
     payload: VerifyEmailPayload,
     response: Response,
     verify_email_use_case: Annotated[VerifyEmailUseCase, Depends(get_verify_email_use_case)],
-    store: Annotated[SessionStore, Depends(get_session_store)],
+    session_manager: Annotated[SessionManager, Depends(get_session_manager)],
 ) -> UserSchema:
     settings = request.app.state.settings
     try:
         user = await verify_email_use_case(secret=settings.security.secret_key, token=payload.token)
-        await _attach_session(settings, response, store, user.id)
+        await session_manager.attach_session(response, user.id)
         return user
     except EmailVerificationTokenError:
         raise HTTPException(
@@ -211,13 +176,11 @@ async def verify_email(
     },
 )
 async def login(
-    request: Request,
     response: Response,
     payload: LoginPayload,
     login_use_case: Annotated[LoginUseCase, Depends(get_login_use_case)],
-    store: Annotated[SessionStore, Depends(get_session_store)],
+    session_manager: Annotated[SessionManager, Depends(get_session_manager)],
 ) -> UserSchema:
-    settings = request.app.state.settings
     try:
         user = await login_use_case(email=payload.email, password=payload.password)
     except InvalidCredentialsError:
@@ -232,7 +195,7 @@ async def login(
             status.HTTP_403_FORBIDDEN,
             detail="Account is disabled",
         ) from None
-    await _attach_session(settings, response, store, user.id)
+    await session_manager.attach_session(response, user.id)
     return user
 
 
@@ -274,10 +237,8 @@ async def me(current: Annotated[User, Depends(require_user)]) -> UserSchema:
 async def logout(
     request: Request,
     response: Response,
-    store: Annotated[SessionStore, Depends(get_session_store)],
+    session_manager: Annotated[SessionManager, Depends(get_session_manager)],
 ) -> Response:
-    settings = request.app.state.settings
-    token = request.cookies.get(settings.session.cookie_name)
-    await _clear_session(response, store, token)
+    await session_manager.clear_session(request, response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response

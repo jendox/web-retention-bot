@@ -1,104 +1,146 @@
 from typing import Annotated
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import require_master_profile
-from app.core.database import get_db_session
 from app.models.master import MasterProfile
-from app.repositories.schedules import ScheduleRepository
 from app.schemas.master import (
     MasterProfileSchema,
     MasterProfileUpdate,
     MasterScheduleOut,
     MasterScheduleUpsert,
 )
-from app.use_cases.replace_schedule import ScheduleBookingConflictError, replace_master_schedule
+from app.schemas.errors import ErrorDetail
+from app.use_cases.master import UpdateMasterProfileUseCase, get_update_master_profile_use_case
+from app.use_cases.schedule import (
+    GetMasterScheduleUseCase,
+    ReplaceMasterScheduleUseCase,
+    ScheduleBookingConflictError,
+    get_get_master_schedule_use_case,
+    get_replace_master_schedule_use_case,
+)
 
 router = APIRouter(prefix="/masters", tags=["masters"])
 
 
-async def _snapshot_schedule(session: AsyncSession, master_id: UUID) -> MasterScheduleOut:
-    schedules = ScheduleRepository(session)
-    weekly_models = await schedules.weekly_for_master(master_id)
-    overrides_models = await schedules.overrides_for_master(master_id)
-
-    weekly_by_day: dict[int, list[dict]] = {}
-    for rule in sorted(weekly_models, key=lambda item: (item.weekday, item.start_time)):
-        weekly_by_day.setdefault(rule.weekday, []).append(
-            {
-                "start_time": rule.start_time.strftime("%H:%M"),
-                "end_time": rule.end_time.strftime("%H:%M"),
-            },
-        )
-    weekly_rules = [{"weekday": weekday, "intervals": intervals} for weekday, intervals in weekly_by_day.items()]
-    overrides = sorted(
-        [
-            {
-                "override_date": ov.override_date.isoformat(),
-                "is_closed": ov.is_closed,
-                "intervals": [
-                    {
-                        "start_time": interval.start_time.strftime("%H:%M"),
-                        "end_time": interval.end_time.strftime("%H:%M"),
-                    }
-                    for interval in ov.intervals
-                ],
-                "note": ov.note,
-            }
-            for ov in overrides_models
-        ],
-        key=lambda item: item["override_date"],
-    )
-    return MasterScheduleOut(weekly_rules=weekly_rules, overrides=overrides)
-
-
-@router.get("/me", response_model=MasterProfileSchema)
-async def profile_me(master: Annotated[MasterProfile, Depends(require_master_profile)]) -> MasterProfileSchema:
-    return MasterProfileSchema.model_validate(master)
-
-
-@router.put("/me", response_model=MasterProfileSchema)
-async def profile_update(
-    payload: MasterProfileUpdate,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+@router.get(
+    path="/me",
+    summary="Current master profile",
+    description=(
+        "Returns the master profile linked to the current authenticated user. "
+        "Responds with 404 when the user does not have a master profile."
+    ),
+    response_model=MasterProfileSchema,
+    status_code=status.HTTP_200_OK,
+    response_description="Master profile for the current user.",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDetail,
+            "description": "Missing or invalid session cookie.",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorDetail,
+            "description": "The current user does not have a master profile.",
+        },
+    },
+)
+async def profile_me(
     master: Annotated[MasterProfile, Depends(require_master_profile)],
 ) -> MasterProfileSchema:
-    if payload.display_name:
-        master.display_name = payload.display_name
-    if payload.public_slug is not None:
-        master.public_slug = payload.public_slug
-    if payload.timezone:
-        master.timezone = payload.timezone
-    if payload.default_currency is not None:
-        master.default_currency = payload.default_currency
-    await session.flush()
     return MasterProfileSchema.model_validate(master)
 
 
-@router.get("/me/schedule", response_model=MasterScheduleOut)
+@router.put(
+    path="/me",
+    summary="Update current master profile",
+    description=(
+        "Applies a partial update to the current user's master profile. Nullable fields such as `public_slug` "
+        "may be cleared; non-nullable profile fields ignore explicit null values."
+    ),
+    response_model=MasterProfileSchema,
+    status_code=status.HTTP_200_OK,
+    response_description="Updated master profile.",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDetail,
+            "description": "Missing or invalid session cookie.",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorDetail,
+            "description": "The current user does not have a master profile.",
+        },
+    },
+)
+async def profile_update(
+    payload: MasterProfileUpdate,
+    use_case: Annotated[UpdateMasterProfileUseCase, Depends(get_update_master_profile_use_case)],
+) -> MasterProfileSchema:
+    return await use_case(payload)
+
+
+@router.get(
+    path="/me/schedule",
+    summary="Current master schedule",
+    description=(
+        "Returns the recurring weekly schedule and date-specific schedule overrides for the current master. "
+        "Date overrides replace the weekly template for their calendar date."
+    ),
+    response_model=MasterScheduleOut,
+    status_code=status.HTTP_200_OK,
+    response_description="Current weekly schedule and date overrides.",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDetail,
+            "description": "Missing or invalid session cookie.",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorDetail,
+            "description": "The current user does not have a master profile.",
+        },
+    },
+)
 async def get_schedule_route(
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    use_case: Annotated[GetMasterScheduleUseCase, Depends(get_get_master_schedule_use_case)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
 ) -> MasterScheduleOut:
-    return await _snapshot_schedule(session, master.id)
+    return await use_case(master.id)
 
 
-@router.put("/me/schedule", response_model=MasterScheduleOut)
+@router.put(
+    path="/me/schedule",
+    summary="Replace current master schedule",
+    description=(
+        "Replaces the full weekly schedule and all date-specific overrides for the current master in one request. "
+        "The change is rejected when it would move an existing future booking outside working hours."
+    ),
+    response_model=MasterScheduleOut,
+    status_code=status.HTTP_200_OK,
+    response_description="Updated weekly schedule and date overrides.",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ErrorDetail,
+            "description": "Invalid schedule payload.",
+        },
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDetail,
+            "description": "Missing or invalid session cookie.",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorDetail,
+            "description": "The current user does not have a master profile.",
+        },
+        status.HTTP_409_CONFLICT: {
+            "description": "Schedule changes affect existing future bookings.",
+        },
+    },
+)
 async def put_schedule_route(
     payload: MasterScheduleUpsert,
-    session: Annotated[AsyncSession, Depends(get_db_session)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
+    use_case: Annotated[ReplaceMasterScheduleUseCase, Depends(get_replace_master_schedule_use_case)],
 ) -> MasterScheduleOut:
     try:
-        await replace_master_schedule(
-            session,
-            master.id,
-            master.timezone,
-            weekly=payload.weekly_rules,
-            overrides=payload.overrides,
-        )
+        return await use_case(master, payload)
     except ScheduleBookingConflictError as exc:
         raise HTTPException(
             status_code=409,
@@ -116,4 +158,3 @@ async def put_schedule_route(
         ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return await _snapshot_schedule(session, master.id)

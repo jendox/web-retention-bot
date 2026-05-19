@@ -6,7 +6,7 @@ from app.core.pagination import Pagination
 from app.models.master import MasterProfile
 from app.repositories.services import ServiceRepository, get_service_repo
 from app.schemas.pagination import PaginatedResponse
-from app.schemas.service import ServiceOut
+from app.schemas.service import ServiceSchema
 
 
 class ListServicesUseCase:
@@ -20,7 +20,7 @@ class ListServicesUseCase:
         *,
         is_active: bool | None,
         search: str | None = None,
-    ) -> PaginatedResponse[ServiceOut]:
+    ) -> PaginatedResponse[ServiceSchema]:
         normalized_search = search.strip() if search and search.strip() else None
         total = await self._service_repo.count_for_master(master.id, is_active=is_active, search=normalized_search)
         rows = await self._service_repo.list_page_for_master(
@@ -30,7 +30,7 @@ class ListServicesUseCase:
             is_active=is_active,
             search=normalized_search,
         )
-        items = [ServiceOut.model_validate(svc) for svc in rows]
+        items = [ServiceSchema.model_validate(svc) for svc in rows]
         return PaginatedResponse(
             items=items,
             total=total,

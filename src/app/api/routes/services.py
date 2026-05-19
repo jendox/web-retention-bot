@@ -10,7 +10,7 @@ from app.core.pagination import Pagination, get_pagination
 from app.models.master import MasterProfile
 from app.schemas.errors import ErrorDetail
 from app.schemas.pagination import PaginatedResponse
-from app.schemas.service import ServiceCreate, ServiceOut, ServiceUpdate
+from app.schemas.service import ServiceCreate, ServiceSchema, ServiceUpdate
 from app.use_cases.services.create_service import CreateServiceUseCase, get_create_service_use_case
 from app.use_cases.services.delete_service import DeleteServiceUseCase, get_delete_service_use_case
 from app.use_cases.services.exceptions import ServiceHasBookingsError, ServiceNotFoundError
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/services", tags=["services"])
         "Paginated catalogue of services. Optional `is_active` filters by availability. "
         "Sort: `sort_order`, then creation time."
     ),
-    response_model=PaginatedResponse[ServiceOut],
+    response_model=PaginatedResponse[ServiceSchema],
     response_description="Page of services and total count for the same filter.",
 )
 async def list_services(
@@ -47,7 +47,7 @@ async def list_services(
             description="Optional search by service name or description.",
         ),
     ] = None,
-) -> PaginatedResponse[ServiceOut]:
+) -> PaginatedResponse[ServiceSchema]:
     return await use_case(master, pagination, is_active=is_active, search=q)
 
 
@@ -57,7 +57,7 @@ async def list_services(
     description=(
         "Adds a bookable service. If `currency` is omitted, the master's default currency from the profile is used."
     ),
-    response_model=ServiceOut,
+    response_model=ServiceSchema,
     status_code=status.HTTP_201_CREATED,
     response_description="New service row.",
     responses={
@@ -71,7 +71,7 @@ async def post_service(
     payload: ServiceCreate,
     use_case: Annotated[CreateServiceUseCase, Depends(get_create_service_use_case)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
-) -> ServiceOut:
+) -> ServiceSchema:
     return await use_case.execute(master, payload)
 
 
@@ -79,7 +79,7 @@ async def post_service(
     "/{service_id}",
     summary="Get one service",
     description="Returns a service owned by the authenticated master.",
-    response_model=ServiceOut,
+    response_model=ServiceSchema,
     responses={
         status.HTTP_404_NOT_FOUND: {
             "model": ErrorDetail,
@@ -91,7 +91,7 @@ async def get_service(
     service_id: UUID,
     use_case: Annotated[GetServiceUseCase, Depends(get_get_service_use_case)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
-) -> ServiceOut:
+) -> ServiceSchema:
     try:
         return await use_case.execute(master, service_id)
     except ServiceNotFoundError:
@@ -102,7 +102,7 @@ async def get_service(
     "/{service_id}",
     summary="Update a service",
     description="Partial update of service fields.",
-    response_model=ServiceOut,
+    response_model=ServiceSchema,
     responses={
         status.HTTP_404_NOT_FOUND: {
             "model": ErrorDetail,
@@ -115,7 +115,7 @@ async def patch_service(
     payload: ServiceUpdate,
     use_case: Annotated[UpdateServiceUseCase, Depends(get_update_service_use_case)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
-) -> ServiceOut:
+) -> ServiceSchema:
     try:
         return await use_case.execute(master, service_id, payload)
     except ServiceNotFoundError:

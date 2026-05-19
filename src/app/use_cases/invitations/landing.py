@@ -10,7 +10,7 @@ from app.models import Invitation
 from app.repositories.invitations import InvitationRepository, get_invitation_repo
 from app.repositories.services import ServiceRepository, get_service_repo
 from app.schemas.invitation import InvitationLandingResponse
-from app.schemas.service import ServiceOut
+from app.schemas.service import ServiceSchema
 from app.use_cases.invitations.exceptions import LandingInvitationError
 
 __all__ = [
@@ -70,7 +70,7 @@ class InvitationLandingUseCase:
 
             svc_list_raw = await self._service_repo.list_for_master(master_profile.id)
             services_public = [
-                ServiceOut.model_validate(service)
+                ServiceSchema.model_validate(service)
                 for service in svc_list_raw
                 if service.is_active
             ]
