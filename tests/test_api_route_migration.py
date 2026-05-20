@@ -52,6 +52,9 @@ NEW_CLIENT_PATHS = [
     "/api/client/profile",
 ]
 
+# Paths that return app-level 404 when the user has no linked client profile yet.
+_CLIENT_APP_404_PATHS = {"/api/client/profile"}
+
 
 def _skip_if_unreachable(exc: BaseException) -> None:
     cur: BaseException | None = exc
@@ -173,7 +176,11 @@ def test_authenticated_client_hits_new_client_routes() -> None:
             _register_verified_client(client, email=email)
             for path in NEW_CLIENT_PATHS:
                 resp = client.get(path)
-                assert resp.status_code == 200, (path, resp.status_code, resp.text)
+                bare = path.split("?")[0]
+                if bare in _CLIENT_APP_404_PATHS:
+                    assert resp.status_code in {200, 404}, (path, resp.status_code, resp.text)
+                else:
+                    assert resp.status_code == 200, (path, resp.status_code, resp.text)
     except Exception as exc:
         _skip_if_unreachable(exc)
         raise

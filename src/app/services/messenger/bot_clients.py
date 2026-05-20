@@ -39,7 +39,7 @@ class MessengerBotClients:
         payload = {"external_id": external_id, "text": text}
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(f"{base.rstrip('/')}/v1/send", json=payload, headers=headers)
-        if resp.status_code >= 400:
+        if not resp.is_success:
             detail = resp.text
             try:
                 detail = str(resp.json().get("detail", detail))

@@ -67,6 +67,12 @@ class NotificationSettingsService:
         for channel_def in CHANNEL_DEFS:
             linked = channel_by_kind.get(channel_def.kind)
             connected = linked is not None and linked.is_verified
+            if linked:
+                address = linked.address
+            elif channel_def.kind == DeliveryChannel.EMAIL:
+                address = user.email
+            else:
+                address = None
             external.append(
                 ExternalChannelOut(
                     kind=channel_def.kind.value,
@@ -75,7 +81,7 @@ class NotificationSettingsService:
                     available=channel_def.available,
                     connectable=channel_def.connectable,
                     connected=connected,
-                    address=linked.address if linked else (user.email if channel_def.kind == DeliveryChannel.EMAIL else None),
+                    address=address,
                     connect_url=await self._pending_connect_url(user.id, channel_def.kind, connected=connected),
                     coming_soon_label=channel_def.coming_soon_label,
                 ),
@@ -201,30 +207,30 @@ class NotificationSettingsService:
         linked = await self._repo.get_channel(user_id, kind)
         return linked is not None and linked.is_verified
 
-    def _topic_prefs(self, prefs, topic, channel_by_kind) -> TopicChannelPrefsOut:
-        def enabled_for(kind: DeliveryChannel) -> bool:
-            if kind != DeliveryChannel.EMAIL:
-                linked = channel_by_kind.get(kind)
-                if linked is None or not linked.is_verified:
-                    return False
-            for pref in prefs:
-                if pref.channel != kind:
-                    continue
-                if topic.event_type is not None and pref.event_type == topic.event_type:
-                    return pref.enabled
-                if (
-                    topic.event_type is None
-                    and topic.category is not None
-                    and pref.event_type is None
-                    and pref.category == topic.category
-                ):
-                    return pref.enabled
-            return kind == DeliveryChannel.EMAIL
+    def _channel_enabled(self, prefs, topic, kind: DeliveryChannel, channel_by_kind) -> bool:
+        if kind != DeliveryChannel.EMAIL:
+            linked = channel_by_kind.get(kind)
+            if linked is None or not linked.is_verified:
+                return False
+        for pref in prefs:
+            if pref.channel != kind:
+                continue
+            if topic.event_type is not None and pref.event_type == topic.event_type:
+                return pref.enabled
+            if (
+                topic.event_type is None
+                and topic.category is not None
+                and pref.event_type is None
+                and pref.category == topic.category
+            ):
+                return pref.enabled
+        return kind == DeliveryChannel.EMAIL
 
+    def _topic_prefs(self, prefs, topic, channel_by_kind) -> TopicChannelPrefsOut:
         return TopicChannelPrefsOut(
-            email=enabled_for(DeliveryChannel.EMAIL),
-            telegram=enabled_for(DeliveryChannel.TELEGRAM),
-            sms=enabled_for(DeliveryChannel.SMS),
+            email=self._channel_enabled(prefs, topic, DeliveryChannel.EMAIL, channel_by_kind),
+            telegram=self._channel_enabled(prefs, topic, DeliveryChannel.TELEGRAM, channel_by_kind),
+            sms=self._channel_enabled(prefs, topic, DeliveryChannel.SMS, channel_by_kind),
         )
 
 
