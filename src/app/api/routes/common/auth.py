@@ -1,14 +1,11 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_user
-from app.core.database import get_db_session
 from app.core.password_reset_token import PasswordResetTokenError
 from app.core.verification_token import EmailVerificationTokenError
 from app.models.user import User
-from app.repositories.clients import ClientRepository
 from app.schemas.auth import (
     ChangePasswordPayload,
     ForgotPasswordPayload,
@@ -34,6 +31,7 @@ from app.use_cases.auth import (
     InvalidCredentialsError,
     InvalidCurrentPasswordError,
     LoginUseCase,
+    MeUseCase,
     RegisterMasterUseCase,
     RegisterUserUseCase,
     ResetPasswordUseCase,
@@ -42,6 +40,7 @@ from app.use_cases.auth import (
     get_change_password_use_case,
     get_forgot_password_use_case,
     get_login_use_case,
+    get_me_use_case,
     get_register_master_use_case,
     get_register_user_use_case,
     get_reset_password_use_case,
@@ -236,15 +235,9 @@ async def login(
 )
 async def me(
     current: Annotated[User, Depends(require_user)],
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    use_case: Annotated[MeUseCase, Depends(get_me_use_case)],
 ) -> UserMeOut:
-    base = UserSchema.model_validate(current)
-    client = await ClientRepository(session).primary_client_profile_for_user(current.id)
-    return UserMeOut(
-        **base.model_dump(),
-        client_display_name=client.display_name if client else None,
-        client_phone=client.phone if client else None,
-    )
+    return await use_case(user=current)
 
 
 @router.post(
