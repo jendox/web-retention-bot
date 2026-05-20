@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 
 import { meApi } from '../api/auth'
+import { masterMeUpdateApi } from '../api/masters'
 import type { AppShellOutletContext } from '../app/appShellOutletContext'
 import { useMasterMe } from '../hooks/useMasterMe'
+import { getUserFacingError } from '../lib/apiErrors'
 import { cn } from '../lib/forms'
 
 const fieldClass =
@@ -18,6 +20,10 @@ type FormState = {
   publicSlug: string
   timezone: string
   currency: string
+  contactEmail: string
+  contactPhone: string
+  telegram: string
+  viber: string
   clientDisplayName: string
   clientPhone: string
   notificationsEmail: boolean
@@ -39,9 +45,11 @@ function profileInitials(displayName: string | null | undefined, email: string) 
 export function SettingsPage() {
   const navigate = useNavigate()
   const { isClientOnly } = useOutletContext<AppShellOutletContext>()
+  const queryClient = useQueryClient()
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
   const master = useMasterMe(me.isSuccess)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const email = me.data?.email ?? ''
   const clientDisplayName = me.data?.client_display_name?.trim() ?? ''
@@ -52,6 +60,10 @@ export function SettingsPage() {
       publicSlug: master.data?.public_slug ?? '',
       timezone: master.data?.timezone ?? 'Europe/Minsk',
       currency: master.data?.default_currency ?? 'BYN',
+      contactEmail: master.data?.contact_email ?? '',
+      contactPhone: master.data?.contact_phone ?? '',
+      telegram: master.data?.telegram ?? '',
+      viber: master.data?.viber ?? '',
       clientDisplayName,
       clientPhone,
       notificationsEmail: true,
@@ -61,6 +73,27 @@ export function SettingsPage() {
   )
   const [draft, setDraft] = useState<Partial<FormState>>({})
   const form = { ...defaultState, ...draft }
+
+  const saveMaster = useMutation({
+    mutationFn: () =>
+      masterMeUpdateApi({
+        display_name: form.masterDisplayName.trim() || undefined,
+        public_slug: form.publicSlug.trim() || null,
+        timezone: form.timezone,
+        default_currency: form.currency,
+        contact_email: form.contactEmail.trim() || null,
+        contact_phone: form.contactPhone.trim() || null,
+        telegram: form.telegram.trim() || null,
+        viber: form.viber.trim() || null,
+      }),
+    onSuccess: async () => {
+      setDraft({})
+      setSaveError(null)
+      setSaved(true)
+      await queryClient.invalidateQueries({ queryKey: ['master'] })
+    },
+    onError: (err) => setSaveError(getUserFacingError(err)),
+  })
 
   useEffect(() => {
     if (me.isError) {
@@ -90,12 +123,12 @@ export function SettingsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">Настройки</h1>
           <p className="mt-1 max-w-2xl text-sm text-stone-600 dark:text-stone-400">
-            Профили и параметры аккаунта. Сейчас это черновой интерфейс без сохранения на сервере.
+            Профили и параметры аккаунта. Профиль мастера и контакты сохраняются на сервере.
           </p>
         </div>
         {saved ? (
           <span className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-            Черновик сохранён
+            Сохранено
           </span>
         ) : null}
       </div>
@@ -104,7 +137,12 @@ export function SettingsPage() {
         className="space-y-5"
         onSubmit={(e) => {
           e.preventDefault()
-          setSaved(true)
+          setSaveError(null)
+          if (!isClientOnly) {
+            saveMaster.mutate()
+          } else {
+            setSaved(true)
+          }
         }}
       >
         <section className="rounded-2xl border border-stone-200/90 bg-white p-6 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
@@ -172,7 +210,44 @@ export function SettingsPage() {
                   <option value="EUR">EUR</option>
                 </select>
               </label>
+              <label className="block sm:col-span-2">
+                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Email для клиентов</span>
+                <input
+                  type="email"
+                  value={form.contactEmail}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, contactEmail: e.target.value }))}
+                  placeholder="studio@example.com"
+                  className={cn(fieldClass, 'mt-1')}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Телефон</span>
+                <input
+                  type="tel"
+                  value={form.contactPhone}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, contactPhone: e.target.value }))}
+                  className={cn(fieldClass, 'mt-1')}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Telegram</span>
+                <input
+                  value={form.telegram}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, telegram: e.target.value }))}
+                  placeholder="@username"
+                  className={cn(fieldClass, 'mt-1')}
+                />
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Viber</span>
+                <input
+                  value={form.viber}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, viber: e.target.value }))}
+                  className={cn(fieldClass, 'mt-1')}
+                />
+              </label>
             </div>
+            {saveError ? <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{saveError}</p> : null}
           </section>
         ) : null}
 
@@ -237,9 +312,10 @@ export function SettingsPage() {
         <div className="flex justify-end pt-3">
           <button
             type="submit"
-            className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-500"
+            disabled={!isClientOnly && saveMaster.isPending}
+            className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-500 disabled:opacity-60"
           >
-            Сохранить черновик
+            {!isClientOnly && saveMaster.isPending ? 'Сохраняем…' : 'Сохранить'}
           </button>
         </div>
       </form>

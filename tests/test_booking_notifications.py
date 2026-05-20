@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -15,11 +15,11 @@ from app.models.booking import BookingStatus
 from app.models.notifications.enums import DeliveryChannel, DeliveryStatus, NotificationEventType
 from app.schemas.availability import SlotOut
 from app.schemas.booking import BookingCreate, BookingOut
+from app.services.notifications.booking_mail import BookingNotificationSkip, deliver_booking_created_email
 from app.services.notifications.datetime_format import format_booking_start_local
 from app.services.notifications.dispatcher import BookingEmailContext, NotificationDispatcher
 from app.services.notifications.mail_render import booking_created_in_app_copy, render_booking_created
 from app.services.notifications.recipients import resolve_booking_client_recipient
-from app.services.notifications.booking_mail import BookingNotificationSkip, deliver_booking_created_email
 from app.use_cases.booking.create import CreateBookingUseCase
 
 
@@ -43,7 +43,6 @@ def mail_settings() -> Settings:
 
 
 def test_resolve_booking_client_recipient_requires_linked_verified_user() -> None:
-    client_id = uuid.uuid4()
     user_id = uuid.uuid4()
     client = SimpleNamespace(user_id=user_id)
     verified_user = SimpleNamespace(id=user_id, email="client@example.com", email_verified_at=datetime.now(UTC))
@@ -115,7 +114,8 @@ class _FakeNotificationRepos:
         return event
 
     async def create_note(self, data):
-        note = SimpleNamespace(id=uuid.uuid4(), payload=data.payload, **{k: v for k, v in data.__dict__.items() if k != "payload"})
+        extra = {k: v for k, v in data.__dict__.items() if k != "payload"}
+        note = SimpleNamespace(id=uuid.uuid4(), payload=data.payload, **extra)
         note.payload = data.payload
         note.recipient_user_id = data.recipient_user_id
         note.event_type = data.event_type

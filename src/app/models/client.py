@@ -54,6 +54,7 @@ class MasterClient(Base):
     master_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("master_profiles.id"))
     client_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("clients.id"))
     alias: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    client_alias: Mapped[str | None] = mapped_column(String(200), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     linked_account_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     invite_email_mismatch: Mapped[bool] = mapped_column(Boolean(), default=False, nullable=False)

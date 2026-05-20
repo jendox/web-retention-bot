@@ -16,7 +16,11 @@ from app.repositories.services import ServiceRepository, get_service_repo
 from app.repositories.users import UserRepository, get_user_repo
 from app.schemas.booking import BookingCreate, BookingOut
 from app.schemas.master import MasterProfileSchema
-from app.services.notifications.dispatcher import BookingEmailContext, NotificationDispatcher, get_notification_dispatcher
+from app.services.notifications.dispatcher import (
+    BookingEmailContext,
+    NotificationDispatcher,
+    get_notification_dispatcher,
+)
 from app.services.notifications.mail_render import booking_created_in_app_copy
 from app.services.notifications.recipients import resolve_booking_client_recipient
 from app.use_cases.booking.available_slots import (
@@ -29,7 +33,7 @@ from app.use_cases.booking.exceptions import CreateBookingError
 logger = get_logger("app.booking")
 
 
-def _normalize_start_at(start_at: datetime) -> datetime:
+def normalize_start_at(start_at: datetime) -> datetime:
     if start_at.tzinfo is None:
         start_at = start_at.replace(tzinfo=UTC)
     return start_at.astimezone(UTC)
@@ -126,7 +130,7 @@ class CreateBookingUseCase:
             service = await self._get_active_service(payload.service_id, master.id)
             await self._ensure_client_link_exists(master.id, payload.client_id)
 
-            start_utc = _normalize_start_at(payload.start_at)
+            start_utc = normalize_start_at(payload.start_at)
             await self._ensure_slot_available(master, service, start_utc)
 
             booking = self._build_booking(payload, master, service, start_utc)

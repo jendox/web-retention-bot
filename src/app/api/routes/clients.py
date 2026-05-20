@@ -12,7 +12,14 @@ from app.core.pagination import Pagination, get_pagination
 from app.models.master import MasterProfile
 from app.models.user import User
 from app.repositories.clients import ClientRepository
-from app.schemas.client import ClientCreate, ClientMyMasterItem, ClientUpdate, ClientWithLinkResponse
+from app.schemas.client import (
+    ClientCreate,
+    ClientMasterLinkUpdate,
+    ClientMyMasterItem,
+    ClientUpdate,
+    ClientWithLinkResponse,
+)
+from app.schemas.client_master import client_master_item
 from app.schemas.errors import ErrorDetail
 from app.schemas.pagination import PaginatedResponse
 from app.schemas.service import ServiceSchema
@@ -26,13 +33,17 @@ from app.use_cases.clients.exceptions import (
     ClientNotFoundError,
     ClientNothingToUpdateError,
 )
+from app.use_cases.clients.get_client import GetClientUseCase, get_get_client_use_case
+from app.use_cases.clients.list_clients import ListClientsUseCase, get_list_clients_use_case
 from app.use_cases.clients.list_master_services import (
     ListMasterServicesForClientUseCase,
     get_list_master_services_for_client_use_case,
 )
-from app.use_cases.clients.get_client import GetClientUseCase, get_get_client_use_case
-from app.use_cases.clients.list_clients import ListClientsUseCase, get_list_clients_use_case
 from app.use_cases.clients.update_client import UpdateClientUseCase, get_update_client_use_case
+from app.use_cases.clients.update_client_master_link import (
+    UpdateClientMasterLinkUseCase,
+    get_update_client_master_link_use_case,
+)
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
@@ -52,22 +63,42 @@ async def list_my_masters(
 ) -> list[ClientMyMasterItem]:
     repo = ClientRepository(session)
     rows = await repo.list_masters_for_user_clients(user.id)
-    out: list[ClientMyMasterItem] = []
-    for master, link, client in rows:
-        out.append(
-            ClientMyMasterItem(
-                master_id=master.id,
-                display_name=master.display_name,
-                public_slug=master.public_slug,
-                link_id=link.id,
-                invitation_status=link.invitation_status.value,
-                client_id=client.id,
-                client_display_name=client.display_name,
-                alias=link.alias,
-                contact_email=master.user.email,
-            ),
+    return [
+        client_master_item(
+            master,
+            link,
+            client_id=client.id,
+            client_display_name=client.display_name,
         )
-    return out
+        for master, link, client in rows
+    ]
+
+
+@router.patch(
+    "/me/masters/{master_id}",
+    summary="Update client-side label for a linked master",
+    response_model=ClientMyMasterItem,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"model": ErrorDetail},
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorDetail},
+    },
+)
+async def patch_my_master_link(
+    master_id: UUID,
+    payload: ClientMasterLinkUpdate,
+    user: Annotated[User, Depends(require_user)],
+    use_case: Annotated[
+        UpdateClientMasterLinkUseCase,
+        Depends(get_update_client_master_link_use_case),
+    ],
+) -> ClientMyMasterItem:
+    try:
+        return await use_case(user, master_id, payload)
+    except ClientNothingToUpdateError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No fields to update.") from None
+    except ClientMasterLinkError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.error_message) from None
 
 
 @router.get(

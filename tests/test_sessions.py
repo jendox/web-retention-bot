@@ -85,4 +85,8 @@ async def test_session_manager_clear_session_destroys_store_entry_and_clears_coo
     assert redis.values == {}
     set_cookie = response.headers.getlist("set-cookie")
     assert any(value.startswith(f"{settings.session.cookie_name}=") and "Max-Age=0" in value for value in set_cookie)
-    assert any(value.startswith(f"{settings.session.csrf_cookie_name}=") and "Max-Age=0" in value for value in set_cookie)
+    csrf_cleared = any(
+        value.startswith(f"{settings.session.csrf_cookie_name}=") and "Max-Age=0" in value
+        for value in set_cookie
+    )
+    assert csrf_cleared

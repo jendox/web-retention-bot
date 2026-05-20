@@ -64,7 +64,7 @@ async def test_create_client_booking_success() -> None:
     class FakeClientRepo:
         async def get_linked_client_for_master_user(self, mid, uid):
             if mid == master_id and uid == user_id:
-                return (SimpleNamespace(), client)
+                return (SimpleNamespace(client_alias="My Studio"), client)
             return None
 
     class FakeServiceRepo:
@@ -92,7 +92,7 @@ async def test_create_client_booking_success() -> None:
         ClientBookingCreate(master_id=master_id, service_id=service_id, start_at=start_at),
         user=SimpleNamespace(id=user_id),
     )
-    assert result.master_display_name == "Studio"
+    assert result.master_display_name == "My Studio"
     assert result.service_name == "Стрижка"
 
 
@@ -157,13 +157,18 @@ async def test_reschedule_client_booking() -> None:
 
     uc = RescheduleClientBookingUseCase(
         SimpleNamespace(get_by_master_id=AsyncMock(return_value=master)),
+        SimpleNamespace(
+            get_link_with_client=AsyncMock(
+                return_value=(SimpleNamespace(client_alias="Renamed Studio"), SimpleNamespace()),
+            ),
+        ),
         FakeBookingRepo(),
         SimpleNamespace(get_for_master=AsyncMock(return_value=service)),
         AsyncMock(return_value=[SlotOut(start_at=new_start)]),
     )
     result = await uc(user=SimpleNamespace(id=user_id), booking_id=booking.id, start_at=new_start)
     assert result.start_at == new_start
-    assert result.master_display_name == "Studio"
+    assert result.master_display_name == "Renamed Studio"
 
 
 @pytest.mark.asyncio

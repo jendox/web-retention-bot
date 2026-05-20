@@ -35,6 +35,7 @@ class RegisterMasterUseCase:
                 master = await self._master_repo.create(
                     user_id=user.id,
                     display_name=display_name,
+                    contact_email=str(user.email).lower(),
                 )
                 days = default_weekly_schedule_days(master.id)
                 await self._schedule_repo.add_weekly_days(days)

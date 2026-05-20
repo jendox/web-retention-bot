@@ -34,11 +34,13 @@ class MasterRepository(BaseRepository):
         user_id: UUID,
         display_name: str,
         public_slug: str | None = None,
+        contact_email: str | None = None,
     ) -> MasterProfile:
         profile = MasterProfile(
             user_id=user_id,
             display_name=display_name,
             public_slug=public_slug,
+            contact_email=contact_email,
         )
         self.session.add(profile)
         await self.session.flush()

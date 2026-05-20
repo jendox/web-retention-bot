@@ -4,13 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import require_master_profile
 from app.models.master import MasterProfile
+from app.schemas.errors import ErrorDetail
 from app.schemas.master import (
     MasterProfileSchema,
     MasterProfileUpdate,
     MasterScheduleOut,
     MasterScheduleUpsert,
 )
-from app.schemas.errors import ErrorDetail
 from app.use_cases.master import UpdateMasterProfileUseCase, get_update_master_profile_use_case
 from app.use_cases.schedule import (
     GetMasterScheduleUseCase,

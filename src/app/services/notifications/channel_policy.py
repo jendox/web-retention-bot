@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from app.models.notifications import NotificationEventType, DeliveryChannel
-
+from app.models.notifications import DeliveryChannel, NotificationEventType
 
 # later: UserNotificationPreferenceRepository + NotificationChannelRepository
+
 
 def delivery_channels_for_user(
     *,

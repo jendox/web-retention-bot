@@ -41,11 +41,27 @@ export type ClientMyMasterItem = {
   client_id: string
   client_display_name: string
   alias: string | null
-  contact_email: string
+  client_alias: string | null
+  contact_email: string | null
+  contact_phone: string | null
+  telegram: string | null
+  viber: string | null
+}
+
+export function clientMasterLabel(master: Pick<ClientMyMasterItem, 'client_alias' | 'display_name'>) {
+  const alias = master.client_alias?.trim()
+  return alias || master.display_name
 }
 
 export async function clientsMyMastersApi() {
   return apiFetch<ClientMyMasterItem[]>('/api/clients/me/masters')
+}
+
+export async function clientsMyMasterPatchApi(masterId: string, body: { client_alias?: string | null }) {
+  return apiFetch<ClientMyMasterItem>(`/api/clients/me/masters/${masterId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
 }
 
 export async function clientsMyMasterServicesApi(masterId: string) {

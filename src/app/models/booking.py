@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, Numeric, String, Uuid, CheckConstraint, Index
+from sqlalchemy import CheckConstraint, DateTime, Enum as SAEnum, ForeignKey, Index, Integer, Numeric, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import TimeStampedModel
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 def booking_needs_attendance_confirmation(
-    booking: "Booking",
+    booking: Booking,
     now: datetime | None = None,
 ) -> bool:
     if booking.status is not BookingStatus.COMPLETED:
@@ -83,9 +83,9 @@ class Booking(TimeStampedModel):
         nullable=True,
     )
 
-    master: Mapped["MasterProfile"] = relationship("MasterProfile", back_populates="bookings")
-    client: Mapped["Client"] = relationship("Client", back_populates="bookings")
-    service: Mapped["Service"] = relationship("Service", back_populates="bookings")
+    master: Mapped[MasterProfile] = relationship("MasterProfile", back_populates="bookings")
+    client: Mapped[Client] = relationship("Client", back_populates="bookings")
+    service: Mapped[Service] = relationship("Service", back_populates="bookings")
 
     def is_upcoming(self, now: datetime | None = None) -> bool:
         if now is None:

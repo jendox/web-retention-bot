@@ -29,6 +29,10 @@ class MasterProfileSchema(BaseModel):
     public_slug: str | None
     timezone: str
     default_currency: Currency | None = None
+    contact_email: str | None = None
+    contact_phone: str | None = None
+    telegram: str | None = None
+    viber: str | None = None
 
     tzinfo: ZoneInfo | None = None
 
@@ -50,6 +54,24 @@ class MasterProfileUpdate(BaseModel):
     public_slug: str | None = Field(default=None, max_length=80)
     timezone: str | None = Field(default=None, max_length=64)
     default_currency: Currency | None = None
+    contact_email: str | None = Field(default=None, max_length=320)
+    contact_phone: str | None = Field(default=None, max_length=50)
+    telegram: str | None = Field(default=None, max_length=100)
+    viber: str | None = Field(default=None, max_length=100)
+
+    @field_validator("contact_email", mode="before")
+    @classmethod
+    def empty_contact_email_to_none(cls, value: str | None) -> str | None:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        return value.strip().lower() if isinstance(value, str) else value
+
+    @field_validator("contact_phone", "telegram", "viber", mode="before")
+    @classmethod
+    def empty_optional_str_to_none(cls, value: str | None) -> str | None:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        return value.strip() if isinstance(value, str) else value
 
 
 class ScheduleIntervalIn(BaseModel):

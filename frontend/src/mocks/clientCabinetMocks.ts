@@ -206,7 +206,11 @@ export function buildClientCabinetMocks(now = new Date()) {
       client_id: 'mock-client-self',
       client_display_name: 'Елена Волкова',
       alias: 'Лена',
+      client_alias: 'Моя студия на Ленина',
       contact_email: 'studio.liniya@example.com',
+      contact_phone: '+375291234567',
+      telegram: '@liniya_studio',
+      viber: null,
     },
     {
       master_id: 'mock-master-2',
@@ -217,7 +221,11 @@ export function buildClientCabinetMocks(now = new Date()) {
       client_id: 'mock-client-self',
       client_display_name: 'Елена Волкова',
       alias: null,
+      client_alias: null,
       contact_email: 'irina.lebedeva@example.com',
+      contact_phone: null,
+      telegram: null,
+      viber: null,
     },
   ]
 

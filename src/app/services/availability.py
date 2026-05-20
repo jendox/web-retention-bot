@@ -22,6 +22,39 @@ def _combine_local(d: date, t: time, tz: ZoneInfo) -> datetime:
     return datetime.combine(d, t, tzinfo=tz)
 
 
+def _process_override_for_day(
+    target: date,
+    override_for_day: ScheduleDateOverride,
+    tz: ZoneInfo,
+) -> list[tuple[datetime, datetime]]:
+    segments: list[tuple[datetime, datetime]] = []
+    for interval in override_for_day.intervals:
+        start_dt = _combine_local(target, interval.start_time, tz)
+        end_dt = _combine_local(target, interval.end_time, tz)
+        if end_dt <= start_dt:
+            continue
+        segments.append((start_dt, end_dt))
+    return segments
+
+
+def _process_weekly_days(
+    target: date,
+    weekly_days: list[WeeklyScheduleDay],
+    tz: ZoneInfo,
+) -> list[tuple[datetime, datetime]]:
+    segments: list[tuple[datetime, datetime]] = []
+    weekly_day = next((item for item in weekly_days if item.weekday == target.weekday()), None)
+    if weekly_day is None or weekly_day.is_closed:
+        return []
+    for interval in weekly_day.intervals:
+        start_dt = _combine_local(target, interval.start_time, tz)
+        end_dt = _combine_local(target, interval.end_time, tz)
+        if end_dt <= start_dt:
+            continue
+        segments.append((start_dt, end_dt))
+    return segments
+
+
 def windows_for_date(
     target: date,
     weekly_days: list[WeeklyScheduleDay],
@@ -32,24 +65,11 @@ def windows_for_date(
     if override_for_day and override_for_day.is_closed:
         return []
 
-    segments: list[tuple[datetime, datetime]] = []
     if override_for_day:
-        for interval in override_for_day.intervals:
-            start_dt = _combine_local(target, interval.start_time, tz)
-            end_dt = _combine_local(target, interval.end_time, tz)
-            if end_dt <= start_dt:
-                continue
-            segments.append((start_dt, end_dt))
+        segments = _process_override_for_day(target, override_for_day, tz)
     else:
-        weekly_day = next((item for item in weekly_days if item.weekday == target.weekday()), None)
-        if weekly_day is None or weekly_day.is_closed:
-            return []
-        for interval in weekly_day.intervals:
-            start_dt = _combine_local(target, interval.start_time, tz)
-            end_dt = _combine_local(target, interval.end_time, tz)
-            if end_dt <= start_dt:
-                continue
-            segments.append((start_dt, end_dt))
+        segments = _process_weekly_days(target, weekly_days, tz)
+
     segments.sort(key=lambda pair: pair[0])
     return segments
 

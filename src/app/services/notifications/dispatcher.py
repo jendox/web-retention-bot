@@ -21,10 +21,10 @@ from app.repositories.notifications import (
     UserNotificationCreate,
     UserNotificationRepository,
 )
+from app.services.notifications.booking_mail import deliver_booking_created_email
 from app.services.notifications.channel_policy import delivery_channels_for_user
 from app.services.notifications.mail_render import email_verification_user_notification_copy
 from app.services.notifications.recipients import BookingClientRecipient
-from app.services.notifications.booking_mail import deliver_booking_created_email
 from app.services.notifications.registration_mail import deliver_email_verification
 from app.services.notifications.tasks import process_notification_delivery
 
@@ -223,7 +223,7 @@ class NotificationDispatcher:
                     client_id=client_id,
                     booking_id=booking_id,
                     payload=payload,
-                )
+                ),
             )
 
             user_note = await self._user_notification_repo.create(

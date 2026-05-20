@@ -60,6 +60,19 @@ class MasterClientOut(BaseModel):
     )
 
 
+class ClientMasterLinkUpdate(BaseModel):
+    """Псевдоним мастера в кабинете клиента (только для своей связи)."""
+
+    client_alias: str | None = Field(default=None, max_length=200)
+
+    @field_validator("client_alias", mode="before")
+    @classmethod
+    def empty_client_alias_to_none(cls, value: str | None) -> str | None:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        return value.strip() if isinstance(value, str) else value
+
+
 class ClientMyMasterItem(BaseModel):
     """Мастер, с которым связана карточка клиента у текущего пользователя."""
 
@@ -71,7 +84,11 @@ class ClientMyMasterItem(BaseModel):
     client_id: UUID
     client_display_name: str
     alias: str | None = None
-    contact_email: str
+    client_alias: str | None = None
+    contact_email: str | None = None
+    contact_phone: str | None = None
+    telegram: str | None = None
+    viber: str | None = None
 
 
 class ClientBookingStatsOut(BaseModel):

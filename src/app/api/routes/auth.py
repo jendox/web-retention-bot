@@ -7,6 +7,7 @@ from app.api.deps import require_user
 from app.core.database import get_db_session
 from app.core.verification_token import EmailVerificationTokenError
 from app.models.user import User
+from app.repositories.clients import ClientRepository
 from app.schemas.auth import (
     LoginPayload,
     RegisterAcceptedOut,
@@ -15,7 +16,6 @@ from app.schemas.auth import (
     VerifyEmailPayload,
 )
 from app.schemas.errors import ErrorDetail
-from app.repositories.clients import ClientRepository
 from app.schemas.user import UserMeOut, UserSchema
 from app.services.notifications.dispatcher import (
     NotificationDispatcher,

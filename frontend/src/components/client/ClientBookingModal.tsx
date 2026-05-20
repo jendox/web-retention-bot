@@ -3,7 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { availabilityApi } from '../../api/availability'
 import { bookingsMyCreateApi } from '../../api/bookings'
-import { clientsMyMasterServicesApi, type ClientMyMasterItem } from '../../api/clients'
+import { clientMasterLabel, clientsMyMasterServicesApi, type ClientMyMasterItem } from '../../api/clients'
 import type { Service } from '../../api/services'
 import { getUserFacingError } from '../../lib/apiErrors'
 import { bookingSlotButtonClass } from '../../lib/bookingSlots'
@@ -151,7 +151,7 @@ export function ClientBookingModal({ onClose, masters, initialMasterId, onSucces
                     }}
                     className="w-full rounded-lg border border-stone-200 px-4 py-3 text-left hover:border-teal-500 dark:border-stone-700"
                   >
-                    <p className="font-medium text-stone-900 dark:text-stone-100">{m.display_name}</p>
+                    <p className="font-medium text-stone-900 dark:text-stone-100">{clientMasterLabel(m)}</p>
                     {m.alias ? <p className="text-xs text-stone-500">Как вас зовут: {m.alias}</p> : null}
                   </button>
                 </li>
@@ -162,7 +162,7 @@ export function ClientBookingModal({ onClose, masters, initialMasterId, onSucces
           {step === 'service' ? (
             <div className="space-y-3">
               {selectedMaster ? (
-                <p className="text-sm text-stone-600 dark:text-stone-400">Мастер: {selectedMaster.display_name}</p>
+                <p className="text-sm text-stone-600 dark:text-stone-400">Мастер: {clientMasterLabel(selectedMaster)}</p>
               ) : null}
               {servicesQuery.isLoading ? (
                 <p className="text-sm text-stone-500">Загружаем услуги…</p>
@@ -253,7 +253,7 @@ export function ClientBookingModal({ onClose, masters, initialMasterId, onSucces
               <dl className="space-y-2 text-sm">
                 <div>
                   <dt className="text-stone-500">Мастер</dt>
-                  <dd className="font-medium">{selectedMaster.display_name}</dd>
+                  <dd className="font-medium">{clientMasterLabel(selectedMaster)}</dd>
                 </div>
                 <div>
                   <dt className="text-stone-500">Услуга</dt>

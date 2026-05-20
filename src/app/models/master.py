@@ -35,6 +35,11 @@ class MasterProfile(TimeStampedModel):
         ),
         default=DEFAULT_MASTER_CURRENCY,
     )
+    contact_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    telegram: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    viber: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
     user: Mapped[User] = relationship("User", back_populates="master_profile")
 
     weekly_schedule_days: Mapped[list[WeeklyScheduleDay]] = relationship(

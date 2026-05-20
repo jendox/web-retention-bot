@@ -6,10 +6,32 @@ export type MasterProfile = {
   public_slug: string | null
   timezone: string
   default_currency: string
+  contact_email: string | null
+  contact_phone: string | null
+  telegram: string | null
+  viber: string | null
+}
+
+export type MasterProfileUpdate = {
+  display_name?: string
+  public_slug?: string | null
+  timezone?: string
+  default_currency?: string
+  contact_email?: string | null
+  contact_phone?: string | null
+  telegram?: string | null
+  viber?: string | null
 }
 
 export async function masterMeApi() {
   return apiFetch<MasterProfile>('/api/masters/me')
+}
+
+export async function masterMeUpdateApi(body: MasterProfileUpdate) {
+  return apiFetch<MasterProfile>('/api/masters/me', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
 }
 
 export type ScheduleInterval = {

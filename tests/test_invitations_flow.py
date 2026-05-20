@@ -138,11 +138,22 @@ def test_open_invitation_accept_creates_client_link():
 
             my_masters = client.get("/api/clients/me/masters")
             assert my_masters.status_code == 200, my_masters.text
-            assert [
+            linked = [
                 item
                 for item in my_masters.json()
                 if item["master_id"] == master["id"] and item["client_id"] == accepted_data["client_id"]
             ]
+            assert linked
+            assert linked[0]["contact_email"] == master_email.lower()
+            assert linked[0]["client_alias"] is None
+
+            alias_patch = client.patch(
+                f"/api/clients/me/masters/{master['id']}",
+                json={"client_alias": "My Favorite Studio"},
+                headers=_csrf_headers(client),
+            )
+            assert alias_patch.status_code == 200, alias_patch.text
+            assert alias_patch.json()["client_alias"] == "My Favorite Studio"
     except Exception as exc:
         _skip_if_unreachable(exc)
         raise

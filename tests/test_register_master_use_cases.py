@@ -2,9 +2,9 @@ import uuid
 from datetime import UTC, datetime, time
 from types import SimpleNamespace
 
+from app.schemas.user import UserSchema
 from app.services.schedule_defaults import default_weekly_schedule_days
 from app.use_cases.auth.register_master import RegisterMasterUseCase
-from app.schemas.user import UserSchema
 
 
 def test_default_weekly_schedule_days_are_weekdays_10_to_18():
@@ -53,8 +53,12 @@ class FakeMasterRepository:
     async def get_by_user_id(self, user_id):
         return self.existing_master
 
-    async def create(self, *, user_id, display_name):
-        self.created_with = {"user_id": user_id, "display_name": display_name}
+    async def create(self, *, user_id, display_name, contact_email=None):
+        self.created_with = {
+            "user_id": user_id,
+            "display_name": display_name,
+            "contact_email": contact_email,
+        }
         return _master_profile(uuid.uuid4(), user_id)
 
 
@@ -75,7 +79,11 @@ async def test_register_master_creates_default_weekly_schedule_for_new_master():
     master = await use_case(user, display_name="Master")
 
     assert master.display_name == "Master"
-    assert master_repo.created_with == {"user_id": user.id, "display_name": "Master"}
+    assert master_repo.created_with == {
+        "user_id": user.id,
+        "display_name": "Master",
+        "contact_email": "master@example.com",
+    }
     assert schedule_repo.added_weekly_days is not None
     assert {day.master_id for day in schedule_repo.added_weekly_days} == {master.id}
     assert [day.weekday for day in schedule_repo.added_weekly_days] == [0, 1, 2, 3, 4]

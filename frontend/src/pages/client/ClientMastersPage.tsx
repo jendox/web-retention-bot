@@ -1,6 +1,9 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 
+import { clientMasterLabel, clientsMyMasterPatchApi } from '../../api/clients'
 import { useClientCabinet } from '../../components/client/ClientCabinetContext'
+import { getUserFacingError } from '../../lib/apiErrors'
 import { cn } from '../../lib/forms'
 import type { ClientMasterView } from '../../mocks/clientCabinetMocks'
 
@@ -20,13 +23,78 @@ function masterInitials(name: string) {
   return name.trim().slice(0, 2).toUpperCase() || '?'
 }
 
+function MasterContacts({ master }: { master: ClientMasterView }) {
+  const rows: { label: string; value: string; href?: string }[] = []
+  if (master.contact_email) {
+    rows.push({ label: 'Email', value: master.contact_email, href: `mailto:${master.contact_email}` })
+  }
+  if (master.contact_phone) {
+    rows.push({ label: 'Телефон', value: master.contact_phone, href: `tel:${master.contact_phone}` })
+  }
+  if (master.telegram) {
+    const handle = master.telegram.replace(/^@/, '')
+    rows.push({ label: 'Telegram', value: master.telegram, href: `https://t.me/${handle}` })
+  }
+  if (master.viber) {
+    rows.push({ label: 'Viber', value: master.viber })
+  }
+
+  if (rows.length === 0) {
+    return (
+      <p className="mt-3 text-sm text-stone-500 dark:text-stone-400">Контакты мастера не указаны.</p>
+    )
+  }
+
+  return (
+    <ul className="mt-3 space-y-1.5 text-sm text-stone-600 dark:text-stone-400">
+      {rows.map((row) => (
+        <li key={row.label}>
+          {row.label}:{' '}
+          {row.href ? (
+            <a
+              href={row.href}
+              target={row.label === 'Telegram' ? '_blank' : undefined}
+              rel={row.label === 'Telegram' ? 'noreferrer' : undefined}
+              className="font-medium text-teal-800 hover:underline dark:text-teal-300"
+            >
+              {row.value}
+            </a>
+          ) : (
+            <span className="font-medium text-stone-800 dark:text-stone-200">{row.value}</span>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function MasterCard({
   master,
   onBook,
+  onAliasSaved,
 }: {
   master: ClientMasterView
   onBook: () => void
+  onAliasSaved: () => void
 }) {
+  const label = clientMasterLabel(master)
+  const [editingAlias, setEditingAlias] = useState(false)
+  const [aliasDraft, setAliasDraft] = useState(master.client_alias ?? '')
+  const [aliasError, setAliasError] = useState<string | null>(null)
+
+  const saveAlias = useMutation({
+    mutationFn: () =>
+      clientsMyMasterPatchApi(master.master_id, {
+        client_alias: aliasDraft.trim() || null,
+      }),
+    onSuccess: () => {
+      setEditingAlias(false)
+      setAliasError(null)
+      onAliasSaved()
+    },
+    onError: (err) => setAliasError(getUserFacingError(err)),
+  })
+
   return (
     <li className="flex flex-col rounded-xl border border-stone-200/90 bg-white p-5 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
       <div className="flex items-start gap-3">
@@ -34,13 +102,15 @@ function MasterCard({
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-teal-100 text-sm font-semibold text-teal-800 dark:bg-teal-950/60 dark:text-teal-200"
           aria-hidden
         >
-          {masterInitials(master.display_name)}
+          {masterInitials(label)}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="font-semibold text-stone-900 dark:text-stone-50">{master.display_name}</p>
-              {master.public_slug ? (
+              <p className="font-semibold text-stone-900 dark:text-stone-50">{label}</p>
+              {master.client_alias ? (
+                <p className="text-xs text-stone-500 dark:text-stone-400">Официально: {master.display_name}</p>
+              ) : master.public_slug ? (
                 <p className="text-xs text-stone-500 dark:text-stone-400">@{master.public_slug}</p>
               ) : null}
             </div>
@@ -54,15 +124,63 @@ function MasterCard({
         </div>
       </div>
 
-      <p className="mt-3 text-sm text-stone-600 dark:text-stone-400">
-        Email:{' '}
-        <a
-          href={`mailto:${master.contact_email}`}
-          className="font-medium text-teal-800 hover:underline dark:text-teal-300"
-        >
-          {master.contact_email}
-        </a>
-      </p>
+      <div className="mt-3 rounded-lg border border-stone-100 bg-stone-50/80 px-3 py-2.5 dark:border-stone-700 dark:bg-stone-950/40">
+        <p className="text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">Ваше имя для мастера</p>
+        {editingAlias ? (
+          <div className="mt-2 space-y-2">
+            <input
+              value={aliasDraft}
+              onChange={(e) => setAliasDraft(e.target.value)}
+              placeholder={master.display_name}
+              maxLength={200}
+              className={cn(
+                'w-full rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-sm',
+                'dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100',
+              )}
+            />
+            {aliasError ? <p className="text-xs text-red-600 dark:text-red-400">{aliasError}</p> : null}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={saveAlias.isPending}
+                onClick={() => saveAlias.mutate()}
+                className="rounded-md bg-teal-600 px-3 py-1 text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-60"
+              >
+                {saveAlias.isPending ? 'Сохраняем…' : 'Сохранить'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingAlias(false)
+                  setAliasDraft(master.client_alias ?? '')
+                  setAliasError(null)
+                }}
+                className="rounded-md px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <p className="text-sm text-stone-800 dark:text-stone-200">
+              {master.client_alias?.trim() || <span className="text-stone-500">Не задано — показывается «{master.display_name}»</span>}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setAliasDraft(master.client_alias ?? '')
+                setEditingAlias(true)
+              }}
+              className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+            >
+              Изменить
+            </button>
+          </div>
+        )}
+      </div>
+
+      <MasterContacts master={master} />
 
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         <button
@@ -87,19 +205,30 @@ function MasterCard({
 
 export function ClientMastersPage() {
   const { masters, overviewLoading, openBookingModal } = useClientCabinet()
+  const queryClient = useQueryClient()
   const [masterSearch, setMasterSearch] = useState('')
+
+  const refreshMasters = () => {
+    void queryClient.invalidateQueries({ queryKey: ['clients', 'me', 'masters'] })
+  }
 
   const filteredMasters = useMemo(() => {
     const q = masterSearch.trim().toLowerCase()
     if (!q) {
       return masters
     }
-    return masters.filter(
-      (m) =>
+    return masters.filter((m) => {
+      const label = clientMasterLabel(m).toLowerCase()
+      return (
+        label.includes(q) ||
         m.display_name.toLowerCase().includes(q) ||
         (m.alias?.toLowerCase().includes(q) ?? false) ||
-        m.contact_email.toLowerCase().includes(q),
-    )
+        (m.client_alias?.toLowerCase().includes(q) ?? false) ||
+        (m.contact_email?.toLowerCase().includes(q) ?? false) ||
+        (m.contact_phone?.toLowerCase().includes(q) ?? false) ||
+        (m.telegram?.toLowerCase().includes(q) ?? false)
+      )
+    })
   }, [masters, masterSearch])
 
   return (
@@ -108,7 +237,7 @@ export function ClientMastersPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">Мои мастера</h1>
           <p className="mt-1 max-w-2xl text-sm text-stone-600 dark:text-stone-400">
-            Студии и специалисты, с которыми вы связаны. Здесь можно записаться на визит или написать мастеру по email.
+            Студии и специалисты, с которыми вы связаны. Можно задать своё имя мастера и записаться на визит.
           </p>
         </div>
 
@@ -119,7 +248,7 @@ export function ClientMastersPage() {
             <input
               value={masterSearch}
               onChange={(e) => setMasterSearch(e.target.value)}
-              placeholder="Поиск по имени, email или alias"
+              placeholder="Поиск по имени, контактам или alias"
               className={cn(
                 'w-full rounded-lg border border-stone-200 bg-white py-2.5 pl-10 text-sm text-stone-900 shadow-sm outline-none',
                 'focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20',
@@ -164,7 +293,12 @@ export function ClientMastersPage() {
           )}
         >
           {filteredMasters.map((m) => (
-            <MasterCard key={m.link_id} master={m} onBook={() => openBookingModal(m.master_id)} />
+            <MasterCard
+              key={m.link_id}
+              master={m}
+              onBook={() => openBookingModal(m.master_id)}
+              onAliasSaved={refreshMasters}
+            />
           ))}
         </ul>
       )}

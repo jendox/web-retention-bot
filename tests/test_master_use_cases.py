@@ -16,6 +16,10 @@ def _master_profile() -> SimpleNamespace:
         public_slug="old-slug",
         timezone="UTC",
         default_currency=Currency.BYN,
+        contact_email="old@example.com",
+        contact_phone=None,
+        telegram=None,
+        viber=None,
     )
 
 
@@ -66,6 +70,28 @@ async def test_update_master_profile_ignores_null_for_required_fields():
     assert result.timezone == "UTC"
     assert result.default_currency == Currency.BYN
     assert result.public_slug is None
+    assert repo.flush_called is True
+
+
+async def test_update_master_profile_updates_contact_fields():
+    master = _master_profile()
+    repo = FakeMasterRepository()
+    use_case = UpdateMasterProfileUseCase(master, repo)
+
+    result = await use_case(
+        MasterProfileUpdate(
+            contact_email="new@example.com",
+            contact_phone="+375291112233",
+            telegram="@studio",
+            viber="viber-user",
+        ),
+    )
+
+    assert result.contact_email == "new@example.com"
+    assert result.contact_phone == "+375291112233"
+    assert result.telegram == "@studio"
+    assert result.viber == "viber-user"
+    assert master.contact_email == "new@example.com"
     assert repo.flush_called is True
 
 

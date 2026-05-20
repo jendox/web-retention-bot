@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db_session
 from app.models.booking import Booking, BookingStatus
-from app.models.client import Client
+from app.models.client import Client, MasterClient
 from app.models.master import MasterProfile
 from app.models.service import Service
 from app.repositories.base import BaseRepository
@@ -206,10 +206,18 @@ class BookingRepository(BaseRepository):
         return {client_id: int(count) for client_id, count in rows.all()}
 
     def _client_bookings_base(self, user_id: UUID):
+        master_display_name = func.coalesce(MasterClient.client_alias, MasterProfile.display_name)
         return (
-            select(Booking, MasterProfile.display_name, Service.name)
+            select(Booking, master_display_name, Service.name)
             .join(Client, Booking.client_id == Client.id)
             .join(MasterProfile, Booking.master_id == MasterProfile.id)
+            .join(
+                MasterClient,
+                and_(
+                    MasterClient.master_id == Booking.master_id,
+                    MasterClient.client_id == Booking.client_id,
+                ),
+            )
             .join(Service, Booking.service_id == Service.id)
             .where(Client.user_id == user_id)
         )

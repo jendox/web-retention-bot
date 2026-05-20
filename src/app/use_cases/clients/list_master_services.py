@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, status
+from fastapi import Depends
 
 from app.models.user import User
 from app.repositories.clients import ClientRepository, get_client_repo

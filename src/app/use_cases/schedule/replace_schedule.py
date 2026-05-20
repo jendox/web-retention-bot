@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from fastapi import Depends
 
 from app.core.structured_logging import get_logger, log_context
-from app.models.booking import Booking, BookingStatus
+from app.models.booking import Booking
 from app.models.master import MasterProfile
 from app.models.schedule import (
     ScheduleDateOverride,

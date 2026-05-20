@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-
-from datetime import datetime
 
 from app.core.config import get_settings
 from app.services.notifications.datetime_format import format_booking_start_local
