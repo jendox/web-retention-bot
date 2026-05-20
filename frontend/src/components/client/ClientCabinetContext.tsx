@@ -42,8 +42,9 @@ type ClientCabinetContextValue = {
   openBookingModal: (masterId: string | null) => void
   canManageVisit: (b: BookingClientListItem) => boolean
   setVisitManage: (state: VisitManageState | null) => void
-  bookingSuccessNotice: boolean
-  demoBookingNotice: boolean
+  bookingCreatedNotice: BookingClientListItem | null
+  showBookingCreatedNotice: (booking: BookingClientListItem) => void
+  clearBookingCreatedNotice: () => void
   invalidateCabinetData: () => void
 }
 
@@ -67,9 +68,16 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
   const [bookingModalOpen, setBookingModalOpen] = useState(false)
   const [bookingModalMasterId, setBookingModalMasterId] = useState<string | null>(null)
   const [bookingModalNonce, setBookingModalNonce] = useState(0)
-  const [demoBookingNotice, setDemoBookingNotice] = useState(false)
   const [visitManage, setVisitManage] = useState<VisitManageState | null>(null)
-  const [bookingSuccessNotice, setBookingSuccessNotice] = useState(false)
+  const [bookingCreatedNotice, setBookingCreatedNotice] = useState<BookingClientListItem | null>(null)
+
+  const showBookingCreatedNotice = useCallback((booking: BookingClientListItem) => {
+    setBookingCreatedNotice(booking)
+  }, [])
+
+  const clearBookingCreatedNotice = useCallback(() => {
+    setBookingCreatedNotice(null)
+  }, [])
 
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
   const bookingsOverview = useQuery({
@@ -159,8 +167,9 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
       openBookingModal,
       canManageVisit,
       setVisitManage,
-      bookingSuccessNotice,
-      demoBookingNotice,
+      bookingCreatedNotice,
+      showBookingCreatedNotice,
+      clearBookingCreatedNotice,
       invalidateCabinetData,
     }),
     [
@@ -178,8 +187,9 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
       myMastersLive.error,
       openBookingModal,
       canManageVisit,
-      bookingSuccessNotice,
-      demoBookingNotice,
+      bookingCreatedNotice,
+      showBookingCreatedNotice,
+      clearBookingCreatedNotice,
       invalidateCabinetData,
     ],
   )
@@ -202,8 +212,7 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
           initialMasterId={bookingModalMasterId}
           onConfirm={(b) => {
             setMockBookingExtras((prev) => [...prev, b])
-            setDemoBookingNotice(true)
-            window.setTimeout(() => setDemoBookingNotice(false), 4500)
+            showBookingCreatedNotice(b)
           }}
         />
       ) : null}
@@ -214,10 +223,9 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
           onClose={() => setBookingModalOpen(false)}
           masters={masters as ClientMyMasterItem[]}
           initialMasterId={bookingModalMasterId}
-          onSuccess={() => {
+          onSuccess={(booking) => {
             invalidateCabinetData()
-            setBookingSuccessNotice(true)
-            window.setTimeout(() => setBookingSuccessNotice(false), 4500)
+            showBookingCreatedNotice(booking)
           }}
         />
       ) : null}

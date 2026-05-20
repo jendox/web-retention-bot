@@ -15,10 +15,12 @@ import {
 } from '../api/bookings'
 import { clientsCreateApi, clientsGetApi, clientsListApi, type ClientWithLink } from '../api/clients'
 import { servicesListApi, type Service } from '../api/services'
+import { BookingCreatedNotice } from '../components/booking/BookingCreatedNotice'
 import { IconReschedule, IconTrash } from '../components/booking/bookingActionIcons'
 import { SegmentTabs } from '../components/ui/SegmentTabs'
 import { useMasterMe } from '../hooks/useMasterMe'
 import { getUserFacingError } from '../lib/apiErrors'
+import { formatBookingDateTime } from '../lib/bookingSchedule'
 import { bookingSlotButtonClass } from '../lib/bookingSlots'
 import { cn } from '../lib/forms'
 import {
@@ -92,11 +94,6 @@ function formatSlotTime(value: string) {
   }).format(new Date(value))
 }
 
-function formatBookingDateTime(value: string) {
-  const date = new Date(value)
-  return `${formatDateLong(date)}, ${formatSlotTime(value)}`
-}
-
 function formatSlotFull(value: string) {
   return new Intl.DateTimeFormat('ru-RU', {
     weekday: 'short',
@@ -144,14 +141,6 @@ function IconSearch(props: { className?: string }) {
   return (
     <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75" aria-hidden>
       <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m1.35-5.15a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z" />
-    </svg>
-  )
-}
-
-function IconCheckCircle(props: { className?: string }) {
-  return (
-    <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75" aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   )
 }
@@ -554,24 +543,12 @@ export function BookingsPage() {
       </header>
 
       {bookingSuccess ? (
-        <div
-          ref={bookingSuccessRef}
-          role="status"
-          className="scroll-mt-4 rounded-xl border border-teal-200/90 bg-teal-50/90 p-4 dark:border-teal-900/50 dark:bg-teal-950/40"
-        >
-          <div className="flex gap-3">
-            <IconCheckCircle className="mt-0.5 h-5 w-5 shrink-0 text-teal-700 dark:text-teal-300" />
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-teal-950 dark:text-teal-50">Запись создана</p>
-              <p className="mt-1 text-sm text-teal-900/90 dark:text-teal-100/90">
-                {bookingSuccess.clientName} · {bookingSuccess.serviceName}
-              </p>
-              <p className="mt-0.5 text-sm font-medium text-teal-800 dark:text-teal-200">
-                {formatBookingDateTime(bookingSuccess.booking.start_at)} · {bookingSuccess.booking.duration_min} мин
-              </p>
-            </div>
-          </div>
-        </div>
+        <BookingCreatedNotice
+          innerRef={bookingSuccessRef}
+          primaryLine={`${bookingSuccess.clientName} · ${bookingSuccess.serviceName}`}
+          startAt={bookingSuccess.booking.start_at}
+          durationMin={bookingSuccess.booking.duration_min}
+        />
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(21rem,0.72fr)]">

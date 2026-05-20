@@ -129,12 +129,16 @@ class AcceptInvitationUseCase:
             link.invite_email_mismatch = False
             client.email = user_email
 
+        if not link.client_alias:
+            link.client_alias = master_profile.display_name
+
         return client.id, email_mismatch
 
     async def _accept_open_invite(
         self,
         *,
         invite: Invitation,
+        master_profile: MasterProfile,
         user_id: UUID,
         user_email: str,
         display_name: str,
@@ -161,6 +165,8 @@ class AcceptInvitationUseCase:
             link.linked_account_email = user_email
             link.invite_email_mismatch = False
             link.invitation_status = InvitationStatus.LINKED
+            if not link.client_alias:
+                link.client_alias = master_profile.display_name
             logger.info("merged_with_existing_client", linked_client_id=str(client.id))
             return client.id
         if len(matching_clients) > 1:
@@ -177,6 +183,7 @@ class AcceptInvitationUseCase:
             master_id=invite.master_id,
             client_id=client.id,
             invitation_status=InvitationStatus.LINKED,
+            client_alias=master_profile.display_name,
         )
         link.linked_account_email = user_email
         link.invite_email_mismatch = False
@@ -227,6 +234,7 @@ class AcceptInvitationUseCase:
             else:
                 client_id = await self._accept_open_invite(
                     invite=invite,
+                    master_profile=master_profile,
                     user_id=user.id,
                     user_email=account_email,
                     display_name=display_name,

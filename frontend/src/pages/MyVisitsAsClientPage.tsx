@@ -20,7 +20,7 @@ export function MyVisitsAsClientPage() {
         </p>
         <p className="mt-4 text-sm">
           <NavLink to="/dashboard" className={AUTH_LINK_CLASS}>
-            ← Вернуться к обзору мастера
+            Вернуться к обзору мастера
           </NavLink>
         </p>
       </div>

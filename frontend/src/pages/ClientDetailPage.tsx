@@ -219,7 +219,7 @@ export function ClientDetailPage() {
           to="/clients"
           className="inline-block text-sm font-medium text-teal-700 underline hover:text-teal-600 dark:text-teal-400"
         >
-          ← К списку клиентов
+          К списку клиентов
         </Link>
       </div>
     )
@@ -243,7 +243,7 @@ export function ClientDetailPage() {
           to="/clients"
           className="text-sm font-medium text-teal-700 hover:text-teal-600 dark:text-teal-400 dark:hover:text-teal-300"
         >
-          ← Клиенты
+          Клиенты
         </Link>
         <h1 className="mt-3 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">
           {detail.data?.client.display_name ?? 'Карточка клиента'}

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { clientMasterLabel, clientsMyMasterPatchApi } from '../../api/clients'
 import { useClientCabinet } from '../../components/client/ClientCabinetContext'
@@ -15,12 +15,47 @@ function IconSearch(props: { className?: string }) {
   )
 }
 
+function IconPencil(props: { className?: string }) {
+  return (
+    <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+      />
+    </svg>
+  )
+}
+
+function IconCheck(props: { className?: string }) {
+  return (
+    <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+    </svg>
+  )
+}
+
+function IconX(props: { className?: string }) {
+  return (
+    <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  )
+}
+
+const aliasActionButtonClass =
+  'rounded-md p-1.5 transition disabled:opacity-50 disabled:pointer-events-none'
+
 function masterInitials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (parts.length >= 2) {
     return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase()
   }
   return name.trim().slice(0, 2).toUpperCase() || '?'
+}
+
+function aliasDraftValue(master: ClientMasterView) {
+  return master.client_alias?.trim() || master.display_name
 }
 
 function MasterContacts({ master }: { master: ClientMasterView }) {
@@ -40,9 +75,7 @@ function MasterContacts({ master }: { master: ClientMasterView }) {
   }
 
   if (rows.length === 0) {
-    return (
-      <p className="mt-3 text-sm text-stone-500 dark:text-stone-400">Контакты мастера не указаны.</p>
-    )
+    return <p className="mt-3 text-sm text-stone-500 dark:text-stone-400">Контакты мастера не указаны.</p>
   }
 
   return (
@@ -78,15 +111,26 @@ function MasterCard({
   onAliasSaved: () => void
 }) {
   const label = clientMasterLabel(master)
+  const hasCustomAlias = Boolean(master.client_alias?.trim())
   const [editingAlias, setEditingAlias] = useState(false)
-  const [aliasDraft, setAliasDraft] = useState(master.client_alias ?? '')
+  const [aliasDraft, setAliasDraft] = useState(() => aliasDraftValue(master))
   const [aliasError, setAliasError] = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editingAlias) {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }
+  }, [editingAlias])
 
   const saveAlias = useMutation({
-    mutationFn: () =>
-      clientsMyMasterPatchApi(master.master_id, {
-        client_alias: aliasDraft.trim() || null,
-      }),
+    mutationFn: (nextAlias: string) => {
+      const trimmed = nextAlias.trim()
+      const payload =
+        trimmed === master.display_name.trim() || !trimmed ? null : trimmed
+      return clientsMyMasterPatchApi(master.master_id, { client_alias: payload })
+    },
     onSuccess: () => {
       setEditingAlias(false)
       setAliasError(null)
@@ -94,6 +138,29 @@ function MasterCard({
     },
     onError: (err) => setAliasError(getUserFacingError(err)),
   })
+
+  const commitAlias = () => {
+    const trimmed = aliasDraft.trim()
+    if (!trimmed) {
+      setAliasDraft(master.display_name)
+      setEditingAlias(false)
+      setAliasError(null)
+      return
+    }
+    const currentStored = master.client_alias?.trim() || master.display_name
+    if (trimmed === currentStored) {
+      setEditingAlias(false)
+      setAliasError(null)
+      return
+    }
+    saveAlias.mutate(trimmed)
+  }
+
+  const cancelAliasEdit = () => {
+    setAliasDraft(aliasDraftValue(master))
+    setEditingAlias(false)
+    setAliasError(null)
+  }
 
   return (
     <li className="flex flex-col rounded-xl border border-stone-200/90 bg-white p-5 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
@@ -106,11 +173,82 @@ function MasterCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="font-semibold text-stone-900 dark:text-stone-50">{label}</p>
-              {master.client_alias ? (
-                <p className="text-xs text-stone-500 dark:text-stone-400">Официально: {master.display_name}</p>
-              ) : master.public_slug ? (
+            <div className="min-w-0 flex-1">
+              {editingAlias ? (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1">
+                    <input
+                      ref={inputRef}
+                      value={aliasDraft}
+                      onChange={(e) => setAliasDraft(e.target.value)}
+                      maxLength={200}
+                      disabled={saveAlias.isPending}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          commitAlias()
+                        }
+                        if (e.key === 'Escape') {
+                          e.preventDefault()
+                          cancelAliasEdit()
+                        }
+                      }}
+                      className={cn(
+                        'min-w-0 flex-1 rounded-md border border-teal-500 bg-white px-2 py-1 text-base font-semibold',
+                        'outline-none ring-2 ring-teal-500/20 dark:border-teal-500 dark:bg-stone-950 dark:text-stone-50',
+                      )}
+                      aria-label="Как вы называете этого мастера"
+                    />
+                    <button
+                      type="button"
+                      disabled={saveAlias.isPending}
+                      onClick={() => commitAlias()}
+                      className={cn(
+                        aliasActionButtonClass,
+                        'text-teal-700 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/50',
+                      )}
+                      aria-label="Сохранить название"
+                      title="Сохранить"
+                    >
+                      <IconCheck className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={saveAlias.isPending}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={cancelAliasEdit}
+                      className={cn(
+                        aliasActionButtonClass,
+                        'text-stone-500 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800',
+                      )}
+                      aria-label="Отменить редактирование"
+                      title="Отмена"
+                    >
+                      <IconX className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {aliasError ? <p className="text-xs text-red-600 dark:text-red-400">{aliasError}</p> : null}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <p className="font-semibold text-stone-900 dark:text-stone-50">{label}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAliasDraft(aliasDraftValue(master))
+                      setEditingAlias(true)
+                    }}
+                    className="rounded-md p-1 text-stone-400 transition hover:bg-stone-100 hover:text-teal-700 dark:hover:bg-stone-800 dark:hover:text-teal-300"
+                    aria-label="Изменить название мастера"
+                    title="Изменить название"
+                  >
+                    <IconPencil className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+              {hasCustomAlias && !editingAlias ? (
+                <p className="text-xs text-stone-500 dark:text-stone-400">Мастер: {master.display_name}</p>
+              ) : master.public_slug && !hasCustomAlias && !editingAlias ? (
                 <p className="text-xs text-stone-500 dark:text-stone-400">@{master.public_slug}</p>
               ) : null}
             </div>
@@ -122,62 +260,6 @@ function MasterCard({
             <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">У мастера вы: {master.alias}</p>
           ) : null}
         </div>
-      </div>
-
-      <div className="mt-3 rounded-lg border border-stone-100 bg-stone-50/80 px-3 py-2.5 dark:border-stone-700 dark:bg-stone-950/40">
-        <p className="text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">Ваше имя для мастера</p>
-        {editingAlias ? (
-          <div className="mt-2 space-y-2">
-            <input
-              value={aliasDraft}
-              onChange={(e) => setAliasDraft(e.target.value)}
-              placeholder={master.display_name}
-              maxLength={200}
-              className={cn(
-                'w-full rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-sm',
-                'dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100',
-              )}
-            />
-            {aliasError ? <p className="text-xs text-red-600 dark:text-red-400">{aliasError}</p> : null}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={saveAlias.isPending}
-                onClick={() => saveAlias.mutate()}
-                className="rounded-md bg-teal-600 px-3 py-1 text-xs font-semibold text-white hover:bg-teal-500 disabled:opacity-60"
-              >
-                {saveAlias.isPending ? 'Сохраняем…' : 'Сохранить'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingAlias(false)
-                  setAliasDraft(master.client_alias ?? '')
-                  setAliasError(null)
-                }}
-                className="rounded-md px-3 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800"
-              >
-                Отмена
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <p className="text-sm text-stone-800 dark:text-stone-200">
-              {master.client_alias?.trim() || <span className="text-stone-500">Не задано — показывается «{master.display_name}»</span>}
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                setAliasDraft(master.client_alias ?? '')
-                setEditingAlias(true)
-              }}
-              className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
-            >
-              Изменить
-            </button>
-          </div>
-        )}
       </div>
 
       <MasterContacts master={master} />
@@ -237,7 +319,7 @@ export function ClientMastersPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">Мои мастера</h1>
           <p className="mt-1 max-w-2xl text-sm text-stone-600 dark:text-stone-400">
-            Студии и специалисты, с которыми вы связаны. Можно задать своё имя мастера и записаться на визит.
+            Студии и специалисты, с которыми вы связаны. Название можно изменить у карандаша, затем записаться на визит.
           </p>
         </div>
 

@@ -180,7 +180,7 @@ export function ClientDemoBookingModal({
                 onClick={() => setStep('master')}
                 className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
               >
-                ← Сменить мастера
+                Сменить мастера
               </button>
               <p className="text-sm text-stone-600 dark:text-stone-400">{selectedMaster?.display_name}</p>
               <ul className="space-y-2">
@@ -218,7 +218,7 @@ export function ClientDemoBookingModal({
                 onClick={() => setStep('service')}
                 className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
               >
-                ← Другая услуга
+                Другая услуга
               </button>
               <p className="text-sm font-medium text-stone-800 dark:text-stone-200">{selectedService.name}</p>
               {freeSlots.length === 0 ? (
@@ -256,7 +256,7 @@ export function ClientDemoBookingModal({
                 onClick={() => setStep('slot')}
                 className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
               >
-                ← Другое время
+                Другое время
               </button>
               <dl className="space-y-2 rounded-xl border border-stone-100 bg-stone-50/80 px-4 py-3 text-sm dark:border-stone-800 dark:bg-stone-950/40">
                 <div className="flex justify-between gap-2">

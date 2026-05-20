@@ -145,7 +145,7 @@ def test_open_invitation_accept_creates_client_link():
             ]
             assert linked
             assert linked[0]["contact_email"] == master_email.lower()
-            assert linked[0]["client_alias"] is None
+            assert linked[0]["client_alias"] == master_name
 
             alias_patch = client.patch(
                 f"/api/clients/me/masters/{master['id']}",

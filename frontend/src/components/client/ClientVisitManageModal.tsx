@@ -4,26 +4,14 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { availabilityApi } from '../../api/availability'
 import { bookingsMyCancelApi, bookingsMyRescheduleApi, type BookingClientListItem } from '../../api/bookings'
 import { getUserFacingError } from '../../lib/apiErrors'
+import {
+  bookingDateBounds,
+  bookingDateFieldClass,
+  formatSlotTime,
+  toDateInputValue,
+} from '../../lib/bookingSchedule'
 import { bookingSlotButtonClass } from '../../lib/bookingSlots'
 import { cn } from '../../lib/forms'
-
-const BOOKING_MAX_ADVANCE_DAYS = 90
-
-const fieldClass =
-  'w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none transition focus:border-stone-400 focus:ring-2 focus:ring-stone-400/15 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-100 dark:focus:border-stone-500'
-
-function toDateInputValue(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date)
-  next.setDate(next.getDate() + days)
-  return next
-}
 
 const dateLongFormatter = new Intl.DateTimeFormat('ru-RU', {
   weekday: 'long',
@@ -39,13 +27,6 @@ function formatDateLong(date: Date) {
 function formatBookingDateTime(value: string) {
   const date = new Date(value)
   return `${formatDateLong(date)}, ${formatSlotTime(value)}`
-}
-
-function formatSlotTime(value: string) {
-  return new Intl.DateTimeFormat('ru-RU', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
 }
 
 function formatSlotFull(value: string) {
@@ -71,8 +52,7 @@ export function ClientVisitManageModal({ booking, mode, onClose, onSuccess }: Pr
   const [rescheduleDate, setRescheduleDate] = useState(() => toDateInputValue(new Date(booking.start_at)))
   const [rescheduleSlot, setRescheduleSlot] = useState<string | null>(null)
 
-  const todayValue = toDateInputValue(new Date())
-  const maxDateValue = toDateInputValue(addDays(new Date(), BOOKING_MAX_ADVANCE_DAYS))
+  const { min: todayValue, max: maxDateValue } = bookingDateBounds()
 
   const rescheduleSlots = useQuery({
     queryKey: ['availability', 'reschedule', booking.master_id, booking.service_id, rescheduleDate],
@@ -209,7 +189,7 @@ export function ClientVisitManageModal({ booking, mode, onClose, onSuccess }: Pr
                 setRescheduleDate(event.target.value)
                 setRescheduleSlot(null)
               }}
-              className={cn(fieldClass, 'mt-1 [color-scheme:light] dark:[color-scheme:dark]')}
+              className={cn(bookingDateFieldClass, 'mt-1 [color-scheme:light] dark:[color-scheme:dark]')}
             />
           </label>
 

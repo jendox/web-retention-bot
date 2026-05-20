@@ -89,6 +89,7 @@ class ClientRepository(BaseRepository):
         client_id: UUID,
         invitation_status: InvitationStatus = InvitationStatus.LINKED,
         alias: str | None = None,
+        client_alias: str | None = None,
         notes: str | None = None,
     ) -> MasterClient:
         link = MasterClient(
@@ -96,6 +97,7 @@ class ClientRepository(BaseRepository):
             client_id=client_id,
             invitation_status=invitation_status,
             alias=alias,
+            client_alias=client_alias,
             notes=notes,
         )
         self.session.add(link)
