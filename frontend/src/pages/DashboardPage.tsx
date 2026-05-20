@@ -336,27 +336,6 @@ export function DashboardPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2">
-        <div className={cn(surfaceCardClass, 'p-5')}>
-          <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Учётная запись</p>
-          <p className="mt-2 text-lg font-semibold text-stone-900 dark:text-stone-50">{me.data.email}</p>
-          <p className="mt-1 text-xs text-stone-500">
-            {me.data.email_verified ? 'Email подтверждён' : 'Подтвердите email'}
-          </p>
-        </div>
-        <div className={cn(surfaceCardClass, 'p-5')}>
-          <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Профиль мастера</p>
-          {master.data ? (
-            <>
-              <p className="mt-2 text-lg font-semibold text-stone-900 dark:text-stone-50">{master.data.display_name}</p>
-              <p className="text-xs text-stone-500">Часовой пояс: {master.data.timezone}</p>
-            </>
-          ) : (
-            <p className="mt-2 text-sm text-stone-500">Профиль не загружен</p>
-          )}
-        </div>
-      </section>
-
       {inviteMessage ? (
         <div className="rounded-xl border border-teal-200/80 bg-teal-50/90 p-4 text-sm text-stone-800 dark:border-teal-900/50 dark:bg-teal-950/30 dark:text-stone-100">
           <p className="font-medium text-teal-900 dark:text-teal-100">Ссылка для клиента</p>
