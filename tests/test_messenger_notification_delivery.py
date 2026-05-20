@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -17,7 +16,6 @@ from app.services.notifications.messenger_delivery import (
     deliver_user_notification_telegram,
     format_notification_text,
 )
-from app.services.notifications.tasks import _process_notification_delivery_async
 
 
 def _mail_settings(*, eager: bool = True, telegram_url: str = "http://telegram-bot:8091") -> Settings:

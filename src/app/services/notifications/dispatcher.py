@@ -29,11 +29,11 @@ from app.services.notifications.booking_mail import (
     deliver_booking_moved_email,
 )
 from app.services.notifications.channel_policy import delivery_channels_for_user
-from app.services.notifications.messenger_delivery import deliver_user_notification_telegram
 from app.services.notifications.mail_render import (
     BOOKING_EMAIL_AUDIENCE_MASTER,
     email_verification_user_notification_copy,
 )
+from app.services.notifications.messenger_delivery import deliver_user_notification_telegram
 from app.services.notifications.recipients import BookingClientRecipient
 from app.services.notifications.registration_mail import deliver_email_verification
 from app.services.notifications.tasks import process_notification_delivery

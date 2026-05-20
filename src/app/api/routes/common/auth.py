@@ -5,14 +5,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_user
 from app.core.database import get_db_session
+from app.core.password_reset_token import PasswordResetTokenError
 from app.core.verification_token import EmailVerificationTokenError
 from app.models.user import User
 from app.repositories.clients import ClientRepository
 from app.schemas.auth import (
+    ChangePasswordPayload,
+    ForgotPasswordPayload,
     LoginPayload,
     RegisterAcceptedOut,
     RegisterClientPayload,
     RegisterPayload,
+    ResetPasswordPayload,
     VerifyEmailPayload,
 )
 from app.schemas.errors import ErrorDetail
@@ -23,17 +27,24 @@ from app.services.notifications.dispatcher import (
 )
 from app.services.sessions import SessionManager, get_session_manager
 from app.use_cases.auth import (
+    ChangePasswordUseCase,
     EmailNotVerifiedError,
+    ForgotPasswordUseCase,
     InactiveUserError,
     InvalidCredentialsError,
+    InvalidCurrentPasswordError,
     LoginUseCase,
     RegisterMasterUseCase,
     RegisterUserUseCase,
+    ResetPasswordUseCase,
     UserAlreadyExists,
     VerifyEmailUseCase,
+    get_change_password_use_case,
+    get_forgot_password_use_case,
     get_login_use_case,
     get_register_master_use_case,
     get_register_user_use_case,
+    get_reset_password_use_case,
     get_verify_email_use_case,
 )
 
@@ -254,3 +265,96 @@ async def logout(
     await session_manager.clear_session(request, response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
+
+
+@router.post(
+    path="/forgot-password",
+    summary="Request a password reset email",
+    description=(
+        "Sends a password reset link to the given email if the account exists and is verified. "
+        "Always responds 204 to prevent email enumeration."
+    ),
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_description="If the email exists, a reset link has been sent.",
+)
+async def forgot_password(
+    payload: ForgotPasswordPayload,
+    use_case: Annotated[ForgotPasswordUseCase, Depends(get_forgot_password_use_case)],
+) -> Response:
+    await use_case(email=str(payload.email))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    path="/reset-password",
+    summary="Set a new password using a reset token",
+    description=(
+        "Accepts the signed token from the reset email and a new password. "
+        "On success the password is updated; user must then log in normally."
+    ),
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_description="Password updated successfully.",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ErrorDetail,
+            "description": "Invalid, expired, or tampered reset token.",
+        },
+    },
+)
+async def reset_password(
+    request: Request,
+    payload: ResetPasswordPayload,
+    use_case: Annotated[ResetPasswordUseCase, Depends(get_reset_password_use_case)],
+) -> Response:
+    settings = request.app.state.settings
+    try:
+        await use_case(
+            secret=settings.security.secret_key,
+            token=payload.token,
+            new_password=payload.new_password,
+        )
+    except PasswordResetTokenError:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Ссылка для сброса пароля недействительна или устарела.",
+        ) from None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    path="/change-password",
+    summary="Change password for the current user",
+    description=(
+        "Requires the current password for verification. "
+        "On success the password is updated; existing session remains valid."
+    ),
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_description="Password changed successfully.",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ErrorDetail,
+            "description": "Current password is incorrect.",
+        },
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDetail,
+            "description": "Not authenticated.",
+        },
+    },
+)
+async def change_password(
+    payload: ChangePasswordPayload,
+    current: Annotated[User, Depends(require_user)],
+    use_case: Annotated[ChangePasswordUseCase, Depends(get_change_password_use_case)],
+) -> Response:
+    try:
+        await use_case(
+            user=current,
+            current_password=payload.current_password,
+            new_password=payload.new_password,
+        )
+    except InvalidCurrentPasswordError:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Текущий пароль указан неверно.",
+        ) from None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

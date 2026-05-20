@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import Header, HTTPException, Request, status
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings
 
 
 def verify_bot_internal_secret(

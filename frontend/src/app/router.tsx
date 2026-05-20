@@ -13,9 +13,11 @@ import { ClientDetailPage } from '../pages/ClientDetailPage'
 import { ClientsPage } from '../pages/ClientsPage'
 import { DashboardPage } from '../pages/DashboardPage'
 import { InvitationPage } from '../pages/InvitationPage'
+import { ForgotPasswordPage } from '../pages/ForgotPasswordPage'
 import { LoginPage } from '../pages/LoginPage'
 import { PendingVerificationPage } from '../pages/PendingVerificationPage'
 import { RegisterPage } from '../pages/RegisterPage'
+import { ResetPasswordPage } from '../pages/ResetPasswordPage'
 import { SchedulePage } from '../pages/SchedulePage'
 import { ServicesPage } from '../pages/ServicesPage'
 import { NotificationsPage } from '../pages/NotificationsPage'
@@ -35,6 +37,8 @@ export function AppRouter() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/pending-verification" element={<PendingVerificationPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/invite/:token" element={<InvitationRoute />} />
 
       <Route element={<AppLayout />}>

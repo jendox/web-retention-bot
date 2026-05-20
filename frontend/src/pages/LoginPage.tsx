@@ -33,12 +33,19 @@ export function LoginPage() {
     <AuthScreen
       title="Вход"
       footer={
-        <>
-          Нет аккаунта?{' '}
-          <NavLink to="/register" className={AUTH_LINK_CLASS}>
-            Регистрация
-          </NavLink>
-        </>
+        <div className="space-y-2">
+          <div>
+            Нет аккаунта?{' '}
+            <NavLink to="/register" className={AUTH_LINK_CLASS}>
+              Регистрация
+            </NavLink>
+          </div>
+          <div>
+            <NavLink to="/forgot-password" className={AUTH_LINK_CLASS}>
+              Забыли пароль?
+            </NavLink>
+          </div>
+        </div>
       }
     >
       <form className="space-y-4" onSubmit={form.handleSubmit((vals) => mutation.mutate(vals))}>

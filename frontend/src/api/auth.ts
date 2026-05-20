@@ -44,3 +44,15 @@ export async function meApi() {
 export async function logoutApi() {
   await apiFetch('/api/auth/logout', { method: 'POST' })
 }
+
+export async function forgotPasswordApi(body: { email: string }) {
+  await apiFetch('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function resetPasswordApi(body: { token: string; new_password: string }) {
+  await apiFetch('/api/auth/reset-password', { method: 'POST', body: JSON.stringify(body) })
+}
+
+export async function changePasswordApi(body: { current_password: string; new_password: string }) {
+  await apiFetch('/api/auth/change-password', { method: 'POST', body: JSON.stringify(body) })
+}

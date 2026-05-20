@@ -15,6 +15,7 @@ class SecuritySettings(BaseModel):
     #: HMAC signing for email verification tokens and other auth material.
     secret_key: str = Field(default="development-secret-change-me")
     email_verification_ttl_seconds: int = Field(default=60 * 60 * 72)
+    password_reset_ttl_seconds: int = Field(default=60 * 60 * 2)
     #: Browser origin used in verification emails (SPA opens /verify-email?token=...).
     frontend_public_origin: str = Field(default="http://localhost:5173")
     #: When True (default dev), verification URL is emitted to logs (in addition to SMTP if enabled).

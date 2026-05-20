@@ -15,7 +15,6 @@ from app.models.notifications.enums import DeliveryChannel, DeliveryStatus
 from app.models.notifications.models import NotificationDelivery
 from app.repositories.notification_preferences import NotificationPreferenceRepository
 from app.repositories.notifications import NotificationDeliveryRepository
-from app.services.notifications.messenger_delivery import deliver_user_notification_telegram
 from app.services.notifications.booking_mail import (
     BookingEmailDeliveryOptions,
     BookingNotificationSkip,
@@ -23,6 +22,7 @@ from app.services.notifications.booking_mail import (
     deliver_booking_created_email,
     deliver_booking_moved_email,
 )
+from app.services.notifications.messenger_delivery import deliver_user_notification_telegram
 from app.services.notifications.registration_mail import deliver_email_verification
 
 logger = get_logger("app.notifications.tasks")

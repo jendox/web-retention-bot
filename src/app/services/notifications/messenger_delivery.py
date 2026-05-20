@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 from app.core.config import Settings
 from app.core.structured_logging import get_logger
-from app.models.notifications import NotificationDelivery, UserNotification
+from app.models.notifications import NotificationDelivery
 from app.models.notifications.enums import DeliveryChannel, DeliveryStatus
 from app.repositories.notification_preferences import NotificationPreferenceRepository
 from app.services.messenger.bot_clients import MessengerBotClients, MessengerBotSendError

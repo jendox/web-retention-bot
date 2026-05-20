@@ -130,3 +130,33 @@ class LoginPayload(BaseModel):
 
 class VerifyEmailPayload(BaseModel):
     token: str = Field(min_length=16)
+
+
+class ForgotPasswordPayload(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordPayload(BaseModel):
+    token: str = Field(min_length=16)
+    new_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password", mode="before")
+    @classmethod
+    def _validate_new_password(cls, value: str) -> str:
+        result = validate_password(password=value)
+        if not result.ok:
+            raise ValueError("; ".join(result.errors))
+        return value
+
+
+class ChangePasswordPayload(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password", mode="before")
+    @classmethod
+    def _validate_change_password(cls, value: str) -> str:
+        result = validate_password(password=value)
+        if not result.ok:
+            raise ValueError("; ".join(result.errors))
+        return value

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useOutletContext } from 'react-router-dom'
 
-import { meApi } from '../api/auth'
+import { changePasswordApi, meApi } from '../api/auth'
 import { clientProfilePatchApi } from '../api/client/profile'
 import { masterMeUpdateApi } from '../api/masters'
 import type { AppShellOutletContext } from '../app/appShellOutletContext'
@@ -12,6 +12,7 @@ import { useMasterMe } from '../hooks/useMasterMe'
 import { getUserFacingError } from '../lib/apiErrors'
 import { cn } from '../lib/forms'
 import { surfacePanel } from '../lib/surface'
+import { validatePassword } from '../lib/validators'
 
 const fieldClass =
   'w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-400/15 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-100 dark:focus:border-stone-500'
@@ -41,6 +42,94 @@ function profileInitials(displayName: string | null | undefined, email: string) 
     return name.slice(0, 2).toUpperCase()
   }
   return email.slice(0, 2).toUpperCase()
+}
+
+function ChangePasswordSection() {
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [fieldError, setFieldError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+
+  const mutation = useMutation({
+    mutationFn: () => changePasswordApi({ current_password: currentPassword, new_password: newPassword }),
+    onSuccess: () => {
+      setError(null)
+      setCurrentPassword('')
+      setNewPassword('')
+      setFieldError(null)
+      setSuccess(true)
+    },
+    onError: (err) => {
+      setSuccess(false)
+      setError(getUserFacingError(err))
+    },
+  })
+
+  useEffect(() => {
+    if (!success) return
+    const timer = window.setTimeout(() => setSuccess(false), 3000)
+    return () => window.clearTimeout(timer)
+  }, [success])
+
+  return (
+    <section className={surfacePanel('p-6')}>
+      <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Смена пароля</h2>
+      <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+        Введите текущий пароль и задайте новый.
+      </p>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <label className="block">
+          <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Текущий пароль</span>
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            className={cn(fieldClass, 'mt-1')}
+          />
+        </label>
+        <label className="block">
+          <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Новый пароль</span>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={(e) => {
+              setNewPassword(e.target.value)
+              setFieldError(null)
+            }}
+            className={cn(fieldClass, 'mt-1')}
+          />
+          {fieldError ? <p className="mt-1 text-sm text-rose-600 dark:text-rose-400">{fieldError}</p> : null}
+        </label>
+      </div>
+      {error ? <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{error}</p> : null}
+      {success ? (
+        <p className="mt-3 text-sm font-medium text-emerald-700 dark:text-emerald-300">Пароль изменён.</p>
+      ) : null}
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          disabled={mutation.isPending || !currentPassword || !newPassword}
+          onClick={() => {
+            setError(null)
+            setSuccess(false)
+            const result = validatePassword(newPassword)
+            if (result !== true) {
+              setFieldError(result)
+              return
+            }
+            setFieldError(null)
+            mutation.mutate()
+          }}
+          className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-500 disabled:opacity-60"
+        >
+          {mutation.isPending ? 'Сохраняем…' : 'Сменить пароль'}
+        </button>
+      </div>
+    </section>
+  )
 }
 
 export function SettingsPage() {
@@ -308,6 +397,8 @@ export function SettingsPage() {
         ) : null}
 
         <NotificationSettingsSection cabinet={cabinet} />
+
+        <ChangePasswordSection />
 
         <div className="flex justify-end pt-3">
           <button
