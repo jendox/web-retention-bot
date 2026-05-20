@@ -49,6 +49,7 @@ NEW_CLIENT_PATHS = [
     "/api/client/bookings?scope=upcoming&page=1&page_size=10",
     "/api/client/notifications/me?page=1&page_size=10",
     "/api/client/notification-settings/me",
+    "/api/client/profile",
 ]
 
 

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate, useOutletContext } from 'react-router-dom'
 
 import { meApi } from '../api/auth'
+import { clientProfilePatchApi } from '../api/client/profile'
 import { masterMeUpdateApi } from '../api/masters'
 import type { AppShellOutletContext } from '../app/appShellOutletContext'
 import { NotificationSettingsSection } from '../components/NotificationSettingsSection'
@@ -76,6 +77,23 @@ export function SettingsPage() {
   const [draft, setDraft] = useState<Partial<FormState>>({})
   const form = { ...defaultState, ...draft }
 
+  const hasClientProfile = Boolean(me.data?.client_display_name?.trim() || me.data?.client_phone?.trim())
+
+  const saveClient = useMutation({
+    mutationFn: () =>
+      clientProfilePatchApi({
+        display_name: form.clientDisplayName.trim() || undefined,
+        phone: form.clientPhone.trim() || null,
+      }),
+    onSuccess: async () => {
+      setDraft({})
+      setSaveError(null)
+      setSaved(true)
+      await queryClient.invalidateQueries({ queryKey: ['me'] })
+    },
+    onError: (err) => setSaveError(getUserFacingError(err)),
+  })
+
   const saveMaster = useMutation({
     mutationFn: () =>
       masterMeUpdateApi({
@@ -144,8 +162,10 @@ export function SettingsPage() {
           setSaveError(null)
           if (!isClientCabinet) {
             saveMaster.mutate()
+          } else if (hasClientProfile) {
+            saveClient.mutate()
           } else {
-            setSaved(true)
+            setSaveError('Примите приглашение мастера, чтобы заполнить профиль клиента.')
           }
         }}
       >
@@ -262,15 +282,21 @@ export function SettingsPage() {
           <section className={surfacePanel('p-6')}>
             <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Профиль клиента</h2>
             <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-              Имя и телефон из вашей карточки у мастера. Редактирование на сервере появится позже.
+              Имя и телефон видны мастерам в ваших карточках. Изменения сохраняются для всех связей.
             </p>
+            {!hasClientProfile ? (
+              <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
+                Профиль появится после принятия приглашения от мастера.
+              </p>
+            ) : null}
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <label className="block">
                 <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Имя</span>
                 <input
                   value={form.clientDisplayName}
-                  readOnly
-                  className={cn(fieldClass, readOnlyFieldClass, 'mt-1')}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, clientDisplayName: e.target.value }))}
+                  disabled={!hasClientProfile}
+                  className={cn(fieldClass, !hasClientProfile && readOnlyFieldClass, 'mt-1')}
                   placeholder="Укажите при принятии приглашения"
                 />
               </label>
@@ -278,13 +304,17 @@ export function SettingsPage() {
                 <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Телефон</span>
                 <input
                   value={form.clientPhone}
-                  readOnly
+                  onChange={(e) => setDraft((prev) => ({ ...prev, clientPhone: e.target.value }))}
+                  disabled={!hasClientProfile}
                   type="tel"
-                  className={cn(fieldClass, readOnlyFieldClass, 'mt-1')}
+                  className={cn(fieldClass, !hasClientProfile && readOnlyFieldClass, 'mt-1')}
                   placeholder="Не указан"
                 />
               </label>
             </div>
+            {saveError && isClientCabinet ? (
+              <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{saveError}</p>
+            ) : null}
           </section>
         ) : null}
 
@@ -293,10 +323,17 @@ export function SettingsPage() {
         <div className="flex justify-end pt-3">
           <button
             type="submit"
-            disabled={!isClientCabinet && saveMaster.isPending}
+            disabled={
+              (!isClientCabinet && saveMaster.isPending) ||
+              (isClientCabinet && (saveClient.isPending || !hasClientProfile))
+            }
             className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-500 disabled:opacity-60"
           >
-            {!isClientCabinet && saveMaster.isPending ? 'Сохраняем…' : 'Сохранить'}
+            {!isClientCabinet && saveMaster.isPending
+              ? 'Сохраняем…'
+              : isClientCabinet && saveClient.isPending
+                ? 'Сохраняем…'
+                : 'Сохранить'}
           </button>
         </div>
       </form>

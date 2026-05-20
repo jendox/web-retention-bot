@@ -10,6 +10,7 @@ const DETAIL_RU: Record<string, string> = {
   'Not authenticated': 'Требуется вход.',
   'Email address is not verified': 'Сначала подтвердите email.',
   'Master profile not found': 'Профиль мастера не найден.',
+  'Client profile not found': 'Профиль клиента не найден. Примите приглашение мастера.',
   'Client not found.': 'Клиент не найден.',
   'No fields to update.': 'Нечего сохранить: не переданы поля.',
   'Client has bookings and cannot be deleted.': 'Нельзя удалить клиента: есть записи.',

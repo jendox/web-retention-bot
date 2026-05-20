@@ -23,6 +23,20 @@ class ClientSchema(BaseModel):
     )
 
 
+class ClientProfileUpdate(BaseModel):
+    """Self-service update in the client cabinet (all linked client cards for the user)."""
+
+    display_name: str | None = Field(default=None, min_length=1, max_length=200)
+    phone: str | None = Field(default=None, max_length=50)
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def empty_phone_to_none(cls, v: str | None) -> str | None:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        return v.strip() if isinstance(v, str) else v
+
+
 class ClientUpdate(BaseModel):
     """Частичное обновление карточки клиента и связи мастер–клиент."""
 

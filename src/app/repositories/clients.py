@@ -156,6 +156,11 @@ class ClientRepository(BaseRepository):
         row = await self.session.execute(stmt)
         return row.scalar_one_or_none()
 
+    async def list_client_profiles_for_user(self, user_id: UUID) -> list[Client]:
+        stmt = select(Client).where(Client.user_id == user_id).order_by(Client.updated_at.desc())
+        result = await self.session.execute(stmt)
+        return list(result.scalars())
+
     async def list_masters_for_user_clients(self, user_id: UUID) -> list[tuple[MasterProfile, MasterClient, Client]]:
         stmt = (
             select(MasterProfile, MasterClient, Client)

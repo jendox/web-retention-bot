@@ -8,6 +8,7 @@ from app.api.routes.client import (
     masters as client_masters,
     notification_settings as client_notification_settings,
     notifications as client_notifications,
+    profile as client_profile,
 )
 from app.api.routes.common import auth, invitations
 from app.api.routes.internal import messenger as internal_messenger
@@ -27,6 +28,7 @@ api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(invitations.router)
 
+api_router.include_router(client_profile.router, prefix="/client")
 api_router.include_router(client_bookings.router, prefix="/client")
 api_router.include_router(client_masters.router, prefix="/client")
 api_router.include_router(client_availability.router, prefix="/client")
