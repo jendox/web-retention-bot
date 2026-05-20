@@ -124,3 +124,10 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.uv.workspace]
+members = [
+    "bots/shared",
+    "bots/telegram",
+    "bots/viber",
+]

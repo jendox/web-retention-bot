@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from retention_api import RetentionApi, RetentionApiError
+from retention_shared.api import RetentionApi, RetentionApiError
 
 from app.config import BotConfig
 from app.telegram_api import TelegramApi
