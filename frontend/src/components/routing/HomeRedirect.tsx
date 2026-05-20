@@ -31,7 +31,7 @@ export function HomeRedirect() {
   }
 
   if (master.isSuccess) {
-    return <Navigate to="/dashboard" replace />
+    return <Navigate to="/master" replace />
   }
 
   if (master.isError && master.error instanceof ApiError && master.error.status === 404) {

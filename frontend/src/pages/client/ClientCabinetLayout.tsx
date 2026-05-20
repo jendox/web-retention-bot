@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
-import { Outlet, useNavigate, useSearchParams } from 'react-router-dom'
+import { Outlet, useNavigate, useOutletContext, useSearchParams } from 'react-router-dom'
 
+import type { AppShellOutletContext } from '../../app/appShellOutletContext'
 import { ClientCabinetAlerts } from '../../components/client/ClientCabinetAlerts'
 import { ClientCabinetProvider } from '../../components/client/ClientCabinetContext'
 
@@ -15,7 +16,7 @@ function LegacyTabRedirect() {
     }
 
     if (tab === 'notifications') {
-      navigate('/notifications', { replace: true })
+      navigate('/client/notifications', { replace: true })
       return
     }
 
@@ -55,12 +56,14 @@ function LegacyTabRedirect() {
 }
 
 export function ClientCabinetLayout() {
+  const shellContext = useOutletContext<AppShellOutletContext>()
+
   return (
     <ClientCabinetProvider>
       <LegacyTabRedirect />
       <div className="space-y-6">
         <ClientCabinetAlerts />
-        <Outlet />
+        <Outlet context={shellContext} />
       </div>
     </ClientCabinetProvider>
   )

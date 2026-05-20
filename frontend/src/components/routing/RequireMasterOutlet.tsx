@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
-import { Navigate, Outlet } from 'react-router-dom'
+import { Navigate, Outlet, useOutletContext } from 'react-router-dom'
 
+import type { AppShellOutletContext } from '../../app/appShellOutletContext'
 import { meApi } from '../../api/auth'
 import { ApiError } from '../../api/client'
 import { useMasterMe } from '../../hooks/useMasterMe'
 
 /** Экраны кабинета мастера — только для пользователей с профилем мастера. */
 export function RequireMasterOutlet() {
+  const shellContext = useOutletContext<AppShellOutletContext>()
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
   const master = useMasterMe(me.isSuccess)
 
@@ -26,5 +28,5 @@ export function RequireMasterOutlet() {
     return <Navigate to="/client" replace />
   }
 
-  return <Outlet />
+  return <Outlet context={shellContext} />
 }

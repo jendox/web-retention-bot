@@ -14,7 +14,7 @@ import {
   shouldWarnFrequentNoShows,
 } from '../lib/clientNoShow'
 import { cn } from '../lib/forms'
-import { surfacePanelClass } from '../lib/surface'
+import { surfaceInset, surfacePanel, surfacePanelOverflow } from '../lib/surface'
 import { visitCardAccentClass } from '../lib/visitListCard'
 import { getUserFacingError } from '../lib/apiErrors'
 import { ALLOWED_PAGE_SIZES } from '../lib/pagination'
@@ -23,7 +23,7 @@ import { queryClient } from '../lib/query'
 const fieldClass =
   'w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-stone-900 shadow-sm outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-400/15 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-100 dark:focus:border-stone-500'
 
-const sectionCard = cn(surfacePanelClass, 'p-6')
+const sectionCard = surfacePanel('p-6')
 
 const sectionTitle = 'text-base font-semibold text-stone-900 dark:text-stone-50'
 const sectionHint = 'mt-1 text-sm text-stone-500 dark:text-stone-400'
@@ -217,7 +217,7 @@ export function ClientDetailPage() {
       <div className="space-y-4 p-6">
         <p className="text-sm text-red-700 dark:text-red-300">{msg}</p>
         <Link
-          to="/clients"
+          to="/master/clients"
           className="inline-block text-sm font-medium text-teal-700 underline hover:text-teal-600 dark:text-teal-400"
         >
           К списку клиентов
@@ -241,7 +241,7 @@ export function ClientDetailPage() {
     <div className="mx-auto max-w-3xl space-y-6 pb-10">
       <div>
         <Link
-          to="/clients"
+          to="/master/clients"
           className="text-sm font-medium text-teal-700 hover:text-teal-600 dark:text-teal-400 dark:hover:text-teal-300"
         >
           Клиенты
@@ -271,7 +271,7 @@ export function ClientDetailPage() {
           </div>
         ) : detail.data?.booking_stats && detail.data.booking_stats.no_show_count > 0 ? (
           <div
-            className="rounded-xl border border-stone-300 bg-stone-50/90 p-4 text-sm text-stone-800 shadow-sm dark:border-stone-700 dark:bg-stone-900/50 dark:text-stone-200"
+            className={surfaceInset('bg-stone-50/90 p-4 text-sm text-stone-800 dark:bg-stone-900/50 dark:text-stone-200')}
             role="status"
           >
             <p className="font-medium text-stone-900 dark:text-stone-100">Записи</p>
@@ -314,7 +314,7 @@ export function ClientDetailPage() {
           </div>
         ) : null}
 
-        <div className="overflow-hidden rounded-2xl border border-stone-300 bg-white shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
+        <div className={surfacePanelOverflow()}>
           <button
             type="button"
             id={`${panelId}-heading`}

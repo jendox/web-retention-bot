@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
@@ -184,6 +185,27 @@ class BookingRepository(BaseRepository):
         )
         rows = await self.session.execute(stmt)
         return {client_id: int(count) for client_id, count in rows.all()}
+
+    async def sum_completed_revenue_between(
+        self,
+        *,
+        master_id: UUID,
+        range_start: datetime,
+        range_end: datetime,
+    ) -> tuple[Decimal, int]:
+        filters = (
+            Booking.master_id == master_id,
+            Booking.status == BookingStatus.COMPLETED,
+            Booking.start_at >= range_start,
+            Booking.start_at < range_end,
+        )
+        stmt = select(
+            func.coalesce(func.sum(Booking.price_snapshot), 0),
+            func.count(),
+        ).where(*filters)
+        result = await self.session.execute(stmt)
+        amount, count = result.one()
+        return Decimal(amount), int(count)
 
     async def completed_counts_by_client_ids(
         self,

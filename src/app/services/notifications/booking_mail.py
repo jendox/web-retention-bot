@@ -72,7 +72,7 @@ async def _load_booking_mail_context(
         master=master,
         service=service,
         client_cabinet_url=f"{origin}/client",
-        master_bookings_url=f"{origin}/bookings",
+        master_bookings_url=f"{origin}/master/bookings",
     )
 
 

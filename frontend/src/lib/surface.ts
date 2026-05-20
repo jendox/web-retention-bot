@@ -19,6 +19,14 @@ export function surfaceCard(extra?: string) {
   return cn(surfaceCardClass, extra)
 }
 
+export function surfacePanel(extra?: string) {
+  return cn(surfacePanelClass, extra)
+}
+
 export function surfaceInset(extra?: string) {
   return cn(surfaceInsetClass, extra)
+}
+
+export function surfacePanelOverflow(extra?: string) {
+  return cn(surfacePanelClass, 'overflow-hidden', extra)
 }

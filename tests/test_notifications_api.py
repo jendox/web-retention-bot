@@ -9,11 +9,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.use_cases.notifications.list import ListMyNotificationsUseCase, MarkNotificationReadUseCase
+from app.use_cases.notifications.list import ListClientNotificationsUseCase, MarkNotificationReadUseCase
 
 
 @pytest.mark.asyncio
-async def test_list_my_notifications() -> None:
+async def test_list_client_notifications() -> None:
     user_id = uuid.uuid4()
     note = SimpleNamespace(
         id=uuid.uuid4(),
@@ -28,11 +28,14 @@ async def test_list_my_notifications() -> None:
     from app.core.pagination import Pagination
 
     repo = SimpleNamespace(
-        count_for_user=AsyncMock(return_value=1),
-        list_for_user_page=AsyncMock(return_value=[note]),
-        count_unread_for_user=AsyncMock(return_value=1),
+        count_for_client_cabinet=AsyncMock(return_value=1),
+        list_for_client_cabinet_page=AsyncMock(return_value=[note]),
+        count_unread_for_client_cabinet=AsyncMock(return_value=1),
     )
-    result = await ListMyNotificationsUseCase(repo)(SimpleNamespace(id=user_id), Pagination(page=1, page_size=10))
+    result = await ListClientNotificationsUseCase(repo)(
+        SimpleNamespace(id=user_id),
+        Pagination(page=1, page_size=10),
+    )
     assert result.unread_count == 1
     assert result.total == 1
     assert len(result.items) == 1

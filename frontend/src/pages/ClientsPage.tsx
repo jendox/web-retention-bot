@@ -10,6 +10,7 @@ import { invitationsCreateApi } from '../api/invitations'
 import { getUserFacingError } from '../lib/apiErrors'
 import { formatNoShowCount, shouldWarnFrequentNoShows } from '../lib/clientNoShow'
 import { cn } from '../lib/forms'
+import { surfacePanelOverflow } from '../lib/surface'
 import { parsePage, parsePageSize, type PageSize } from '../lib/pagination'
 import { queryClient } from '../lib/query'
 
@@ -380,7 +381,7 @@ export function ClientsPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-stone-300 bg-white shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
+      <div className={surfacePanelOverflow()}>
         {clients.isLoading ? (
           <p className="p-8 text-center text-sm text-stone-500">Загрузка списка…</p>
         ) : total === 0 ? (
@@ -410,11 +411,11 @@ export function ClientsPage() {
                   <tr
                     key={row.client.id}
                     className="cursor-pointer transition hover:bg-stone-50/90 dark:hover:bg-stone-800/30"
-                    onClick={() => navigate(`/clients/${row.client.id}`)}
+                    onClick={() => navigate(`/master/clients/${row.client.id}`)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault()
-                        navigate(`/clients/${row.client.id}`)
+                        navigate(`/master/clients/${row.client.id}`)
                       }
                     }}
                     role="button"
@@ -464,7 +465,7 @@ export function ClientsPage() {
                           type="button"
                           title="Создать запись для клиента"
                           onClick={() =>
-                            navigate(`/bookings?client_id=${row.client.id}&list_client_id=${row.client.id}`)
+                            navigate(`/master/bookings?client_id=${row.client.id}&list_client_id=${row.client.id}`)
                           }
                           className="rounded-lg p-2 text-stone-500 transition hover:bg-teal-50 hover:text-teal-700 dark:text-stone-400 dark:hover:bg-teal-950/40 dark:hover:text-teal-300"
                           aria-label={`Создать запись для клиента ${row.client.display_name}`}

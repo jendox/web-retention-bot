@@ -155,11 +155,11 @@ make backend-migrate
 Префикс `/api`, OpenAPI: http://127.0.0.1:8000/docs
 
 - `/api/auth/*` — register, login, logout, me, verify-email
-- `/api/masters/me` — профиль, расписание
-- `/api/services/*`, `/api/clients/*`, `/api/invitations/*`
-- `/api/availability` — свободные слоты
-- `/api/bookings` — CRUD записей мастера; `/api/bookings/me` — кабинет клиента
-- `/api/notifications/me` — in‑app лента
+- `/api/master/profile`, `/api/master/schedule` — профиль и расписание мастера
+- `/api/master/services/*`, `/api/master/clients/*`, `/api/master/bookings/*` — CRM мастера
+- `/api/client/masters/*`, `/api/client/bookings/*`, `/api/client/availability` — кабинет клиента
+- `/api/client/notifications/me`, `/api/master/notifications/me` — in‑app лента по кабинету
+- `/api/invitations/*` — приглашения (без изменений пути)
 
 ## Тесты и качество
 

@@ -20,11 +20,11 @@ from app.use_cases.schedule import (
     get_replace_master_schedule_use_case,
 )
 
-router = APIRouter(prefix="/masters", tags=["masters"])
+router = APIRouter(tags=["master-profile"])
 
 
 @router.get(
-    path="/me",
+    path="/profile",
     summary="Current master profile",
     description=(
         "Returns the master profile linked to the current authenticated user. "
@@ -51,7 +51,7 @@ async def profile_me(
 
 
 @router.put(
-    path="/me",
+    path="/profile",
     summary="Update current master profile",
     description=(
         "Applies a partial update to the current user's master profile. Nullable fields such as `public_slug` "
@@ -79,7 +79,7 @@ async def profile_update(
 
 
 @router.get(
-    path="/me/schedule",
+    path="/schedule",
     summary="Current master schedule",
     description=(
         "Returns the recurring weekly schedule and date-specific schedule overrides for the current master. "
@@ -107,7 +107,7 @@ async def get_schedule_route(
 
 
 @router.put(
-    path="/me/schedule",
+    path="/schedule",
     summary="Replace current master schedule",
     description=(
         "Replaces the full weekly schedule and all date-specific overrides for the current master in one request. "

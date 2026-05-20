@@ -8,7 +8,7 @@ from app.schemas.availability import SlotOut
 from app.schemas.errors import ErrorDetail
 from app.use_cases.booking import AvailabilitySlotsError, AvailableSlotsUseCase, get_available_slots_use_case
 
-router = APIRouter(prefix="/availability", tags=["availability"])
+router = APIRouter(prefix="/availability", tags=["client-availability"])
 
 
 def _raise_http_error(error: AvailabilitySlotsError) -> NoReturn:

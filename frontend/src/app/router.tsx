@@ -38,22 +38,25 @@ export function AppRouter() {
       <Route path="/invite/:token" element={<InvitationRoute />} />
 
       <Route element={<AppLayout />}>
-        <Route path="/client" element={<ClientCabinetLayout />}>
-          <Route index element={<ClientOverviewPage />} />
-          <Route path="masters" element={<ClientMastersPage />} />
-          <Route path="visits" element={<ClientVisitsPage />} />
-          <Route path="help" element={<ClientHelpPage />} />
+        <Route path="/client">
+          <Route element={<ClientCabinetLayout />}>
+            <Route index element={<ClientOverviewPage />} />
+            <Route path="masters" element={<ClientMastersPage />} />
+            <Route path="visits" element={<ClientVisitsPage />} />
+            <Route path="help" element={<ClientHelpPage />} />
+          </Route>
+          <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
-        <Route path="/my-visits" element={<Navigate to="/client" replace />} />
-        <Route path="/notifications" element={<NotificationsPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route element={<RequireMasterOutlet />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/schedule" element={<SchedulePage />} />
-          <Route path="/clients" element={<ClientsPage />} />
-          <Route path="/clients/:id" element={<ClientDetailPage />} />
-          <Route path="/services" element={<ServicesPage />} />
-          <Route path="/bookings" element={<BookingsPage />} />
+        <Route path="/master" element={<RequireMasterOutlet />}>
+          <Route index element={<DashboardPage />} />
+          <Route path="schedule" element={<SchedulePage />} />
+          <Route path="clients" element={<ClientsPage />} />
+          <Route path="clients/:id" element={<ClientDetailPage />} />
+          <Route path="services" element={<ServicesPage />} />
+          <Route path="bookings" element={<BookingsPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Route>
 

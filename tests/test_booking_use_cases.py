@@ -15,6 +15,7 @@ from app.use_cases.booking.available_slots import AvailableSlotsUseCase
 from app.use_cases.booking.create import CreateBookingUseCase
 from app.use_cases.booking.exceptions import AvailabilitySlotsError, UpdateBookingError
 from app.use_cases.booking.list import ListClientBookingsUseCase, ListMasterBookingsUseCase
+from app.use_cases.booking.revenue import GetMasterMonthlyRevenueUseCase
 from app.use_cases.booking.update import (
     CancelBookingUseCase,
     MarkBookingAttendanceUseCase,
@@ -385,3 +386,25 @@ async def test_available_slots_use_case_rejects_past_day():
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.error_message == "Date is in the past"
+
+
+async def test_monthly_revenue_use_case_aggregates_completed_visits():
+    expected_master_id = uuid.uuid4()
+
+    class RevenueRepo:
+        async def sum_completed_revenue_between(self, *, master_id, range_start, range_end):
+            assert master_id == expected_master_id
+            assert range_start < range_end
+            return Decimal("275.50"), 3
+
+    master = SimpleNamespace(
+        id=expected_master_id,
+        timezone="Europe/Moscow",
+        default_currency=Currency.BYN,
+    )
+    result = await GetMasterMonthlyRevenueUseCase(RevenueRepo())(master)
+
+    assert result.amount == Decimal("275.50")
+    assert result.currency == "BYN"
+    assert result.completed_count == 3
+    assert len(result.month) == 7

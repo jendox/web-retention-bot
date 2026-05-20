@@ -58,13 +58,21 @@ class FakeClientRepo:
         )
         return self.created_client
 
-    async def create_link(self, *, master_id, client_id, invitation_status=InvitationStatus.LINKED):
+    async def create_link(
+        self,
+        *,
+        master_id,
+        client_id,
+        invitation_status=InvitationStatus.LINKED,
+        client_alias=None,
+    ):
         self.created_link = SimpleNamespace(
             master_id=master_id,
             client_id=client_id,
             invitation_status=invitation_status,
             linked_account_email=None,
             invite_email_mismatch=False,
+            client_alias=client_alias,
         )
         return self.created_link
 
@@ -78,17 +86,22 @@ class FakeDispatcher:
 
 
 def _valid_invite(*, master_id=None, target_client_id=None):
+    resolved_master_id = master_id or uuid.uuid4()
     master_user_id = uuid.uuid4()
     return SimpleNamespace(
         id=uuid.uuid4(),
-        master_id=master_id or uuid.uuid4(),
+        master_id=resolved_master_id,
         token="invite-token",
         expires_at=datetime.now(UTC) + timedelta(hours=1),
         accepted_at=None,
         revoked_at=None,
         linked_client_id=None,
         target_client_id=target_client_id,
-        master=SimpleNamespace(id=master_id or uuid.uuid4(), user_id=master_user_id),
+        master=SimpleNamespace(
+            id=resolved_master_id,
+            user_id=master_user_id,
+            display_name="Studio Master",
+        ),
     )
 
 
@@ -116,6 +129,7 @@ async def test_accept_open_invitation_creates_new_client_and_link():
     assert client_repo.created_link.client_id == client_id
     assert client_repo.created_link.linked_account_email == "client@example.com"
     assert client_repo.created_link.invitation_status == InvitationStatus.LINKED
+    assert client_repo.created_link.client_alias == "Studio Master"
     assert invite.linked_client_id == client_id
     assert invite.accepted_at is not None
 
@@ -131,6 +145,7 @@ async def test_accept_open_invitation_links_existing_unlinked_client_with_same_e
         invitation_status=InvitationStatus.PENDING,
         linked_account_email=None,
         invite_email_mismatch=True,
+        client_alias=None,
     )
     client = SimpleNamespace(
         id=existing_client_id,
@@ -160,6 +175,7 @@ async def test_accept_open_invitation_links_existing_unlinked_client_with_same_e
     assert link.linked_account_email == "client@example.com"
     assert link.invite_email_mismatch is False
     assert link.invitation_status == InvitationStatus.LINKED
+    assert link.client_alias == "Studio Master"
     assert invite.linked_client_id == existing_client_id
     assert invite.accepted_at is not None
 
@@ -169,7 +185,7 @@ async def test_accept_targeted_invitation_links_existing_client_and_flags_email_
     target_client_id = uuid.uuid4()
     invite = _valid_invite(master_id=master_id, target_client_id=target_client_id)
     user = SimpleNamespace(id=uuid.uuid4(), email="account@example.com")
-    link = SimpleNamespace(linked_account_email=None, invite_email_mismatch=False)
+    link = SimpleNamespace(linked_account_email=None, invite_email_mismatch=False, client_alias=None)
     client = SimpleNamespace(
         id=target_client_id,
         display_name="Stored Name",

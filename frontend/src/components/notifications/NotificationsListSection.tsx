@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { notificationsMarkReadApi, notificationsMyListApi } from '../../api/notifications'
+import type { NotificationCabinet } from '../../api/notifications'
+import * as clientNotifications from '../../api/client/notifications'
+import * as masterNotifications from '../../api/master/notifications'
 import { ListPagination } from '../ui/ListPagination'
 import { getUserFacingError } from '../../lib/apiErrors'
 import { cn } from '../../lib/forms'
@@ -21,6 +23,7 @@ function formatRelativeDay(iso: string) {
 type Props = {
   page: number
   pageSize: PageSize
+  cabinet: NotificationCabinet
   onPageChange: (page: number) => void
   onPageSizeChange: (pageSize: PageSize) => void
   enabled?: boolean
@@ -29,6 +32,7 @@ type Props = {
 export function NotificationsListSection({
   page,
   pageSize,
+  cabinet,
   onPageChange,
   onPageSizeChange,
   enabled = true,
@@ -36,13 +40,19 @@ export function NotificationsListSection({
   const queryClient = useQueryClient()
 
   const list = useQuery({
-    queryKey: ['notifications', 'me', page, pageSize],
-    queryFn: () => notificationsMyListApi({ page, page_size: pageSize }),
+    queryKey: ['notifications', 'me', cabinet, page, pageSize],
+    queryFn: () => {
+      const api = cabinet === 'client' ? clientNotifications : masterNotifications
+      return api.notificationsMyListApi({ page, page_size: pageSize })
+    },
     enabled,
   })
 
   const markRead = useMutation({
-    mutationFn: (id: string) => notificationsMarkReadApi(id),
+    mutationFn: (id: string) => {
+      const api = cabinet === 'client' ? clientNotifications : masterNotifications
+      return api.notificationsMarkReadApi(id)
+    },
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['notifications', 'me'] }),
   })
 
@@ -128,10 +138,13 @@ export function NotificationsListSection({
 }
 
 /** Unread badge for nav; uses a lightweight first-page fetch. */
-export function useNotificationsUnreadCount(enabled: boolean) {
+export function useNotificationsUnreadCount(enabled: boolean, cabinet: NotificationCabinet) {
   const q = useQuery({
-    queryKey: ['notifications', 'me', 'unread-badge'],
-    queryFn: () => notificationsMyListApi({ page: 1, page_size: 10 }),
+    queryKey: ['notifications', 'me', 'unread-badge', cabinet],
+    queryFn: () => {
+      const api = cabinet === 'client' ? clientNotifications : masterNotifications
+      return api.notificationsMyListApi({ page: 1, page_size: 10 })
+    },
     enabled,
     staleTime: 30_000,
   })

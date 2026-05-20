@@ -11,6 +11,7 @@ from app.repositories.clients import ClientRepository
 from app.repositories.users import UserRepository
 from app.services.notifications.dispatcher import BookingEmailContext, NotificationDispatcher
 from app.services.notifications.mail_render import (
+    BOOKING_EMAIL_AUDIENCE_CLIENT,
     booking_cancelled_in_app_copy,
     booking_moved_in_app_copy,
 )
@@ -60,7 +61,12 @@ async def notify_client_booking_cancelled(ctx: BookingClientNotifyContext) -> No
             master_profile_id=ctx.master.id,
             client_id=client.id,
             recipient=recipient,
-            email_ctx=BookingEmailContext(title=title, body=body, link_url=link_url, payload={}),
+            email_ctx=BookingEmailContext(
+                title=title,
+                body=body,
+                link_url=link_url,
+                payload={"audience": BOOKING_EMAIL_AUDIENCE_CLIENT},
+            ),
         )
         logger.info("notified")
 
@@ -91,6 +97,7 @@ async def notify_client_booking_moved(ctx: BookingClientNotifyContext, *, previo
                 body=body,
                 link_url=link_url,
                 payload={
+                    "audience": BOOKING_EMAIL_AUDIENCE_CLIENT,
                     "previous_start_at": previous_iso,
                     "new_start_at": ctx.booking.start_at.isoformat(),
                 },

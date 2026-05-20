@@ -24,6 +24,7 @@ import { getUserFacingError } from '../lib/apiErrors'
 import { formatBookingDateTime } from '../lib/bookingSchedule'
 import { bookingSlotButtonClass } from '../lib/bookingSlots'
 import { cn } from '../lib/forms'
+import { surfaceCard } from '../lib/surface'
 import {
   blocksCalendar,
   bookingStatusBadgeClass,
@@ -558,7 +559,7 @@ export function BookingsPage() {
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(21rem,0.72fr)]">
-        <section className="rounded-xl border border-stone-300 bg-white p-4 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80 sm:p-5">
+        <section className={surfaceCard('p-4 sm:p-5')}>
           <div className="mb-5 flex items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200">
               <IconPlus className="h-5 w-5" />
@@ -873,7 +874,7 @@ export function BookingsPage() {
         </section>
 
         <aside className="space-y-4">
-          <div className="rounded-xl border border-stone-300 bg-white p-4 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
+          <div className={surfaceCard('p-4')}>
             <p className="text-xs font-semibold uppercase text-stone-500 dark:text-stone-400">Предпросмотр</p>
             <p className="mt-2 text-lg font-semibold text-stone-900 dark:text-stone-50">{previewClientName}</p>
             {selectedService ? (
@@ -897,7 +898,7 @@ export function BookingsPage() {
 
       <section
         id="bookings-list-section"
-        className="rounded-xl border border-stone-300 bg-white p-4 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80 sm:p-5"
+        className={surfaceCard('p-4 sm:p-5')}
       >
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>

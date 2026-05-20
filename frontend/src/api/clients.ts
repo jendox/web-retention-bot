@@ -1,5 +1,4 @@
-import { apiFetch } from './client'
-import type { Service } from './services'
+/** Shared client types and re-exports from client/master API modules. */
 
 export type ClientBookingStats = {
   no_show_count: number
@@ -53,44 +52,6 @@ export function clientMasterLabel(master: Pick<ClientMyMasterItem, 'client_alias
   return alias || master.display_name
 }
 
-export async function clientsMyMastersApi() {
-  return apiFetch<ClientMyMasterItem[]>('/api/clients/me/masters')
-}
-
-export async function clientsMyMasterPatchApi(masterId: string, body: { client_alias?: string | null }) {
-  return apiFetch<ClientMyMasterItem>(`/api/clients/me/masters/${masterId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(body),
-  })
-}
-
-export async function clientsMyMasterServicesApi(masterId: string) {
-  return apiFetch<Service[]>(`/api/clients/me/masters/${masterId}/services`)
-}
-
-export async function clientsListApi(params?: { page?: number; page_size?: number; q?: string }) {
-  const sp = new URLSearchParams()
-  if (params?.page != null) {
-    sp.set('page', String(params.page))
-  }
-  if (params?.page_size != null) {
-    sp.set('page_size', String(params.page_size))
-  }
-  if (params?.q) {
-    sp.set('q', params.q)
-  }
-  const qs = sp.toString()
-  return apiFetch<PaginatedClients>(`/api/clients${qs ? `?${qs}` : ''}`)
-}
-
-export async function clientsGetApi(clientId: string) {
-  return apiFetch<ClientWithLink>(`/api/clients/${clientId}`)
-}
-
-export async function clientsCreateApi(body: { display_name: string; phone?: string; email?: string }) {
-  return apiFetch<ClientWithLink>('/api/clients', { method: 'POST', body: JSON.stringify(body) })
-}
-
 export type ClientPatchBody = {
   display_name?: string
   phone?: string | null
@@ -99,13 +60,16 @@ export type ClientPatchBody = {
   alias?: string | null
 }
 
-export async function clientsPatchApi(clientId: string, body: ClientPatchBody) {
-  return apiFetch<ClientWithLink>(`/api/clients/${clientId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(body),
-  })
-}
+export {
+  clientsMyMastersApi,
+  clientsMyMasterPatchApi,
+  clientsMyMasterServicesApi,
+} from './client/masters'
 
-export async function clientsDeleteApi(clientId: string) {
-  return apiFetch<void>(`/api/clients/${clientId}`, { method: 'DELETE' })
-}
+export {
+  clientsListApi,
+  clientsGetApi,
+  clientsCreateApi,
+  clientsPatchApi,
+  clientsDeleteApi,
+} from './master/clients'

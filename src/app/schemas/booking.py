@@ -67,6 +67,13 @@ class BookingClientListItem(BookingOut):
     service_name: str
 
 
+class BookingMonthlyRevenueOut(BaseModel):
+    amount: Decimal = Field(description="Sum of price_snapshot for COMPLETED visits in the calendar month.")
+    currency: str = Field(description="Master default currency code for display.")
+    month: str = Field(description="Calendar month in the master's timezone (YYYY-MM).")
+    completed_count: int = Field(description="Number of COMPLETED visits included in the sum.")
+
+
 class BookingCancel(BaseModel):
     comment: str | None = Field(
         default=None,

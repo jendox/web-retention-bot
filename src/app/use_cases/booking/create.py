@@ -21,7 +21,7 @@ from app.services.notifications.dispatcher import (
     NotificationDispatcher,
     get_notification_dispatcher,
 )
-from app.services.notifications.mail_render import booking_created_in_app_copy
+from app.services.notifications.mail_render import BOOKING_EMAIL_AUDIENCE_CLIENT, booking_created_in_app_copy
 from app.services.notifications.recipients import resolve_booking_client_recipient
 from app.use_cases.booking.available_slots import (
     AvailableSlotsUseCase,
@@ -165,7 +165,7 @@ class CreateBookingUseCase:
                             title=title,
                             body=body,
                             link_url=link_url,
-                            payload={},
+                            payload={"audience": BOOKING_EMAIL_AUDIENCE_CLIENT},
                         ),
                     )
 

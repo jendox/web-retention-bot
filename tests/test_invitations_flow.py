@@ -71,7 +71,7 @@ def _register_verified_master(client: TestClient, *, email: str, display_name: s
         headers=_csrf_headers(client),
     )
     assert verify.status_code == 200, verify.text
-    master = client.get("/api/masters/me")
+    master = client.get("/api/master/profile")
     assert master.status_code == 200, master.text
     return master.json()
 
@@ -136,7 +136,7 @@ def test_open_invitation_accept_creates_client_link():
             assert accepted_landing.json()["linked_client_id"] == accepted_data["client_id"]
             assert accepted_landing.json()["accepted_at"] is not None
 
-            my_masters = client.get("/api/clients/me/masters")
+            my_masters = client.get("/api/client/masters")
             assert my_masters.status_code == 200, my_masters.text
             linked = [
                 item
@@ -148,7 +148,7 @@ def test_open_invitation_accept_creates_client_link():
             assert linked[0]["client_alias"] == master_name
 
             alias_patch = client.patch(
-                f"/api/clients/me/masters/{master['id']}",
+                f"/api/client/masters/{master['id']}",
                 json={"client_alias": "My Favorite Studio"},
                 headers=_csrf_headers(client),
             )
@@ -170,7 +170,7 @@ def test_targeted_invitation_accept_links_existing_client_and_flags_email_mismat
             master = _register_verified_master(client, email=master_email, display_name=master_name)
 
             created_client = client.post(
-                "/api/clients",
+                "/api/master/clients",
                 json={
                     "display_name": "Stored Client",
                     "phone": "+375291110000",
@@ -209,7 +209,7 @@ def test_targeted_invitation_accept_links_existing_client_and_flags_email_mismat
                 "email_mismatch_with_master_record": True,
             }
 
-            my_masters = client.get("/api/clients/me/masters")
+            my_masters = client.get("/api/client/masters")
             assert my_masters.status_code == 200, my_masters.text
             assert [
                 item
@@ -228,7 +228,7 @@ def test_targeted_invitation_accept_links_existing_client_and_flags_email_mismat
             )
             assert login_master.status_code == 200, login_master.text
 
-            detail = client.get(f"/api/clients/{target_client_id}")
+            detail = client.get(f"/api/master/clients/{target_client_id}")
             assert detail.status_code == 200, detail.text
             detail_data = detail.json()
             assert detail_data["client"]["display_name"] == "Accepted Client"

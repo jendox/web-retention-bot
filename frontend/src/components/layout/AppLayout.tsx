@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 
-import type { AppShellOutletContext } from '../../app/appShellOutletContext'
+import type { AppCabinet, AppShellOutletContext } from '../../app/appShellOutletContext'
 
 import { logoutApi, meApi } from '../../api/auth'
 import { ApiError } from '../../api/client'
 import { useMasterMe } from '../../hooks/useMasterMe'
 import { cn } from '../../lib/forms'
-import { clearClientShellRole, persistClientShellRole, readPersistedShellRole } from '../../lib/clientShellRoleStorage'
 import { queryClient } from '../../lib/query'
 import {
   IconBell,
@@ -36,18 +35,28 @@ const clientNav = (unread: number): NavItem[] => [
   { to: '/client', label: 'Обзор', icon: IconOverview },
   { to: '/client/masters', label: 'Мои мастера', icon: IconUsers },
   { to: '/client/visits', label: 'Записи', icon: IconClipboard },
-  { to: '/notifications', label: 'Уведомления', icon: IconBell, badge: unread > 0 ? unread : undefined },
-  { to: '/settings', label: 'Настройки', icon: IconSettings },
+  {
+    to: '/client/notifications',
+    label: 'Уведомления',
+    icon: IconBell,
+    badge: unread > 0 ? unread : undefined,
+  },
+  { to: '/client/settings', label: 'Настройки', icon: IconSettings },
 ]
 
 const masterNav = (unread: number): NavItem[] => [
-  { to: '/dashboard', label: 'Обзор', icon: IconOverview },
-  { to: '/schedule', label: 'Расписание', icon: IconCalendar },
-  { to: '/clients', label: 'Клиенты', icon: IconUsers },
-  { to: '/services', label: 'Услуги', icon: IconBriefcase },
-  { to: '/bookings', label: 'Записи', icon: IconClipboard },
-  { to: '/notifications', label: 'Уведомления', icon: IconBell, badge: unread > 0 ? unread : undefined },
-  { to: '/settings', label: 'Настройки', icon: IconSettings },
+  { to: '/master', label: 'Обзор', icon: IconOverview },
+  { to: '/master/schedule', label: 'Расписание', icon: IconCalendar },
+  { to: '/master/clients', label: 'Клиенты', icon: IconUsers },
+  { to: '/master/services', label: 'Услуги', icon: IconBriefcase },
+  { to: '/master/bookings', label: 'Записи', icon: IconClipboard },
+  {
+    to: '/master/notifications',
+    label: 'Уведомления',
+    icon: IconBell,
+    badge: unread > 0 ? unread : undefined,
+  },
+  { to: '/master/settings', label: 'Настройки', icon: IconSettings },
 ]
 
 function initials(displayName: string | undefined, email: string) {
@@ -60,16 +69,21 @@ function initials(displayName: string | undefined, email: string) {
   return email.slice(0, 2).toUpperCase()
 }
 
+function cabinetFromPath(pathname: string): AppCabinet {
+  return pathname.startsWith('/master') ? 'master' : 'client'
+}
+
 export function AppLayout() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
   const master = useMasterMe(me.isSuccess)
+  const cabinet = cabinetFromPath(location.pathname)
 
   const logout = useMutation({
     mutationFn: logoutApi,
     onSuccess: async () => {
-      clearClientShellRole()
       await queryClient.removeQueries({ queryKey: ['me'] })
       await queryClient.removeQueries({ queryKey: ['master'] })
       navigate('/login')
@@ -86,35 +100,21 @@ export function AppLayout() {
     master.error.status === 404
 
   const isMasterUser = Boolean(master.data)
-
-  /* Надёжно фиксируем режим оболочки до чтения из storage: при «мигании» fetch это же значение подставится из sessionStorage. */
-  if (typeof sessionStorage !== 'undefined' && email) {
-    if (master.data) {
-      persistClientShellRole(email, 'master')
-    } else if (liveMaster404) {
-      persistClientShellRole(email, 'client')
-    }
-  }
-
-  const storedShellRole = email ? readPersistedShellRole(email) : null
-
-  /**
-   * Клиент без профиля мастера. Учитываем sessionStorage: при «мигании» статуса запроса master
-   * живое условие может на кадр стать ложным — иначе показывается сайдбар мастера.
-   */
-  const isClientOnly =
-    Boolean(me.isSuccess && email) && !isMasterUser && (liveMaster404 || storedShellRole === 'client')
+  const isClientOnly = Boolean(me.isSuccess && email) && !isMasterUser && liveMaster404
+  const isClientCabinet = cabinet === 'client'
+  const showClientCabinetLink = isMasterUser && !isClientCabinet
+  const showMasterCabinetLink = isMasterUser && isClientCabinet
 
   const shellLoading = me.isLoading || (me.isSuccess && !master.isFetched)
 
   const clientDisplayName = me.data?.client_display_name?.trim()
-  const displayName = isClientOnly
+  const displayName = isClientCabinet
     ? clientDisplayName || email.split('@')[0] || 'Клиент'
     : (name ?? 'Мастер')
-  const cabinetLabel = isClientOnly ? 'кабинет клиента' : 'кабинет мастера'
-  const homePath = isClientOnly ? '/client' : '/dashboard'
-  const notificationsUnread = useNotificationsUnreadCount(me.isSuccess)
-  const navItems = isClientOnly ? clientNav(notificationsUnread) : masterNav(notificationsUnread)
+  const cabinetLabel = isClientCabinet ? 'кабинет клиента' : 'кабинет мастера'
+  const homePath = isClientCabinet ? '/client' : '/master'
+  const notificationsUnread = useNotificationsUnreadCount(me.isSuccess, cabinet)
+  const navItems = isClientCabinet ? clientNav(notificationsUnread) : masterNav(notificationsUnread)
 
   useEffect(() => {
     if (me.isError) {
@@ -169,7 +169,7 @@ export function AppLayout() {
             <NavLink
               key={to}
               to={to}
-              end={to === '/client'}
+              end={to === '/client' || to === '/master'}
               title={compact ? label : undefined}
               onClick={mode === 'drawer' ? () => setMobileNavOpen(false) : undefined}
               className={({ isActive }) =>
@@ -199,7 +199,7 @@ export function AppLayout() {
           ))}
         </nav>
 
-        {!isClientOnly ? (
+        {showClientCabinetLink ? (
           compact ? (
             <div className="mx-2 mb-2 border-t border-stone-200 pt-2 dark:border-stone-800">
               <NavLink
@@ -224,7 +224,7 @@ export function AppLayout() {
                 Как клиент
               </p>
               <p className="mt-1 text-xs leading-snug text-stone-600 dark:text-stone-400">
-                Тот же аккаунт может записываться к другим мастерам — отдельный экран без путаницы с расписанием.
+                Ваши записи к другим мастерам — в личном кабинете, отдельно от расписания студии.
               </p>
               <NavLink
                 to="/client"
@@ -240,6 +240,52 @@ export function AppLayout() {
               >
                 <IconUserCircle className="h-4 w-4 shrink-0" />
                 Личный кабинет
+              </NavLink>
+            </div>
+          )
+        ) : null}
+
+        {showMasterCabinetLink ? (
+          compact ? (
+            <div className="mx-2 mb-2 border-t border-stone-200 pt-2 dark:border-stone-800">
+              <NavLink
+                to="/master"
+                title="Кабинет мастера"
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center justify-center rounded-lg px-2 py-3 transition-colors',
+                    isActive
+                      ? 'bg-teal-100 text-teal-900 dark:bg-teal-950/50 dark:text-teal-100'
+                      : 'text-teal-800 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/30',
+                  )
+                }
+              >
+                <IconBriefcase className="h-5 w-5 shrink-0" />
+                <span className="sr-only">Кабинет мастера</span>
+              </NavLink>
+            </div>
+          ) : (
+            <div className="mx-2 mb-2 rounded-lg border border-dashed border-stone-300 bg-white/60 px-3 py-3 dark:border-stone-600 dark:bg-stone-950/40">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                Как мастер
+              </p>
+              <p className="mt-1 text-xs leading-snug text-stone-600 dark:text-stone-400">
+                Расписание, клиенты и услуги вашей студии — в кабинете мастера.
+              </p>
+              <NavLink
+                to="/master"
+                onClick={mode === 'drawer' ? () => setMobileNavOpen(false) : undefined}
+                className={({ isActive }) =>
+                  cn(
+                    'mt-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors',
+                    isActive
+                      ? 'bg-teal-100 text-teal-900 dark:bg-teal-950/50 dark:text-teal-100'
+                      : 'text-teal-800 hover:bg-teal-50 dark:text-teal-300 dark:hover:bg-teal-950/30',
+                  )
+                }
+              >
+                <IconBriefcase className="h-4 w-4 shrink-0" />
+                Кабинет мастера
               </NavLink>
             </div>
           )
@@ -264,7 +310,7 @@ export function AppLayout() {
             title={compact ? `${displayName} · ${email}` : undefined}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-stone-200 text-xs font-semibold text-stone-700 dark:bg-stone-700 dark:text-stone-200"
           >
-            {me.isSuccess ? initials(isClientOnly ? displayName : name, email) : '…'}
+            {me.isSuccess ? initials(isClientCabinet ? displayName : name, email) : '…'}
           </div>
           {!compact ? (
             <>
@@ -348,13 +394,15 @@ export function AppLayout() {
             <p className="truncate text-xs text-stone-500 dark:text-stone-400">{cabinetLabel}</p>
           </NavLink>
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-stone-200 text-xs font-semibold text-stone-700 dark:bg-stone-700 dark:text-stone-200">
-            {me.isSuccess ? initials(isClientOnly ? displayName : name, email) : '…'}
+            {me.isSuccess ? initials(isClientCabinet ? displayName : name, email) : '…'}
           </div>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 md:px-8 lg:px-10 lg:py-10">
-            <Outlet context={{ isClientOnly } satisfies AppShellOutletContext} />
+            <Outlet
+              context={{ isClientOnly, cabinet } satisfies AppShellOutletContext}
+            />
           </div>
         </div>
       </main>

@@ -5,6 +5,7 @@ import { clientMasterLabel, clientsMyMasterPatchApi } from '../../api/clients'
 import { useClientCabinet } from '../../components/client/ClientCabinetContext'
 import { getUserFacingError } from '../../lib/apiErrors'
 import { cn } from '../../lib/forms'
+import { surfaceCard } from '../../lib/surface'
 import type { ClientMasterView } from '../../mocks/clientCabinetMocks'
 
 function IconSearch(props: { className?: string }) {
@@ -163,7 +164,7 @@ function MasterCard({
   }
 
   return (
-    <li className="flex flex-col rounded-xl border border-stone-300 bg-white p-5 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
+    <li className={surfaceCard('flex flex-col p-5')}>
       <div className="flex items-start gap-3">
         <div
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-teal-100 text-sm font-semibold text-teal-800 dark:bg-teal-950/60 dark:text-teal-200"

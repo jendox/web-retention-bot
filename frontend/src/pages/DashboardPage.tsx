@@ -3,13 +3,13 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { meApi } from '../api/auth'
-import { bookingsListApi, type Booking } from '../api/bookings'
+import { bookingsListApi, bookingsMonthlyRevenueApi, type Booking } from '../api/bookings'
 import { clientsListApi } from '../api/clients'
 import { invitationsCreateApi } from '../api/invitations'
 import { useMasterMe } from '../hooks/useMasterMe'
 import { servicesListApi } from '../api/services'
 import { IconBriefcase, IconClipboard, IconUsers } from '../components/layout/navIcons'
-import { blocksCalendar, BookingStatus } from '../lib/bookingStatus'
+import { blocksCalendar } from '../lib/bookingStatus'
 import { cn } from '../lib/forms'
 import { surfaceCardClass } from '../lib/surface'
 import { ALLOWED_PAGE_SIZES } from '../lib/pagination'
@@ -21,14 +21,6 @@ function isSameLocalDay(iso: string, ref: Date) {
 }
 
 const CLIENTS_PAGE_SIZE_CAP = ALLOWED_PAGE_SIZES[ALLOWED_PAGE_SIZES.length - 1]
-
-function startOfMonth(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), 1)
-}
-
-function endOfMonth(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999)
-}
 
 function formatRuGreetingDate(d: Date) {
   const formatted = new Intl.DateTimeFormat('ru-RU', {
@@ -116,9 +108,9 @@ export function DashboardPage() {
     queryFn: () => bookingsListApi({ scope: 'upcoming', page: 1, page_size: CLIENTS_PAGE_SIZE_CAP }),
     enabled: me.isSuccess,
   })
-  const bookingsHistory = useQuery({
-    queryKey: ['bookings', 'history', 'dashboard-revenue', 1, CLIENTS_PAGE_SIZE_CAP],
-    queryFn: () => bookingsListApi({ scope: 'history', page: 1, page_size: CLIENTS_PAGE_SIZE_CAP }),
+  const monthlyRevenue = useQuery({
+    queryKey: ['bookings', 'stats', 'monthly-revenue'],
+    queryFn: bookingsMonthlyRevenueApi,
     enabled: me.isSuccess,
   })
   const servicesActive = useQuery({
@@ -182,22 +174,9 @@ export function DashboardPage() {
     const scheduled = list.filter((b) => blocksCalendar(b.status))
     const todayCount = scheduled.filter((b) => isSameLocalDay(b.start_at, nowInner)).length
 
-    const monthStart = startOfMonth(nowInner)
-    const monthEnd = endOfMonth(nowInner)
-    let revenue = 0
-    for (const b of bookingsHistory.data?.items ?? []) {
-      if (b.status !== BookingStatus.COMPLETED) {
-        continue
-      }
-      const t = new Date(b.start_at)
-      if (t < monthStart || t > monthEnd) {
-        continue
-      }
-      const n = Number.parseFloat(b.price_snapshot)
-      if (!Number.isNaN(n)) {
-        revenue += n
-      }
-    }
+    const revenueAmount = Number.parseFloat(monthlyRevenue.data?.amount ?? '')
+    const revenueMonth = Number.isNaN(revenueAmount) ? 0 : revenueAmount
+    const revenueCurrency = monthlyRevenue.data?.currency
 
     const upcoming = scheduled
       .filter((b) => new Date(b.start_at) >= nowInner)
@@ -208,10 +187,11 @@ export function DashboardPage() {
       clientCount: clients.data?.total ?? 0,
       serviceCount: servicesActive.data?.total ?? 0,
       todayCount,
-      revenueMonth: revenue,
+      revenueMonth,
+      revenueCurrency,
       upcoming,
     }
-  }, [bookings.data, bookingsHistory.data, clients.data, servicesActive.data])
+  }, [bookings.data, monthlyRevenue.data, clients.data, servicesActive.data])
 
   const firstName = useMemo(() => {
     const n = master.data?.display_name?.trim()
@@ -240,7 +220,7 @@ export function DashboardPage() {
           label="Клиентов в базе"
           iconBg="bg-teal-100 dark:bg-teal-950/50"
           iconColor="text-teal-700 dark:text-teal-300"
-          iconLinkTo="/clients"
+          iconLinkTo="/master/clients"
           iconLinkLabel="Открыть раздел «Клиенты»"
           icon={<IconUsers className="h-5 w-5 shrink-0 overflow-visible" />}
         />
@@ -249,7 +229,7 @@ export function DashboardPage() {
           label="Активных услуг"
           iconBg="bg-emerald-100/90 dark:bg-emerald-950/40"
           iconColor="text-emerald-700 dark:text-emerald-300"
-          iconLinkTo="/services"
+          iconLinkTo="/master/services"
           iconLinkLabel="Открыть раздел «Услуги»"
           icon={<IconBriefcase className="h-5 w-5 shrink-0 overflow-visible" />}
         />
@@ -258,12 +238,16 @@ export function DashboardPage() {
           label="Записей сегодня"
           iconBg="bg-amber-100/90 dark:bg-amber-950/35"
           iconColor="text-amber-800 dark:text-amber-200"
-          iconLinkTo="/bookings"
+          iconLinkTo="/master/bookings"
           iconLinkLabel="Открыть раздел «Записи»"
           icon={<IconClipboard className="h-5 w-5 shrink-0 overflow-visible" />}
         />
         <StatCard
-          value={stats.revenueMonth > 0 ? `${stats.revenueMonth.toLocaleString('ru-RU')}` : '—'}
+          value={
+            stats.revenueMonth > 0
+              ? `${stats.revenueMonth.toLocaleString('ru-RU')}${stats.revenueCurrency ? ` ${stats.revenueCurrency}` : ''}`
+              : '—'
+          }
           label="Выручка за месяц"
           iconBg="bg-violet-100/90 dark:bg-violet-950/40"
           iconColor="text-violet-700 dark:text-violet-300"
@@ -290,7 +274,7 @@ export function DashboardPage() {
           <div className="mb-4 flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-50">Ближайшие записи</h2>
             <Link
-              to="/bookings"
+              to="/master/bookings"
               className="text-sm font-medium text-teal-700 hover:text-teal-600 dark:text-teal-400 dark:hover:text-teal-300"
             >
               Записи
@@ -324,10 +308,10 @@ export function DashboardPage() {
           <h2 className="mb-4 text-lg font-semibold text-stone-900 dark:text-stone-50">Быстрые действия</h2>
           <ul className="space-y-1">
             {[
-              { to: '/clients', label: 'Добавить клиента' },
-              { to: '/bookings', label: 'Новая запись' },
-              { to: '/services', label: 'Добавить услугу' },
-              { to: '/schedule', label: 'Открыть расписание' },
+              { to: '/master/clients', label: 'Добавить клиента' },
+              { to: '/master/bookings', label: 'Новая запись' },
+              { to: '/master/services', label: 'Добавить услугу' },
+              { to: '/master/schedule', label: 'Открыть расписание' },
             ].map((item) => (
               <li key={item.to}>
                 <Link

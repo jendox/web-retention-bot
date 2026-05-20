@@ -95,7 +95,7 @@ def append_client_comment_to_body(body: str, comment: str | None) -> str:
 
 
 def _master_bookings_url() -> str:
-    return f"{get_settings().security.frontend_public_origin.rstrip('/')}/bookings"
+    return f"{get_settings().security.frontend_public_origin.rstrip('/')}/master/bookings"
 
 
 @dataclass(frozen=True)

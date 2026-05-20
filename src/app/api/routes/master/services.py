@@ -18,7 +18,7 @@ from app.use_cases.services.get_service import GetServiceUseCase, get_get_servic
 from app.use_cases.services.list_services import ListServicesUseCase, get_list_services_use_case
 from app.use_cases.services.update_service import UpdateServiceUseCase, get_update_service_use_case
 
-router = APIRouter(prefix="/services", tags=["services"])
+router = APIRouter(prefix="/services", tags=["master-services"])
 
 
 @router.get(

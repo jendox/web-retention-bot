@@ -12,6 +12,10 @@ from app.core.database import get_db_session
 from app.models import NotificationDelivery, NotificationEvent, UserNotification
 from app.models.notifications import DeliveryChannel, DeliveryStatus, NotificationEventType
 from app.repositories.base import BaseRepository
+from app.repositories.notification_cabinet import (
+    notification_belongs_to_client_cabinet,
+    notification_belongs_to_master_cabinet,
+)
 
 
 @dataclass
@@ -68,14 +72,22 @@ class UserNotificationRepository(BaseRepository):
         await self.session.flush()
         return notification_entity
 
-    async def count_for_user(self, user_id: UUID) -> int:
-        stmt = select(func.count()).select_from(UserNotification).where(
+    def _for_user(self, user_id: UUID, *, cabinet_filter):
+        return [
             UserNotification.recipient_user_id == user_id,
+            cabinet_filter(),
+        ]
+
+    async def count_for_client_cabinet(self, user_id: UUID) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(UserNotification)
+            .where(*self._for_user(user_id, cabinet_filter=notification_belongs_to_client_cabinet))
         )
         result = await self.session.execute(stmt)
         return int(result.scalar_one())
 
-    async def list_for_user_page(
+    async def list_for_client_cabinet_page(
         self,
         user_id: UUID,
         *,
@@ -84,13 +96,55 @@ class UserNotificationRepository(BaseRepository):
     ) -> list[UserNotification]:
         stmt = (
             select(UserNotification)
-            .where(UserNotification.recipient_user_id == user_id)
+            .where(*self._for_user(user_id, cabinet_filter=notification_belongs_to_client_cabinet))
             .order_by(UserNotification.created_at.desc())
             .limit(limit)
             .offset(offset)
         )
         rows = await self.session.execute(stmt)
         return list(rows.scalars())
+
+    async def count_unread_for_client_cabinet(self, user_id: UUID) -> int:
+        stmt = select(func.count()).select_from(UserNotification).where(
+            *self._for_user(user_id, cabinet_filter=notification_belongs_to_client_cabinet),
+            UserNotification.read_at.is_(None),
+        )
+        result = await self.session.execute(stmt)
+        return int(result.scalar_one())
+
+    async def count_for_master_cabinet(self, user_id: UUID) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(UserNotification)
+            .where(*self._for_user(user_id, cabinet_filter=notification_belongs_to_master_cabinet))
+        )
+        result = await self.session.execute(stmt)
+        return int(result.scalar_one())
+
+    async def list_for_master_cabinet_page(
+        self,
+        user_id: UUID,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[UserNotification]:
+        stmt = (
+            select(UserNotification)
+            .where(*self._for_user(user_id, cabinet_filter=notification_belongs_to_master_cabinet))
+            .order_by(UserNotification.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        rows = await self.session.execute(stmt)
+        return list(rows.scalars())
+
+    async def count_unread_for_master_cabinet(self, user_id: UUID) -> int:
+        stmt = select(func.count()).select_from(UserNotification).where(
+            *self._for_user(user_id, cabinet_filter=notification_belongs_to_master_cabinet),
+            UserNotification.read_at.is_(None),
+        )
+        result = await self.session.execute(stmt)
+        return int(result.scalar_one())
 
     async def get_for_user(self, notification_id: UUID, user_id: UUID) -> UserNotification | None:
         stmt = (
@@ -103,14 +157,6 @@ class UserNotificationRepository(BaseRepository):
         )
         row = await self.session.execute(stmt)
         return row.scalar_one_or_none()
-
-    async def count_unread_for_user(self, user_id: UUID) -> int:
-        stmt = select(func.count()).select_from(UserNotification).where(
-            UserNotification.recipient_user_id == user_id,
-            UserNotification.read_at.is_(None),
-        )
-        result = await self.session.execute(stmt)
-        return int(result.scalar_one())
 
 
 class NotificationDeliveryRepository(BaseRepository):

@@ -13,24 +13,60 @@ from app.schemas.notification import UserNotificationOut, UserNotificationsListO
 from app.use_cases.notifications.exceptions import NotificationNotFoundError
 
 
-class ListMyNotificationsUseCase:
+async def _list_cabinet_notifications(
+    repo: UserNotificationRepository,
+    user: User,
+    pagination: Pagination,
+    *,
+    count_total,
+    list_page,
+    count_unread,
+) -> UserNotificationsListOut:
+    total = await count_total(user.id)
+    items = await list_page(
+        user.id,
+        limit=pagination.page_size,
+        offset=pagination.offset,
+    )
+    unread_count = await count_unread(user.id)
+    return UserNotificationsListOut(
+        items=[UserNotificationOut.model_validate(item) for item in items],
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        unread_count=unread_count,
+    )
+
+
+class ListClientNotificationsUseCase:
     def __init__(self, notification_repo: UserNotificationRepository) -> None:
         self._notification_repo = notification_repo
 
     async def __call__(self, user: User, pagination: Pagination) -> UserNotificationsListOut:
-        total = await self._notification_repo.count_for_user(user.id)
-        items = await self._notification_repo.list_for_user_page(
-            user.id,
-            limit=pagination.page_size,
-            offset=pagination.offset,
+        repo = self._notification_repo
+        return await _list_cabinet_notifications(
+            repo,
+            user,
+            pagination,
+            count_total=repo.count_for_client_cabinet,
+            list_page=repo.list_for_client_cabinet_page,
+            count_unread=repo.count_unread_for_client_cabinet,
         )
-        unread_count = await self._notification_repo.count_unread_for_user(user.id)
-        return UserNotificationsListOut(
-            items=[UserNotificationOut.model_validate(item) for item in items],
-            total=total,
-            page=pagination.page,
-            page_size=pagination.page_size,
-            unread_count=unread_count,
+
+
+class ListMasterNotificationsUseCase:
+    def __init__(self, notification_repo: UserNotificationRepository) -> None:
+        self._notification_repo = notification_repo
+
+    async def __call__(self, user: User, pagination: Pagination) -> UserNotificationsListOut:
+        repo = self._notification_repo
+        return await _list_cabinet_notifications(
+            repo,
+            user,
+            pagination,
+            count_total=repo.count_for_master_cabinet,
+            list_page=repo.list_for_master_cabinet_page,
+            count_unread=repo.count_unread_for_master_cabinet,
         )
 
 
@@ -48,10 +84,16 @@ class MarkNotificationReadUseCase:
         return UserNotificationOut.model_validate(note)
 
 
-def get_list_my_notifications_use_case(
+def get_list_client_notifications_use_case(
     notification_repo: Annotated[UserNotificationRepository, Depends(get_user_notification_repo)],
-) -> ListMyNotificationsUseCase:
-    return ListMyNotificationsUseCase(notification_repo)
+) -> ListClientNotificationsUseCase:
+    return ListClientNotificationsUseCase(notification_repo)
+
+
+def get_list_master_notifications_use_case(
+    notification_repo: Annotated[UserNotificationRepository, Depends(get_user_notification_repo)],
+) -> ListMasterNotificationsUseCase:
+    return ListMasterNotificationsUseCase(notification_repo)
 
 
 def get_mark_notification_read_use_case(

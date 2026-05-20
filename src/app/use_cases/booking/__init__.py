@@ -20,6 +20,10 @@ from app.use_cases.booking.list import (
     get_list_client_bookings_use_case,
     get_list_master_bookings_use_case,
 )
+from app.use_cases.booking.revenue import (
+    GetMasterMonthlyRevenueUseCase,
+    get_master_monthly_revenue_use_case,
+)
 from app.use_cases.booking.update import (
     CancelBookingUseCase,
     MarkBookingAttendanceUseCase,
@@ -40,6 +44,7 @@ __all__ = [
     "CreateBookingUseCase",
     "ListClientBookingsUseCase",
     "ListMasterBookingsUseCase",
+    "GetMasterMonthlyRevenueUseCase",
     "MarkBookingAttendanceUseCase",
     "RescheduleBookingUseCase",
     "RescheduleClientBookingUseCase",
@@ -51,6 +56,7 @@ __all__ = [
     "get_create_booking_use_case",
     "get_list_client_bookings_use_case",
     "get_list_master_bookings_use_case",
+    "get_master_monthly_revenue_use_case",
     "get_mark_booking_attendance_use_case",
     "get_reschedule_booking_use_case",
     "get_reschedule_client_booking_use_case",

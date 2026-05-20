@@ -12,13 +12,13 @@ from app.schemas.errors import ErrorDetail
 from app.schemas.notification import UserNotificationOut, UserNotificationsListOut
 from app.use_cases.notifications.exceptions import NotificationNotFoundError
 from app.use_cases.notifications.list import (
-    ListMyNotificationsUseCase,
+    ListMasterNotificationsUseCase,
     MarkNotificationReadUseCase,
-    get_list_my_notifications_use_case,
+    get_list_master_notifications_use_case,
     get_mark_notification_read_use_case,
 )
 
-router = APIRouter(prefix="/notifications", tags=["notifications"])
+router = APIRouter(prefix="/notifications", tags=["master-notifications"])
 
 
 def _raise_not_found(_exc: NotificationNotFoundError) -> NoReturn:
@@ -27,7 +27,7 @@ def _raise_not_found(_exc: NotificationNotFoundError) -> NoReturn:
 
 @router.get(
     path="/me",
-    summary="Current user's in-app notifications",
+    summary="Current user's in-app notifications (master cabinet)",
     response_model=UserNotificationsListOut,
     status_code=status.HTTP_200_OK,
     responses={
@@ -38,7 +38,7 @@ def _raise_not_found(_exc: NotificationNotFoundError) -> NoReturn:
 async def list_my_notifications(
     user: Annotated[User, Depends(require_user)],
     pagination: Annotated[Pagination, Depends(get_pagination)],
-    use_case: Annotated[ListMyNotificationsUseCase, Depends(get_list_my_notifications_use_case)],
+    use_case: Annotated[ListMasterNotificationsUseCase, Depends(get_list_master_notifications_use_case)],
 ) -> UserNotificationsListOut:
     return await use_case(user, pagination)
 

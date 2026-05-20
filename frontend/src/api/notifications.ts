@@ -1,5 +1,3 @@
-import { apiFetch } from './client'
-
 export type UserNotification = {
   id: string
   event_type: string
@@ -18,16 +16,4 @@ export type UserNotificationsList = {
   unread_count: number
 }
 
-export async function notificationsMyListApi(params: { page: number; page_size: number }) {
-  const q = new URLSearchParams({
-    page: String(params.page),
-    page_size: String(params.page_size),
-  })
-  return apiFetch<UserNotificationsList>(`/api/notifications/me?${q}`)
-}
-
-export async function notificationsMarkReadApi(notificationId: string) {
-  return apiFetch<UserNotification>(`/api/notifications/${notificationId}/read`, {
-    method: 'POST',
-  })
-}
+export type NotificationCabinet = 'client' | 'master'

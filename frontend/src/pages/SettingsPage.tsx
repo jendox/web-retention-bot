@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate, useOutletContext } from 'react-router-dom'
+import { useLocation, useNavigate, useOutletContext } from 'react-router-dom'
 
 import { meApi } from '../api/auth'
 import { masterMeUpdateApi } from '../api/masters'
 import type { AppShellOutletContext } from '../app/appShellOutletContext'
+import { cabinetFromPathname } from '../lib/appCabinet'
 import { useMasterMe } from '../hooks/useMasterMe'
 import { getUserFacingError } from '../lib/apiErrors'
 import { cn } from '../lib/forms'
+import { surfacePanel } from '../lib/surface'
 
 const fieldClass =
   'w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-400/15 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-100 dark:focus:border-stone-500'
@@ -44,7 +46,10 @@ function profileInitials(displayName: string | null | undefined, email: string) 
 
 export function SettingsPage() {
   const navigate = useNavigate()
-  const { isClientOnly } = useOutletContext<AppShellOutletContext>()
+  const { pathname } = useLocation()
+  const outletContext = useOutletContext<AppShellOutletContext>()
+  const cabinet = outletContext.cabinet ?? cabinetFromPathname(pathname)
+  const isClientCabinet = cabinet === 'client'
   const queryClient = useQueryClient()
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
   const master = useMasterMe(me.isSuccess)
@@ -109,7 +114,7 @@ export function SettingsPage() {
     return () => window.clearTimeout(timer)
   }, [saved])
 
-  if (me.isLoading || (me.isSuccess && !master.isFetched)) {
+  if (me.isLoading || (!isClientCabinet && me.isSuccess && !master.isFetched)) {
     return <p className="text-sm text-stone-500 dark:text-stone-400">Загрузка…</p>
   }
 
@@ -123,7 +128,9 @@ export function SettingsPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">Настройки</h1>
           <p className="mt-1 max-w-2xl text-sm text-stone-600 dark:text-stone-400">
-            Профили и параметры аккаунта. Профиль мастера и контакты сохраняются на сервере.
+            {isClientCabinet
+              ? 'Аккаунт и профиль клиента. Настройки студии — в кабинете мастера.'
+              : 'Профили и параметры аккаунта. Профиль мастера и контакты сохраняются на сервере.'}
           </p>
         </div>
         {saved ? (
@@ -138,14 +145,14 @@ export function SettingsPage() {
         onSubmit={(e) => {
           e.preventDefault()
           setSaveError(null)
-          if (!isClientOnly) {
+          if (!isClientCabinet) {
             saveMaster.mutate()
           } else {
             setSaved(true)
           }
         }}
       >
-        <section className="rounded-2xl border border-stone-300 bg-white p-6 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
+        <section className={surfacePanel('p-6')}>
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-teal-600 text-sm font-semibold text-white">
               {profileInitials(me.data.client_display_name, email)}
@@ -161,8 +168,8 @@ export function SettingsPage() {
           </label>
         </section>
 
-        {!isClientOnly ? (
-          <section className="rounded-2xl border border-stone-300 bg-white p-6 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
+        {!isClientCabinet ? (
+          <section className={surfacePanel('p-6')}>
             <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Профиль мастера</h2>
             <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
               Эти данные видны клиентам в приглашениях и личном кабинете.
@@ -251,7 +258,7 @@ export function SettingsPage() {
           </section>
         ) : null}
 
-        <section className="rounded-2xl border border-stone-300 bg-white p-6 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
+        <section className={surfacePanel('p-6')}>
           <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Профиль клиента</h2>
           <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
             Имя и телефон из вашей карточки у мастера. Редактирование на сервере появится позже.
@@ -279,43 +286,90 @@ export function SettingsPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-stone-300 bg-white p-6 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
+        <section className={surfacePanel('p-6')}>
           <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Уведомления</h2>
           <div className="mt-4 space-y-3">
-            <label className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                checked={form.notificationsEmail}
-                onChange={(e) => setDraft((prev) => ({ ...prev, notificationsEmail: e.target.checked }))}
-                className="mt-1 h-4 w-4 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
-              />
-              <span>
-                <span className="block text-sm font-medium text-stone-800 dark:text-stone-200">Письма о приглашениях</span>
-                <span className="block text-sm text-stone-500 dark:text-stone-400">Новые приглашения и изменения статуса.</span>
-              </span>
-            </label>
-            <label className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                checked={form.remindersEmail}
-                onChange={(e) => setDraft((prev) => ({ ...prev, remindersEmail: e.target.checked }))}
-                className="mt-1 h-4 w-4 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
-              />
-              <span>
-                <span className="block text-sm font-medium text-stone-800 dark:text-stone-200">Напоминания о записях</span>
-                <span className="block text-sm text-stone-500 dark:text-stone-400">Письма перед визитом и после изменения записи.</span>
-              </span>
-            </label>
+            {isClientCabinet ? (
+              <>
+                <label className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={form.notificationsEmail}
+                    onChange={(e) => setDraft((prev) => ({ ...prev, notificationsEmail: e.target.checked }))}
+                    className="mt-1 h-4 w-4 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-stone-800 dark:text-stone-200">
+                      Письма о записях
+                    </span>
+                    <span className="block text-sm text-stone-500 dark:text-stone-400">
+                      Создание, перенос и отмена визитов мастером.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={form.remindersEmail}
+                    onChange={(e) => setDraft((prev) => ({ ...prev, remindersEmail: e.target.checked }))}
+                    className="mt-1 h-4 w-4 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-stone-800 dark:text-stone-200">
+                      Напоминания перед визитом
+                    </span>
+                    <span className="block text-sm text-stone-500 dark:text-stone-400">
+                      Email-напоминания о предстоящих записях.
+                    </span>
+                  </span>
+                </label>
+              </>
+            ) : (
+              <>
+                <label className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={form.notificationsEmail}
+                    onChange={(e) => setDraft((prev) => ({ ...prev, notificationsEmail: e.target.checked }))}
+                    className="mt-1 h-4 w-4 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-stone-800 dark:text-stone-200">
+                      Письма о действиях клиентов
+                    </span>
+                    <span className="block text-sm text-stone-500 dark:text-stone-400">
+                      Запись, перенос и отмена через кабинет клиента.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={form.remindersEmail}
+                    onChange={(e) => setDraft((prev) => ({ ...prev, remindersEmail: e.target.checked }))}
+                    className="mt-1 h-4 w-4 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-stone-800 dark:text-stone-200">
+                      Служебные письма студии
+                    </span>
+                    <span className="block text-sm text-stone-500 dark:text-stone-400">
+                      Приглашения и важные изменения в аккаунте мастера.
+                    </span>
+                  </span>
+                </label>
+              </>
+            )}
           </div>
         </section>
 
         <div className="flex justify-end pt-3">
           <button
             type="submit"
-            disabled={!isClientOnly && saveMaster.isPending}
+            disabled={!isClientCabinet && saveMaster.isPending}
             className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-500 disabled:opacity-60"
           >
-            {!isClientOnly && saveMaster.isPending ? 'Сохраняем…' : 'Сохранить'}
+            {!isClientCabinet && saveMaster.isPending ? 'Сохраняем…' : 'Сохранить'}
           </button>
         </div>
       </form>

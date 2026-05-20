@@ -16,6 +16,7 @@ import {
 import { getUserFacingError } from '../lib/apiErrors'
 import { CURRENCIES, DEFAULT_MASTER_CURRENCY, type CurrencyCode } from '../lib/currency'
 import { cn } from '../lib/forms'
+import { surfacePanelOverflow } from '../lib/surface'
 import { parsePage, parsePageSize, type PageSize } from '../lib/pagination'
 import { queryClient } from '../lib/query'
 
@@ -537,7 +538,7 @@ export function ServicesPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-stone-300 bg-white shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
+      <div className={surfacePanelOverflow()}>
         {list.isLoading ? (
           <p className="p-8 text-center text-sm text-stone-500">Загрузка списка…</p>
         ) : total === 0 ? (

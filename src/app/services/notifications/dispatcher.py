@@ -28,7 +28,10 @@ from app.services.notifications.booking_mail import (
     deliver_booking_moved_email,
 )
 from app.services.notifications.channel_policy import delivery_channels_for_user
-from app.services.notifications.mail_render import email_verification_user_notification_copy
+from app.services.notifications.mail_render import (
+    BOOKING_EMAIL_AUDIENCE_MASTER,
+    email_verification_user_notification_copy,
+)
 from app.services.notifications.recipients import BookingClientRecipient
 from app.services.notifications.registration_mail import deliver_email_verification
 from app.services.notifications.tasks import process_notification_delivery
@@ -212,6 +215,7 @@ class NotificationDispatcher:
             client_id=str(client_id),
         ):
             payload = {
+                "audience": BOOKING_EMAIL_AUDIENCE_MASTER,
                 "profile_email": profile_email,
                 "account_email": account_email,
                 "client_display_name": client_display_name,
