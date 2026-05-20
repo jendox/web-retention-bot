@@ -2,7 +2,12 @@ import { useEffect, useState, type MouseEvent } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { availabilityApi } from '../../api/availability'
-import { bookingsMyCancelApi, bookingsMyRescheduleApi, type BookingClientListItem } from '../../api/bookings'
+import {
+  BOOKING_COMMENT_MAX_LENGTH,
+  bookingsMyCancelApi,
+  bookingsMyRescheduleApi,
+  type BookingClientListItem,
+} from '../../api/bookings'
 import { getUserFacingError } from '../../lib/apiErrors'
 import {
   bookingDateBounds,
@@ -11,7 +16,7 @@ import {
   toDateInputValue,
 } from '../../lib/bookingSchedule'
 import { bookingSlotButtonClass } from '../../lib/bookingSlots'
-import { cn } from '../../lib/forms'
+import { cn, fieldClass } from '../../lib/forms'
 
 const dateLongFormatter = new Intl.DateTimeFormat('ru-RU', {
   weekday: 'long',
@@ -51,6 +56,8 @@ type Props = {
 export function ClientVisitManageModal({ booking, mode, onClose, onSuccess }: Props) {
   const [rescheduleDate, setRescheduleDate] = useState(() => toDateInputValue(new Date(booking.start_at)))
   const [rescheduleSlot, setRescheduleSlot] = useState<string | null>(null)
+  const [cancelComment, setCancelComment] = useState('')
+  const [rescheduleComment, setRescheduleComment] = useState('')
 
   const { min: todayValue, max: maxDateValue } = bookingDateBounds()
 
@@ -66,7 +73,7 @@ export function ClientVisitManageModal({ booking, mode, onClose, onSuccess }: Pr
   })
 
   const cancelBooking = useMutation({
-    mutationFn: () => bookingsMyCancelApi(booking.id),
+    mutationFn: () => bookingsMyCancelApi(booking.id, cancelComment),
     onSuccess: () => {
       onSuccess()
       onClose()
@@ -78,7 +85,7 @@ export function ClientVisitManageModal({ booking, mode, onClose, onSuccess }: Pr
       if (!rescheduleSlot) {
         throw new Error('Выберите новое время.')
       }
-      return bookingsMyRescheduleApi(booking.id, rescheduleSlot)
+      return bookingsMyRescheduleApi(booking.id, rescheduleSlot, rescheduleComment)
     },
     onSuccess: () => {
       onSuccess()
@@ -127,6 +134,20 @@ export function ClientVisitManageModal({ booking, mode, onClose, onSuccess }: Pr
             Запись к «{booking.master_display_name}» на {formatSlotFull(booking.start_at)} ({booking.service_name}) будет
             отменена.
           </p>
+          <label className="mt-4 block">
+            <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
+              Комментарий для мастера (необязательно)
+            </span>
+            <textarea
+              value={cancelComment}
+              onChange={(event) => setCancelComment(event.target.value)}
+              maxLength={BOOKING_COMMENT_MAX_LENGTH}
+              rows={3}
+              disabled={cancelBooking.isPending}
+              placeholder="Например: не смогу прийти — прошу перенести."
+              className={cn(fieldClass, 'mt-1 resize-y')}
+            />
+          </label>
           {cancelBooking.isError ? (
             <p className="mt-3 text-sm text-red-700 dark:text-red-300" role="alert">
               {getUserFacingError(cancelBooking.error)}
@@ -220,6 +241,21 @@ export function ClientVisitManageModal({ booking, mode, onClose, onSuccess }: Pr
               </div>
             )}
           </div>
+
+          <label className="block">
+            <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
+              Комментарий для мастера (необязательно)
+            </span>
+            <textarea
+              value={rescheduleComment}
+              onChange={(event) => setRescheduleComment(event.target.value)}
+              maxLength={BOOKING_COMMENT_MAX_LENGTH}
+              rows={3}
+              disabled={reschedule.isPending}
+              placeholder="Например: переношу из‑за работы."
+              className={cn(fieldClass, 'mt-1 resize-y')}
+            />
+          </label>
 
           {reschedule.isError ? (
             <p className="text-sm text-red-700 dark:text-red-300" role="alert">

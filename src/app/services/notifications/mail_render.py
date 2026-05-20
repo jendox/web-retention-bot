@@ -12,6 +12,9 @@ from app.services.notifications.datetime_format import format_booking_start_loca
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent / "templates" / "email"
 
+BOOKING_EMAIL_AUDIENCE_CLIENT = "client"
+BOOKING_EMAIL_AUDIENCE_MASTER = "master"
+
 
 @lru_cache(maxsize=1)
 def _jinja_env() -> Environment:
@@ -83,6 +86,16 @@ def append_master_comment_to_body(body: str, comment: str | None) -> str:
     if not comment:
         return body
     return f"{body}\n\nКомментарий мастера: {comment}"
+
+
+def append_client_comment_to_body(body: str, comment: str | None) -> str:
+    if not comment:
+        return body
+    return f"{body}\n\nКомментарий клиента: {comment}"
+
+
+def _master_bookings_url() -> str:
+    return f"{get_settings().security.frontend_public_origin.rstrip('/')}/bookings"
 
 
 @dataclass(frozen=True)
@@ -179,3 +192,136 @@ def booking_moved_in_app_copy(
     )
     link_url = f"{get_settings().security.frontend_public_origin.rstrip('/')}/client/visits"
     return title, body, link_url
+
+
+@dataclass(frozen=True)
+class BookingCreatedMasterEmailRenderContext:
+    recipient_email: str
+    client_name: str
+    service_name: str
+    start_at_local: str
+    duration_min: int
+    bookings_url: str
+
+
+def render_booking_created_master(render_ctx: BookingCreatedMasterEmailRenderContext) -> tuple[str, str, str]:
+    env = _jinja_env()
+    ctx = {
+        "recipient_email": render_ctx.recipient_email,
+        "client_name": render_ctx.client_name,
+        "service_name": render_ctx.service_name,
+        "start_at_local": render_ctx.start_at_local,
+        "duration_min": render_ctx.duration_min,
+        "bookings_url": render_ctx.bookings_url,
+    }
+    subject = env.get_template("booking_created_master.subject.txt").render(**ctx).strip()
+    text_body = env.get_template("booking_created_master.txt").render(**ctx)
+    html_body = env.get_template("booking_created_master.html").render(**ctx)
+    return subject, text_body, html_body
+
+
+def booking_created_master_in_app_copy(
+    *,
+    client_display_name: str,
+    service_name: str,
+    start_at: datetime,
+    master_timezone: str,
+) -> tuple[str, str, str | None]:
+    start_at_local = format_booking_start_local(start_at, master_timezone)
+    title = "Новая запись от клиента"
+    body = f"{client_display_name}: {service_name}, {start_at_local}"
+    return title, body, _master_bookings_url()
+
+
+@dataclass(frozen=True)
+class BookingCancelledMasterEmailRenderContext:
+    recipient_email: str
+    client_name: str
+    service_name: str
+    start_at_local: str
+    duration_min: int
+    bookings_url: str
+    client_comment: str | None = None
+
+
+def render_booking_cancelled_master(render_ctx: BookingCancelledMasterEmailRenderContext) -> tuple[str, str, str]:
+    env = _jinja_env()
+    ctx = {
+        "recipient_email": render_ctx.recipient_email,
+        "client_name": render_ctx.client_name,
+        "service_name": render_ctx.service_name,
+        "start_at_local": render_ctx.start_at_local,
+        "duration_min": render_ctx.duration_min,
+        "bookings_url": render_ctx.bookings_url,
+        "client_comment": render_ctx.client_comment,
+    }
+    subject = env.get_template("booking_cancelled_master.subject.txt").render(**ctx).strip()
+    text_body = env.get_template("booking_cancelled_master.txt").render(**ctx)
+    html_body = env.get_template("booking_cancelled_master.html").render(**ctx)
+    return subject, text_body, html_body
+
+
+def booking_cancelled_master_in_app_copy(
+    *,
+    client_display_name: str,
+    service_name: str,
+    start_at: datetime,
+    master_timezone: str,
+    client_comment: str | None = None,
+) -> tuple[str, str, str | None]:
+    start_at_local = format_booking_start_local(start_at, master_timezone)
+    title = "Запись отменена клиентом"
+    body = append_client_comment_to_body(
+        f"{client_display_name}: {service_name}, {start_at_local} — отменена",
+        client_comment,
+    )
+    return title, body, _master_bookings_url()
+
+
+@dataclass(frozen=True)
+class BookingMovedMasterEmailRenderContext:
+    recipient_email: str
+    client_name: str
+    service_name: str
+    start_at_local: str
+    duration_min: int
+    bookings_url: str
+    previous_start_at_local: str
+    client_comment: str | None = None
+
+
+def render_booking_moved_master(render_ctx: BookingMovedMasterEmailRenderContext) -> tuple[str, str, str]:
+    env = _jinja_env()
+    ctx = {
+        "recipient_email": render_ctx.recipient_email,
+        "client_name": render_ctx.client_name,
+        "service_name": render_ctx.service_name,
+        "previous_start_at_local": render_ctx.previous_start_at_local,
+        "start_at_local": render_ctx.start_at_local,
+        "duration_min": render_ctx.duration_min,
+        "bookings_url": render_ctx.bookings_url,
+        "client_comment": render_ctx.client_comment,
+    }
+    subject = env.get_template("booking_moved_master.subject.txt").render(**ctx).strip()
+    text_body = env.get_template("booking_moved_master.txt").render(**ctx)
+    html_body = env.get_template("booking_moved_master.html").render(**ctx)
+    return subject, text_body, html_body
+
+
+def booking_moved_master_in_app_copy(
+    *,
+    client_display_name: str,
+    service_name: str,
+    previous_start_at: datetime,
+    start_at: datetime,
+    master_timezone: str,
+    client_comment: str | None = None,
+) -> tuple[str, str, str | None]:
+    previous_local = format_booking_start_local(previous_start_at, master_timezone)
+    start_at_local = format_booking_start_local(start_at, master_timezone)
+    title = "Запись перенесена клиентом"
+    body = append_client_comment_to_body(
+        f"{client_display_name}: {service_name}, {previous_local} → {start_at_local}",
+        client_comment,
+    )
+    return title, body, _master_bookings_url()

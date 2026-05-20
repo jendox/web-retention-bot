@@ -129,9 +129,14 @@ async def post_cancel_my_booking(
     booking_id: UUID,
     user: Annotated[User, Depends(require_user)],
     use_case: Annotated[CancelClientBookingUseCase, Depends(get_cancel_client_booking_use_case)],
+    payload: Annotated[BookingCancel | None, Body()] = None,
 ) -> Response:
     try:
-        await use_case(user=user, booking_id=booking_id)
+        await use_case(
+            user=user,
+            booking_id=booking_id,
+            comment=payload.comment if payload else None,
+        )
     except BookingsError as error:
         _raise_http_error(error)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -157,7 +162,12 @@ async def post_reschedule_my_booking(
     use_case: Annotated[RescheduleClientBookingUseCase, Depends(get_reschedule_client_booking_use_case)],
 ) -> BookingClientListItem:
     try:
-        return await use_case(user=user, booking_id=booking_id, start_at=payload.start_at)
+        return await use_case(
+            user=user,
+            booking_id=booking_id,
+            start_at=payload.start_at,
+            comment=payload.comment,
+        )
     except BookingsError as error:
         _raise_http_error(error)
 

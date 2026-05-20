@@ -15,6 +15,7 @@ from app.models.notifications.enums import DeliveryChannel, DeliveryStatus
 from app.models.notifications.models import NotificationDelivery
 from app.repositories.notifications import NotificationDeliveryRepository
 from app.services.notifications.booking_mail import (
+    BookingEmailDeliveryOptions,
     BookingNotificationSkip,
     deliver_booking_cancelled_email,
     deliver_booking_created_email,
@@ -84,6 +85,10 @@ async def _process_booking_created_email(
                 session=session,
                 booking_id=booking_id,
                 to_email=to_email,
+                options=BookingEmailDeliveryOptions(
+                    audience=payload.get("audience", "client"),
+                    client_display_name=payload.get("client_display_name"),
+                ),
             )
     except BookingNotificationSkip as exc:
         deliver.status = DeliveryStatus.SKIPPED
@@ -119,6 +124,10 @@ async def _process_booking_cancelled_email(
                 session=session,
                 booking_id=booking_id,
                 to_email=to_email,
+                options=BookingEmailDeliveryOptions(
+                    audience=payload.get("audience", "client"),
+                    client_display_name=payload.get("client_display_name"),
+                ),
             )
     except BookingNotificationSkip as exc:
         deliver.status = DeliveryStatus.SKIPPED
@@ -156,6 +165,10 @@ async def _process_booking_moved_email(
                 booking_id=booking_id,
                 to_email=to_email,
                 previous_start_at_iso=previous_start_at,
+                options=BookingEmailDeliveryOptions(
+                    audience=payload.get("audience", "client"),
+                    client_display_name=payload.get("client_display_name"),
+                ),
             )
     except BookingNotificationSkip as exc:
         deliver.status = DeliveryStatus.SKIPPED

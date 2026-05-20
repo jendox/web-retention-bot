@@ -22,6 +22,7 @@ from app.repositories.notifications import (
     UserNotificationRepository,
 )
 from app.services.notifications.booking_mail import (
+    BookingEmailDeliveryOptions,
     deliver_booking_cancelled_email,
     deliver_booking_created_email,
     deliver_booking_moved_email,
@@ -33,9 +34,9 @@ from app.services.notifications.registration_mail import deliver_email_verificat
 from app.services.notifications.tasks import process_notification_delivery
 
 EMAIL_VERIFY_DEDUP = "email_verify:user:{user_id}"
-BOOKING_CREATED_DEDUP = "booking_created:booking:{booking_id}"
-BOOKING_CANCELLED_DEDUP = "booking_cancelled:booking:{booking_id}"
-BOOKING_MOVED_DEDUP = "booking_moved:booking:{booking_id}:{start_at_iso}"
+BOOKING_CREATED_DEDUP = "booking_created:booking:{booking_id}:user:{user_id}"
+BOOKING_CANCELLED_DEDUP = "booking_cancelled:booking:{booking_id}:user:{user_id}"
+BOOKING_MOVED_DEDUP = "booking_moved:booking:{booking_id}:user:{user_id}:{start_at_iso}"
 
 logger = get_logger("app.notifications.dispatcher")
 
@@ -68,12 +69,17 @@ class NotificationDispatcher:
     async def _deliver_booking_email(self, user_note: UserNotification, *, to_email: str) -> None:
         payload = user_note.payload or {}
         booking_id = UUID(payload["booking_id"])
+        email_options = BookingEmailDeliveryOptions(
+            audience=payload.get("audience", "client"),
+            client_display_name=payload.get("client_display_name"),
+        )
         if user_note.event_type is NotificationEventType.BOOKING_CREATED:
             await deliver_booking_created_email(
                 settings=self._settings,
                 session=self._session,
                 booking_id=booking_id,
                 to_email=to_email,
+                options=email_options,
             )
             return
         if user_note.event_type is NotificationEventType.BOOKING_CANCELLED:
@@ -82,6 +88,7 @@ class NotificationDispatcher:
                 session=self._session,
                 booking_id=booking_id,
                 to_email=to_email,
+                options=email_options,
             )
             return
         if user_note.event_type is NotificationEventType.BOOKING_MOVED:
@@ -94,6 +101,7 @@ class NotificationDispatcher:
                 booking_id=booking_id,
                 to_email=to_email,
                 previous_start_at_iso=previous_start_at_iso,
+                options=email_options,
             )
             return
         raise ValueError(f"unsupported booking email event: {user_note.event_type.value}")
@@ -274,7 +282,10 @@ class NotificationDispatcher:
                     body=email_ctx.body,
                     link_url=email_ctx.link_url,
                     payload=payload,
-                    dedup_key=BOOKING_CREATED_DEDUP.format(booking_id=booking_id),
+                    dedup_key=BOOKING_CREATED_DEDUP.format(
+                        booking_id=booking_id,
+                        user_id=recipient.user_id,
+                    ),
                 ),
             )
 
@@ -328,7 +339,10 @@ class NotificationDispatcher:
                     body=email_ctx.body,
                     link_url=email_ctx.link_url,
                     payload=payload,
-                    dedup_key=BOOKING_CANCELLED_DEDUP.format(booking_id=booking_id),
+                    dedup_key=BOOKING_CANCELLED_DEDUP.format(
+                        booking_id=booking_id,
+                        user_id=recipient.user_id,
+                    ),
                 ),
             )
 
@@ -387,6 +401,7 @@ class NotificationDispatcher:
                     payload=payload,
                     dedup_key=BOOKING_MOVED_DEDUP.format(
                         booking_id=booking_id,
+                        user_id=recipient.user_id,
                         start_at_iso=payload["new_start_at"],
                     ),
                 ),

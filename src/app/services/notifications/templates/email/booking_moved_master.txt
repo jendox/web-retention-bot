@@ -1,0 +1,18 @@
+Здравствуйте!
+
+Клиент {{ client_name }} перенёс запись на услугу «{{ service_name }}».
+
+Было: {{ previous_start_at_local }}
+Новое время: {{ start_at_local }}
+Длительность: {{ duration_min }} мин.
+{% if client_comment %}
+
+Комментарий клиента:
+{{ client_comment }}
+{% endif %}
+
+Открыть записи:
+{{ bookings_url }}
+
+—
+Это автоматическое сообщение; отвечать на него не нужно.

@@ -1,0 +1,1 @@
+Новая запись: {{ client_name }} — {{ service_name }}

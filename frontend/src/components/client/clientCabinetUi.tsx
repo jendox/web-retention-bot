@@ -145,7 +145,7 @@ export function ClientVisitRow({
         </p>
         {actionComment ? (
           <p className="mt-1 text-xs text-stone-600 dark:text-stone-400">
-            <span className="font-medium text-stone-700 dark:text-stone-300">Комментарий мастера: </span>
+            <span className="font-medium text-stone-700 dark:text-stone-300">Комментарий: </span>
             {actionComment}
           </p>
         ) : null}

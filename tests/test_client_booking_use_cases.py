@@ -15,6 +15,7 @@ from app.schemas.availability import SlotOut
 from app.schemas.booking import ClientBookingCreate
 from app.use_cases.booking.client_booking import (
     CancelClientBookingUseCase,
+    ClientBookingUseCaseDeps,
     CreateClientBookingUseCase,
     RescheduleClientBookingUseCase,
 )
@@ -33,21 +34,63 @@ def _booking(**overrides):
         "price_snapshot": Decimal("50.00"),
         "currency_snapshot": "BYN",
         "status": BookingStatus.SCHEDULED,
+        "cancel_comment": None,
+        "reschedule_comment": None,
     }
     data.update(overrides)
     return SimpleNamespace(**data)
 
 
+def _booking_deps(
+    *,
+    master_repo,
+    client_repo,
+    service_repo,
+    booking_repo,
+    master_user_id: uuid.UUID,
+    slots_uc=None,
+):
+    return ClientBookingUseCaseDeps(
+        master_repo=master_repo,
+        client_repo=client_repo,
+        service_repo=service_repo,
+        booking_repo=booking_repo,
+        user_repo=SimpleNamespace(
+            get_by_id=AsyncMock(
+                return_value=SimpleNamespace(
+                    id=master_user_id,
+                    email="master@example.com",
+                    email_verified_at=datetime.now(UTC),
+                ),
+            ),
+        ),
+        dispatcher=SimpleNamespace(
+            dispatch_booking_created=AsyncMock(),
+            dispatch_booking_cancelled=AsyncMock(),
+            dispatch_booking_moved=AsyncMock(),
+        ),
+        available_slots_use_case=slots_uc,
+    )
+
+
 @pytest.mark.asyncio
 async def test_create_client_booking_success() -> None:
     master_id = uuid.uuid4()
+    master_user_id = uuid.uuid4()
     client_id = uuid.uuid4()
     service_id = uuid.uuid4()
     user_id = uuid.uuid4()
     start_at = datetime(2026, 5, 20, 10, 0, tzinfo=UTC)
 
-    master = SimpleNamespace(id=master_id, display_name="Studio", timezone="UTC", public_slug=None)
-    client = SimpleNamespace(id=client_id, user_id=user_id)
+    master = SimpleNamespace(
+        id=master_id,
+        user_id=master_user_id,
+        display_name="Studio",
+        timezone="UTC",
+        public_slug=None,
+    )
+    client = SimpleNamespace(id=client_id, user_id=user_id, display_name="Anna")
+    link = SimpleNamespace(client_alias="My Studio", alias="Anna K.")
     service = SimpleNamespace(
         id=service_id,
         name="Стрижка",
@@ -64,7 +107,7 @@ async def test_create_client_booking_success() -> None:
     class FakeClientRepo:
         async def get_linked_client_for_master_user(self, mid, uid):
             if mid == master_id and uid == user_id:
-                return (SimpleNamespace(client_alias="My Studio"), client)
+                return (link, client)
             return None
 
     class FakeServiceRepo:
@@ -80,34 +123,45 @@ async def test_create_client_booking_success() -> None:
             return booking
 
     slots_uc = AsyncMock(return_value=[SlotOut(start_at=start_at)])
-
-    uc = CreateClientBookingUseCase(
-        FakeMasterRepo(),
-        FakeClientRepo(),
-        FakeServiceRepo(),
-        FakeBookingRepo(),
-        slots_uc,
+    deps = _booking_deps(
+        master_repo=FakeMasterRepo(),
+        client_repo=FakeClientRepo(),
+        service_repo=FakeServiceRepo(),
+        booking_repo=FakeBookingRepo(),
+        master_user_id=master_user_id,
+        slots_uc=slots_uc,
     )
+    uc = CreateClientBookingUseCase(deps)
     result = await uc(
         ClientBookingCreate(master_id=master_id, service_id=service_id, start_at=start_at),
         user=SimpleNamespace(id=user_id),
     )
     assert result.master_display_name == "My Studio"
     assert result.service_name == "Стрижка"
+    deps.dispatcher.dispatch_booking_created.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_create_client_booking_requires_link() -> None:
     uc = CreateClientBookingUseCase(
-        SimpleNamespace(
-            get_by_master_id=AsyncMock(
-                return_value=SimpleNamespace(id=uuid.uuid4(), display_name="M", timezone="UTC", public_slug=None),
+        _booking_deps(
+            master_repo=SimpleNamespace(
+                get_by_master_id=AsyncMock(
+                    return_value=SimpleNamespace(
+                        id=uuid.uuid4(),
+                        user_id=uuid.uuid4(),
+                        display_name="M",
+                        timezone="UTC",
+                        public_slug=None,
+                    ),
+                ),
             ),
+            client_repo=SimpleNamespace(get_linked_client_for_master_user=AsyncMock(return_value=None)),
+            service_repo=SimpleNamespace(),
+            booking_repo=SimpleNamespace(),
+            master_user_id=uuid.uuid4(),
+            slots_uc=AsyncMock(),
         ),
-        SimpleNamespace(get_linked_client_for_master_user=AsyncMock(return_value=None)),
-        SimpleNamespace(),
-        SimpleNamespace(),
-        AsyncMock(),
     )
     with pytest.raises(CreateBookingError, match="Not linked"):
         await uc(
@@ -119,7 +173,13 @@ async def test_create_client_booking_requires_link() -> None:
 @pytest.mark.asyncio
 async def test_cancel_client_booking() -> None:
     user_id = uuid.uuid4()
-    booking = _booking()
+    master_user_id = uuid.uuid4()
+    master_id = uuid.uuid4()
+    booking = _booking(master_id=master_id)
+    master = SimpleNamespace(id=master_id, user_id=master_user_id, display_name="Studio", timezone="UTC")
+    service = SimpleNamespace(id=booking.service_id, name="Услуга")
+    link = SimpleNamespace(alias="Anna")
+    client = SimpleNamespace(id=booking.client_id, display_name="Anna")
 
     class FakeBookingRepo:
         async def get_for_user(self, bid, uid):
@@ -130,20 +190,42 @@ async def test_cancel_client_booking() -> None:
         async def flush(self):
             self.flushed = True
 
-    repo = FakeBookingRepo()
-    await CancelClientBookingUseCase(repo)(user=SimpleNamespace(id=user_id), booking_id=booking.id)
+    deps = _booking_deps(
+        master_repo=SimpleNamespace(get_by_master_id=AsyncMock(return_value=master)),
+        client_repo=SimpleNamespace(get_link_with_client=AsyncMock(return_value=(link, client))),
+        service_repo=SimpleNamespace(get_for_master=AsyncMock(return_value=service)),
+        booking_repo=FakeBookingRepo(),
+        master_user_id=master_user_id,
+    )
+    await CancelClientBookingUseCase(deps)(
+        user=SimpleNamespace(id=user_id),
+        booking_id=booking.id,
+        comment="  Не смогу  ",
+    )
+
     assert booking.status is BookingStatus.CANCELLED
+    assert booking.cancel_comment == "Не смогу"
+    deps.dispatcher.dispatch_booking_cancelled.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_reschedule_client_booking() -> None:
     user_id = uuid.uuid4()
+    master_user_id = uuid.uuid4()
     master_id = uuid.uuid4()
     new_start = datetime(2026, 5, 21, 14, 0, tzinfo=UTC)
     booking = _booking(master_id=master_id)
 
-    master = SimpleNamespace(id=master_id, display_name="Studio", timezone="UTC", public_slug=None)
+    master = SimpleNamespace(
+        id=master_id,
+        user_id=master_user_id,
+        display_name="Studio",
+        timezone="UTC",
+        public_slug=None,
+    )
     service = SimpleNamespace(id=booking.service_id, name="Услуга", is_active=True)
+    link = SimpleNamespace(client_alias="Renamed Studio", alias="Anna")
+    client = SimpleNamespace(id=booking.client_id, display_name="Anna")
 
     class FakeBookingRepo:
         async def get_for_user(self, bid, uid):
@@ -155,26 +237,39 @@ async def test_reschedule_client_booking() -> None:
         async def flush(self):
             pass
 
-    uc = RescheduleClientBookingUseCase(
-        SimpleNamespace(get_by_master_id=AsyncMock(return_value=master)),
-        SimpleNamespace(
-            get_link_with_client=AsyncMock(
-                return_value=(SimpleNamespace(client_alias="Renamed Studio"), SimpleNamespace()),
-            ),
-        ),
-        FakeBookingRepo(),
-        SimpleNamespace(get_for_master=AsyncMock(return_value=service)),
-        AsyncMock(return_value=[SlotOut(start_at=new_start)]),
+    deps = _booking_deps(
+        master_repo=SimpleNamespace(get_by_master_id=AsyncMock(return_value=master)),
+        client_repo=SimpleNamespace(get_link_with_client=AsyncMock(return_value=(link, client))),
+        service_repo=SimpleNamespace(get_for_master=AsyncMock(return_value=service)),
+        booking_repo=FakeBookingRepo(),
+        master_user_id=master_user_id,
+        slots_uc=AsyncMock(return_value=[SlotOut(start_at=new_start)]),
     )
-    result = await uc(user=SimpleNamespace(id=user_id), booking_id=booking.id, start_at=new_start)
+    uc = RescheduleClientBookingUseCase(deps)
+    result = await uc(
+        user=SimpleNamespace(id=user_id),
+        booking_id=booking.id,
+        start_at=new_start,
+        comment="Удобно?",
+    )
     assert result.start_at == new_start
     assert result.master_display_name == "Renamed Studio"
+    assert booking.reschedule_comment == "Удобно?"
+    deps.dispatcher.dispatch_booking_moved.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_cancel_client_booking_not_found() -> None:
     with pytest.raises(UpdateBookingError):
-        await CancelClientBookingUseCase(SimpleNamespace(get_for_user=AsyncMock(return_value=None)))(
+        await CancelClientBookingUseCase(
+            _booking_deps(
+                master_repo=SimpleNamespace(),
+                client_repo=SimpleNamespace(),
+                service_repo=SimpleNamespace(),
+                booking_repo=SimpleNamespace(get_for_user=AsyncMock(return_value=None)),
+                master_user_id=uuid.uuid4(),
+            ),
+        )(
             user=SimpleNamespace(id=uuid.uuid4()),
             booking_id=uuid.uuid4(),
         )

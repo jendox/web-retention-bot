@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Запись перенесена</title>
+</head>
+<body style="margin:0;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Ubuntu,'Helvetica Neue',sans-serif;font-size:16px;line-height:1.55;color:#1c1917;background-color:#e7e5e4;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color:#f5f5f4;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;background-color:#ffffff;border:1px solid #e7e5e4;border-radius:16px;overflow:hidden;">
+          <tr>
+            <td style="padding:28px 28px 8px;">
+              <p style="margin:0 0 6px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#0f766e;">Запись перенесена</p>
+              <p style="margin:0 0 16px;font-size:20px;font-weight:600;color:#1c1917;">{{ service_name }}</p>
+              <p style="margin:0 0 24px;color:#44403c;font-size:15px;">Клиент <strong>{{ client_name }}</strong> изменил время визита.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 28px 16px;">
+              <p style="margin:0 0 8px;font-size:13px;color:#78716c;">Было</p>
+              <p style="margin:0 0 16px;font-size:15px;color:#57534e;text-decoration:line-through;">{{ previous_start_at_local }}</p>
+              <p style="margin:0 0 8px;font-size:13px;color:#78716c;">Новое время</p>
+              <p style="margin:0;font-size:15px;font-weight:600;color:#1c1917;">{{ start_at_local }}</p>
+            </td>
+          </tr>
+          {% if client_comment %}
+          <tr>
+            <td style="padding:0 28px 16px;">
+              <p style="margin:0;font-size:14px;color:#44403c;"><span style="display:block;margin-bottom:6px;font-size:13px;color:#78716c;">Комментарий клиента</span>{{ client_comment }}</p>
+            </td>
+          </tr>
+          {% endif %}
+          <tr>
+            <td style="padding:4px 28px 28px;text-align:center;">
+              <a href="{{ bookings_url }}" style="display:inline-block;padding:12px 24px;background-color:#0d9488;color:#fafaf9;text-decoration:none;border-radius:8px;font-weight:600;">Открыть записи</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

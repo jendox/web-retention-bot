@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from uuid import UUID
 
-from app.models import Client, User
+from app.models import Client, MasterProfile, User
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,17 @@ def resolve_booking_client_recipient(
     if client.user_id is None or user is None:
         return None
     if user.id != client.user_id:
+        return None
+    if user.email_verified_at is None:
+        return None
+    return BookingClientRecipient(user_id=user.id, email=user.email)
+
+
+def resolve_booking_master_recipient(
+    master: MasterProfile,
+    user: User | None,
+) -> BookingClientRecipient | None:
+    if user is None or user.id != master.user_id:
         return None
     if user.email_verified_at is None:
         return None

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.models.client import MasterClient
+from app.models.client import Client, MasterClient
 from app.models.master import MasterProfile
 from app.schemas.client import ClientMyMasterItem
 
@@ -33,3 +33,9 @@ def master_label_for_client(link: MasterClient, master: MasterProfile) -> str:
     if link.client_alias and link.client_alias.strip():
         return link.client_alias.strip()
     return master.display_name
+
+
+def client_label_for_master(link: MasterClient, client: Client) -> str:
+    if link.alias and link.alias.strip():
+        return link.alias.strip()
+    return client.display_name

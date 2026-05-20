@@ -1,0 +1,1 @@
+Запись отменена: {{ client_name }} — {{ service_name }}

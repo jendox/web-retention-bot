@@ -29,7 +29,7 @@ from app.services.notifications.mail_render import (
     render_booking_created,
     render_booking_moved,
 )
-from app.services.notifications.recipients import resolve_booking_client_recipient
+from app.services.notifications.recipients import resolve_booking_client_recipient, resolve_booking_master_recipient
 from app.use_cases.booking.create import CreateBookingUseCase
 from app.use_cases.booking.update import CancelBookingUseCase, RescheduleBookingUseCase
 
@@ -352,6 +352,14 @@ async def test_create_booking_skips_notification_without_linked_user() -> None:
     )
 
     dispatcher.dispatch_booking_created.assert_not_called()
+
+
+def test_resolve_booking_master_recipient_requires_verified_email() -> None:
+    master = SimpleNamespace(id=uuid.uuid4(), user_id=uuid.uuid4())
+    user = SimpleNamespace(id=master.user_id, email="m@example.com", email_verified_at=datetime.now(UTC))
+    recipient = resolve_booking_master_recipient(master, user)
+    assert recipient is not None
+    assert recipient.email == "m@example.com"
 
 
 def test_append_master_comment_to_body() -> None:

@@ -63,14 +63,22 @@ export async function bookingsMyCreateApi(body: {
   })
 }
 
-export async function bookingsMyCancelApi(bookingId: string) {
-  await apiFetch(`/api/bookings/me/${bookingId}/cancel`, { method: 'POST' })
+export async function bookingsMyCancelApi(bookingId: string, comment?: string | null) {
+  const trimmed = comment?.trim()
+  await apiFetch(`/api/bookings/me/${bookingId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify(trimmed ? { comment: trimmed } : {}),
+  })
 }
 
-export async function bookingsMyRescheduleApi(bookingId: string, start_at: string) {
+export async function bookingsMyRescheduleApi(bookingId: string, start_at: string, comment?: string | null) {
+  const trimmed = comment?.trim()
   return apiFetch<BookingClientListItem>(`/api/bookings/me/${bookingId}/reschedule`, {
     method: 'POST',
-    body: JSON.stringify({ start_at }),
+    body: JSON.stringify({
+      start_at,
+      ...(trimmed ? { comment: trimmed } : {}),
+    }),
   })
 }
 
