@@ -1,4 +1,5 @@
 DOCKER_COMPOSE = docker compose -f deploy/docker-compose.dev.yml
+DOCKER_COMPOSE_BOTS = docker compose -f deploy/docker-compose.bots.yml
 
 infra-up:
 	$(DOCKER_COMPOSE) up -d
@@ -8,6 +9,15 @@ infra-down:
 
 infra-clean:
 	$(DOCKER_COMPOSE) down -v
+
+bots-up:
+	$(DOCKER_COMPOSE_BOTS) up -d --build telegram-bot
+
+bots-up-viber:
+	$(DOCKER_COMPOSE_BOTS) --profile viber up -d --build
+
+bots-down:
+	$(DOCKER_COMPOSE_BOTS) down
 
 backend-install:
 	uv sync

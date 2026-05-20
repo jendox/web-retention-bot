@@ -14,3 +14,12 @@ make infra-up
 | smtp4dev | `25` (SMTP), `5000` (web UI) | Catch-all dev mailbox; matches default `SMTP__*` in `.env.example` |
 
 Stop: `make infra-down`. Reset data: `make infra-clean`.
+
+### Messenger bots (optional)
+
+```bash
+# TELEGRAM_BOT_TOKEN in repo root .env
+make bots-up
+```
+
+See [`../bots/README.md`](../bots/README.md). API must be running on the host (`make backend-run`) so bots can call `RETENTION_API_URL` (default `http://host.docker.internal:8000`).

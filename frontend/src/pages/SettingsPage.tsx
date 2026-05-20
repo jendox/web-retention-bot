@@ -5,6 +5,7 @@ import { useLocation, useNavigate, useOutletContext } from 'react-router-dom'
 import { meApi } from '../api/auth'
 import { masterMeUpdateApi } from '../api/masters'
 import type { AppShellOutletContext } from '../app/appShellOutletContext'
+import { NotificationSettingsSection } from '../components/NotificationSettingsSection'
 import { cabinetFromPathname } from '../lib/appCabinet'
 import { useMasterMe } from '../hooks/useMasterMe'
 import { getUserFacingError } from '../lib/apiErrors'
@@ -28,8 +29,6 @@ type FormState = {
   viber: string
   clientDisplayName: string
   clientPhone: string
-  notificationsEmail: boolean
-  remindersEmail: boolean
 }
 
 function profileInitials(displayName: string | null | undefined, email: string) {
@@ -71,8 +70,6 @@ export function SettingsPage() {
       viber: master.data?.viber ?? '',
       clientDisplayName,
       clientPhone,
-      notificationsEmail: true,
-      remindersEmail: true,
     }),
     [clientDisplayName, clientPhone, email, master.data],
   )
@@ -291,82 +288,7 @@ export function SettingsPage() {
           </section>
         ) : null}
 
-        <section className={surfacePanel('p-6')}>
-          <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Уведомления</h2>
-          <div className="mt-4 space-y-3">
-            {isClientCabinet ? (
-              <>
-                <label className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={form.notificationsEmail}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, notificationsEmail: e.target.checked }))}
-                    className="mt-1 h-4 w-4 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
-                  />
-                  <span>
-                    <span className="block text-sm font-medium text-stone-800 dark:text-stone-200">
-                      Письма о записях
-                    </span>
-                    <span className="block text-sm text-stone-500 dark:text-stone-400">
-                      Создание, перенос и отмена визитов мастером.
-                    </span>
-                  </span>
-                </label>
-                <label className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={form.remindersEmail}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, remindersEmail: e.target.checked }))}
-                    className="mt-1 h-4 w-4 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
-                  />
-                  <span>
-                    <span className="block text-sm font-medium text-stone-800 dark:text-stone-200">
-                      Напоминания перед визитом
-                    </span>
-                    <span className="block text-sm text-stone-500 dark:text-stone-400">
-                      Email-напоминания о предстоящих записях.
-                    </span>
-                  </span>
-                </label>
-              </>
-            ) : (
-              <>
-                <label className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={form.notificationsEmail}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, notificationsEmail: e.target.checked }))}
-                    className="mt-1 h-4 w-4 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
-                  />
-                  <span>
-                    <span className="block text-sm font-medium text-stone-800 dark:text-stone-200">
-                      Письма о действиях клиентов
-                    </span>
-                    <span className="block text-sm text-stone-500 dark:text-stone-400">
-                      Запись, перенос и отмена через кабинет клиента.
-                    </span>
-                  </span>
-                </label>
-                <label className="flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={form.remindersEmail}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, remindersEmail: e.target.checked }))}
-                    className="mt-1 h-4 w-4 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
-                  />
-                  <span>
-                    <span className="block text-sm font-medium text-stone-800 dark:text-stone-200">
-                      Служебные письма студии
-                    </span>
-                    <span className="block text-sm text-stone-500 dark:text-stone-400">
-                      Приглашения и важные изменения в аккаунте мастера.
-                    </span>
-                  </span>
-                </label>
-              </>
-            )}
-          </div>
-        </section>
+        <NotificationSettingsSection cabinet={cabinet} />
 
         <div className="flex justify-end pt-3">
           <button

@@ -41,6 +41,19 @@ class NotificationSettings(BaseModel):
     eager_deliveries: bool = Field(default=False)
 
 
+class MessengerBotsSettings(BaseModel):
+    #: Shared secret between API and bot sidecars (header X-Bot-Secret).
+    internal_secret: str = Field(default="dev-bot-internal-secret-change-me")
+    link_token_ttl_seconds: int = Field(default=900, ge=60, le=3600)
+    telegram_bot_username: str = Field(default="retention_studio_bot")
+    #: Public Viber PA chat URI slug (for deep link); optional until Viber is configured.
+    viber_pa_uri: str = Field(default="retention_studio")
+    #: Base URL of telegram sidecar, e.g. http://telegram-bot:8091
+    telegram_service_url: str | None = Field(default=None)
+    #: Base URL of viber sidecar, e.g. http://viber-bot:8092
+    viber_service_url: str | None = Field(default=None)
+
+
 class SmtpSettings(BaseModel):
     #: When False, verification emails are only logged (see SECURITY__AUTH_LOG_VERIFICATION_LINK); no TCP to SMTP.
     enabled: bool = Field(default=True)
@@ -71,6 +84,7 @@ class Settings(BaseSettings):
     session: SessionSettings = Field(default_factory=SessionSettings)
     celery: CelerySettings = Field(default_factory=CelerySettings)
     notifications: NotificationSettings = Field(default_factory=NotificationSettings)
+    messenger_bots: MessengerBotsSettings = Field(default_factory=MessengerBotsSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
     booking: Booking = Field(default_factory=Booking)
 

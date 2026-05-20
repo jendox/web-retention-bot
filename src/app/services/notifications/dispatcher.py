@@ -13,6 +13,7 @@ from app.core.database import get_db_session
 from app.core.structured_logging import get_logger, get_request_id, log_context
 from app.models import NotificationDelivery, NotificationEvent, UserNotification
 from app.models.notifications.enums import DeliveryChannel, DeliveryStatus, NotificationEventType
+from app.repositories.notification_preferences import NotificationPreferenceRepository
 from app.repositories.notifications import (
     NotificationDeliveryCreate,
     NotificationDeliveryRepository,
@@ -68,6 +69,7 @@ class NotificationDispatcher:
         self._notification_event_repo = NotificationEventRepository(session)
         self._user_notification_repo = UserNotificationRepository(session)
         self._notification_delivery_repo = NotificationDeliveryRepository(session)
+        self._preference_repo = NotificationPreferenceRepository(session)
 
     async def _deliver_booking_email(self, user_note: UserNotification, *, to_email: str) -> None:
         payload = user_note.payload or {}
@@ -293,7 +295,8 @@ class NotificationDispatcher:
                 ),
             )
 
-            for channel in delivery_channels_for_user(
+            for channel in await delivery_channels_for_user(
+                self._preference_repo,
                 user_id=recipient.user_id,
                 event_type=NotificationEventType.BOOKING_CREATED,
             ):
@@ -350,7 +353,8 @@ class NotificationDispatcher:
                 ),
             )
 
-            for channel in delivery_channels_for_user(
+            for channel in await delivery_channels_for_user(
+                self._preference_repo,
                 user_id=recipient.user_id,
                 event_type=NotificationEventType.BOOKING_CANCELLED,
             ):
@@ -411,7 +415,8 @@ class NotificationDispatcher:
                 ),
             )
 
-            for channel in delivery_channels_for_user(
+            for channel in await delivery_channels_for_user(
+                self._preference_repo,
                 user_id=recipient.user_id,
                 event_type=NotificationEventType.BOOKING_MOVED,
             ):

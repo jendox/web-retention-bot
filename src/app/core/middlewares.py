@@ -18,6 +18,10 @@ CSRF_EXEMPT_PATHS = frozenset(
         "/health",
     },
 )
+
+
+def _csrf_exempt(path: str) -> bool:
+    return path in CSRF_EXEMPT_PATHS or path.startswith("/api/internal/")
 CSRF_ERROR_DETAIL = "CSRF token missing or invalid"
 RATE_LIMIT_ERROR_DETAIL = "Too many requests"
 
@@ -34,7 +38,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         if (
             request.method.upper() in SAFE_METHODS
-            or request.url.path in CSRF_EXEMPT_PATHS
+            or _csrf_exempt(request.url.path)
             or not request.url.path.startswith("/api/")
         ):
             return await call_next(request)

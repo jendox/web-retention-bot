@@ -41,12 +41,14 @@ NEW_MASTER_PATHS = [
     "/api/master/bookings?scope=upcoming&page=1&page_size=10",
     "/api/master/bookings/stats/monthly-revenue",
     "/api/master/notifications/me?page=1&page_size=10",
+    "/api/master/notification-settings/me",
 ]
 
 NEW_CLIENT_PATHS = [
     "/api/client/masters",
     "/api/client/bookings?scope=upcoming&page=1&page_size=10",
     "/api/client/notifications/me?page=1&page_size=10",
+    "/api/client/notification-settings/me",
 ]
 
 

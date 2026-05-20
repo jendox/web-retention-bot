@@ -10,6 +10,7 @@
 | `tests/` | Pytest (API, use cases, уведомления) |
 | `frontend/` | SPA: React 19, TypeScript, Vite, Tailwind 4, TanStack Query |
 | `deploy/` | Dev‑инфра: PostgreSQL, Redis, [smtp4dev](https://github.com/rnwood/smtp4dev) |
+| `bots/` | Лёгкие sidecar‑контейнеры Telegram / Viber (отдельно от `src/app`) |
 | `docs/` | Продуктовый промпт и заметки |
 
 Корень: `pyproject.toml`, `alembic.ini`, `.env.example`, `Makefile`.
@@ -70,6 +71,7 @@ make frontend-run      # http://127.0.0.1:5173 — proxy /api → :8000
 | Цель | Описание |
 |------|----------|
 | `make infra-up` / `infra-down` / `infra-clean` | Docker Compose dev stack |
+| `make bots-up` / `bots-down` | Telegram‑бот sidecar (`deploy/docker-compose.bots.yml`) |
 | `make backend-install` | `uv sync` |
 | `make backend-migrate` | Alembic `upgrade head` |
 | `make backend-run` | Uvicorn с reload |
@@ -90,6 +92,7 @@ make frontend-run      # http://127.0.0.1:5173 — proxy /api → :8000
 - **SMTP** — исходящая почта
 - **BOOKING** — шаг слотов, горизонт записи, интервал автозавершения
 - **NOTIFICATIONS** — `EAGER_DELIVERIES` (синхронная доставка email без Celery)
+- **MESSENGER_BOTS** — секрет для sidecar, URL Telegram/Viber‑сервисов, имя бота `retention_studio_bot`; токен бота — `TELEGRAM_BOT_TOKEN` для контейнера (см. [`bots/README.md`](bots/README.md))
 
 ## Реализованный функционал
 
