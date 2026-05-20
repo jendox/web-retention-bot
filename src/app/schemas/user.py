@@ -26,3 +26,10 @@ class UserSchema(BaseModel):
     def set_email_verified(self) -> UserSchema:
         self.email_verified = self.email_verified_at is not None
         return self
+
+
+class UserMeOut(UserSchema):
+    """Профиль сессии: данные карточки клиента (если пользователь привязан к мастеру)."""
+
+    client_display_name: str | None = None
+    client_phone: str | None = None

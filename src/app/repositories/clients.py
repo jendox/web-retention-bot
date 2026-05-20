@@ -7,6 +7,7 @@ from uuid import UUID
 from fastapi import Depends
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
 from app.models.booking import Booking
@@ -148,6 +149,11 @@ class ClientRepository(BaseRepository):
         rows = await self.session.execute(stmt)
         return [(row[0], row[1]) for row in rows.all()]
 
+    async def primary_client_profile_for_user(self, user_id: UUID) -> Client | None:
+        stmt = select(Client).where(Client.user_id == user_id).order_by(Client.updated_at.desc()).limit(1)
+        row = await self.session.execute(stmt)
+        return row.scalar_one_or_none()
+
     async def list_masters_for_user_clients(self, user_id: UUID) -> list[tuple[MasterProfile, MasterClient, Client]]:
         stmt = (
             select(MasterProfile, MasterClient, Client)
@@ -157,6 +163,7 @@ class ClientRepository(BaseRepository):
                 Client.user_id == user_id,
                 MasterClient.invitation_status != InvitationStatus.REVOKED,
             )
+            .options(selectinload(MasterProfile.user))
             .order_by(func.lower(MasterProfile.display_name).asc(), Client.id.asc())
         )
         rows = await self.session.execute(stmt)
@@ -168,6 +175,27 @@ class ClientRepository(BaseRepository):
             Client.user_id == user_id,
         )
         return list((await self.session.scalars(stmt)).all())
+
+    async def get_linked_client_for_master_user(
+        self,
+        master_id: UUID,
+        user_id: UUID,
+    ) -> tuple[MasterClient, Client] | None:
+        stmt = (
+            select(MasterClient, Client)
+            .join(Client, MasterClient.client_id == Client.id)
+            .where(
+                MasterClient.master_id == master_id,
+                Client.user_id == user_id,
+                MasterClient.invitation_status != InvitationStatus.REVOKED,
+            )
+            .order_by(Client.id.asc())
+            .limit(1)
+        )
+        row = (await self.session.execute(stmt)).one_or_none()
+        if row is None:
+            return None
+        return row[0], row[1]
 
     async def count_bookings_for_client(self, client_id: UUID) -> int:
         stmt = select(func.count()).select_from(Booking).where(Booking.client_id == client_id)

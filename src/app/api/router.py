@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.routes import auth, availability, bookings, clients, invitations, masters, services
+from app.api.routes import auth, availability, bookings, clients, invitations, masters, notifications, services
 
 __all__ = ["api_router"]
 
@@ -15,3 +15,4 @@ api_router.include_router(clients.router)
 api_router.include_router(invitations.router)
 api_router.include_router(availability.router)
 api_router.include_router(bookings.router)
+api_router.include_router(notifications.router)

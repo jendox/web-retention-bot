@@ -88,8 +88,14 @@ class FakeBookingRepository:
             return 1
         return 0
 
-    async def list_with_details_for_linked_user(self, user_id):
-        return [(self.booking, "Master", "Service")] if self.booking else []
+    async def count_for_client_user(self, user_id, *, scope):
+        rows = await self.list_for_client_user_page(user_id, scope=scope, limit=500, offset=0)
+        return len(rows)
+
+    async def list_for_client_user_page(self, user_id, *, scope, limit, offset):
+        _ = user_id, scope
+        rows = [(self.booking, "Master", "Service")] if self.booking else []
+        return rows[offset : offset + limit]
 
     async def flush(self):
         self.flushed = True
@@ -246,17 +252,22 @@ async def test_list_booking_use_cases_return_response_schemas():
         Pagination(page=1, page_size=10),
         scope=BookingListScope.UPCOMING,
     )
-    client_result = await ListClientBookingsUseCase(booking_repo)(uuid.uuid4())
+    client_result = await ListClientBookingsUseCase(booking_repo)(
+        uuid.uuid4(),
+        Pagination(page=1, page_size=10),
+        scope=BookingListScope.UPCOMING,
+    )
 
     assert master_result.items == [BookingOut.model_validate(booking)]
     assert master_result.total == 1
-    assert client_result == [
+    assert client_result.items == [
         BookingClientListItem(
             **BookingOut.model_validate(booking).model_dump(),
             master_display_name="Master",
             service_name="Service",
         ),
     ]
+    assert client_result.total == 1
 
 
 async def test_available_slots_use_case_uses_explicit_booking_settings():

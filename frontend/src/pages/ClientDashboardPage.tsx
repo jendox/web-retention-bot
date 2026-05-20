@@ -1,27 +1,39 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Link, useNavigate } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { meApi } from '../api/auth'
-import { bookingsMyListApi, type BookingClientListItem } from '../api/bookings'
-import { clientsMyMastersApi } from '../api/clients'
+import { bookingsMyListApi, type BookingClientListItem, type BookingListScope } from '../api/bookings'
+import { clientsMyMastersApi, type ClientMyMasterItem } from '../api/clients'
 import {
   IconCalendar,
-  IconChevronRight,
   IconClipboard,
   IconOverview,
   IconUsers,
 } from '../components/layout/navIcons'
-import { blocksCalendar, BookingStatus, isBookingUpcoming } from '../lib/bookingStatus'
+import {
+  blocksCalendar,
+  BookingStatus,
+  bookingStatusBadgeClass,
+  bookingStatusLabel,
+  isBookingUpcoming,
+} from '../lib/bookingStatus'
+import { getUserFacingError } from '../lib/apiErrors'
 import { cn } from '../lib/forms'
+import { VisitBookingActions } from '../components/booking/VisitBookingActions'
+import { ClientBookingModal } from '../components/client/ClientBookingModal'
 import { ClientDemoBookingModal } from '../components/client/ClientDemoBookingModal'
+import { ClientVisitManageModal } from '../components/client/ClientVisitManageModal'
+import { useNotificationsUnreadCount } from '../components/notifications/NotificationsListSection'
+import { ListPagination } from '../components/ui/ListPagination'
+import { SegmentTabs } from '../components/ui/SegmentTabs'
+import { parsePage, parsePageSize, type PageSize } from '../lib/pagination'
+import { visitCardAccentClass } from '../lib/visitListCard'
 import {
   buildClientCabinetMocks,
   clientDashboardUsesMocks,
   type ClientMasterView,
-  type ClientNotificationMock,
   type MockBookableService,
-  type MockTelegramBotInfo,
 } from '../mocks/clientCabinetMocks'
 
 function isSameLocalDay(iso: string, ref: Date) {
@@ -58,29 +70,34 @@ function formatSlotShort(iso: string) {
   }).format(dt)
 }
 
-function formatRelativeDay(iso: string) {
-  const dt = new Date(iso)
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(dt)
-}
-
-const accentBar = ['border-l-teal-600', 'border-l-amber-500', 'border-l-rose-400', 'border-l-sky-500'] as const
-
 const EMPTY_BOOKINGS: BookingClientListItem[] = []
 const EMPTY_MASTERS: ClientMasterView[] = []
 
-type TabId = 'overview' | 'masters' | 'visits' | 'notifications' | 'help'
-type VisitFilter = 'upcoming' | 'past' | 'cancelled'
+type TabId = 'overview' | 'masters' | 'visits' | 'help'
+type VisitScope = 'upcoming' | 'past'
+
+const TAB_IDS: TabId[] = ['overview', 'masters', 'visits', 'help']
+
+function tabFromParams(params: URLSearchParams): TabId {
+  const raw = params.get('tab')
+  if (raw === 'notifications') {
+    return 'overview'
+  }
+  return TAB_IDS.includes(raw as TabId) ? (raw as TabId) : 'overview'
+}
+
+function visitScopeFromParams(params: URLSearchParams): VisitScope {
+  return params.get('visit_scope') === 'past' ? 'past' : 'upcoming'
+}
+
+function visitScopeToApi(scope: VisitScope): BookingListScope {
+  return scope === 'upcoming' ? 'upcoming' : 'history'
+}
 
 const tabs: { id: TabId; label: string }[] = [
   { id: 'overview', label: 'Обзор' },
   { id: 'masters', label: 'Мои мастера' },
   { id: 'visits', label: 'Записи' },
-  { id: 'notifications', label: 'Уведомления' },
   { id: 'help', label: 'Как это работает' },
 ]
 
@@ -108,90 +125,160 @@ function StatCard({ icon, value, label, sub, iconBg, iconColor }: StatProps) {
   )
 }
 
-function VisitRow({ b, i }: { b: BookingClientListItem; i: number }) {
+function VisitRow({
+  b,
+  i,
+  showActions,
+  onReschedule,
+  onCancel,
+}: {
+  b: BookingClientListItem
+  i: number
+  showActions?: boolean
+  onReschedule?: () => void
+  onCancel?: () => void
+}) {
   return (
-    <li
-      key={b.id}
-      className={cn(
-        'flex flex-col gap-1 rounded-lg border border-stone-100 bg-stone-50/80 py-3 pl-3 pr-3 sm:flex-row sm:items-center sm:gap-3 dark:border-stone-800 dark:bg-stone-950/40',
-        'border-l-4',
-        accentBar[i % accentBar.length],
-      )}
-    >
+    <li className={visitCardAccentClass(i, 'flex flex-col gap-2 py-3 pl-3 pr-3 sm:flex-row sm:items-center sm:gap-3')}>
       <div className="min-w-[7.5rem] shrink-0 text-xs font-medium text-stone-600 dark:text-stone-400">{formatSlotShort(b.start_at)}</div>
       <div className="min-w-0 flex-1">
         <p className="font-medium text-stone-900 dark:text-stone-100">{b.master_display_name}</p>
         <p className="text-xs text-stone-500 dark:text-stone-500">
           {b.service_name} · {b.duration_min} мин · {b.price_snapshot} {b.currency_snapshot}
-          {b.status === BookingStatus.CANCELLED ? (
-            <span className="ml-2 rounded-md bg-stone-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-stone-700 dark:bg-stone-700 dark:text-stone-200">
-              отменена
+          {b.status !== BookingStatus.SCHEDULED ? (
+            <span
+              className={cn(
+                'ml-2 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                bookingStatusBadgeClass(b.status),
+              )}
+            >
+              {bookingStatusLabel(b.status)}
             </span>
           ) : null}
         </p>
       </div>
+      {showActions && onReschedule && onCancel ? (
+        <VisitBookingActions
+          subjectLabel={`${b.master_display_name}, ${formatSlotShort(b.start_at)}`}
+          onReschedule={onReschedule}
+          onCancel={onCancel}
+        />
+      ) : null}
     </li>
   )
 }
 
-function computeVisitStats(bookings: BookingClientListItem[]) {
+function computeOverviewStats(upcomingItems: BookingClientListItem[], upcomingTotal: number) {
   const nowInner = new Date()
-  const scheduled = bookings.filter((b) => blocksCalendar(b.status))
-  const upcoming = scheduled
-    .filter((b) => isBookingUpcoming(b, nowInner))
-    .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
-  const next = upcoming[0]
+  const today = upcomingItems.filter((b) => isSameLocalDay(b.start_at, nowInner))
   const monthStart = startOfMonth(nowInner)
   const monthEnd = endOfMonth(nowInner)
-  const inMonth = scheduled.filter((b) => {
+  const inMonth = upcomingItems.filter((b) => {
     const t = new Date(b.start_at)
     return t >= monthStart && t <= monthEnd
   })
-  const today = scheduled.filter((b) => isSameLocalDay(b.start_at, nowInner))
-  const mastersUpcoming = new Set(upcoming.map((b) => b.master_id)).size
+  const mastersUpcoming = new Set(upcomingItems.map((b) => b.master_id)).size
+  const next = upcomingItems[0]
 
   return {
-    upcomingCount: upcoming.length,
+    upcomingCount: upcomingTotal,
     nextLabel: next ? formatSlotShort(next.start_at) : undefined,
     nextMaster: next?.master_display_name,
     nextBooking: next,
     monthCount: inMonth.length,
     todayCount: today.length,
     mastersUpcoming,
-    topUpcoming: upcoming.slice(0, 6),
-    totalScheduled: scheduled.length,
+    topUpcoming: upcomingItems.slice(0, 6),
   }
 }
 
 export function ClientDashboardPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
   const useMocks = clientDashboardUsesMocks()
   const mockBundle = useMemo(() => (useMocks ? buildClientCabinetMocks() : null), [useMocks])
 
-  const [tab, setTab] = useState<TabId>('overview')
-  const [visitFilter, setVisitFilter] = useState<VisitFilter>('upcoming')
+  const tab = tabFromParams(searchParams)
+  const visitScope = visitScopeFromParams(searchParams)
+  const visitPage = parsePage(searchParams.get('visit_page'))
+  const visitPageSize = parsePageSize(searchParams.get('visit_page_size'))
+
+  const setTab = (id: TabId) => {
+    setSearchParams((prev) => {
+      const n = new URLSearchParams(prev)
+      if (id === 'overview') {
+        n.delete('tab')
+      } else {
+        n.set('tab', id)
+      }
+      return n
+    })
+  }
+
+  const setVisitScope = (scope: VisitScope) => {
+    setSearchParams((prev) => {
+      const n = new URLSearchParams(prev)
+      n.set('tab', 'visits')
+      n.set('visit_scope', scope)
+      n.set('visit_page', '1')
+      n.set('visit_page_size', String(visitPageSize))
+      return n
+    })
+  }
+
+  const setVisitPage = (p: number) => {
+    setSearchParams((prev) => {
+      const n = new URLSearchParams(prev)
+      n.set('tab', 'visits')
+      n.set('visit_page', String(p))
+      n.set('visit_page_size', String(visitPageSize))
+      if (!n.get('visit_scope')) {
+        n.set('visit_scope', visitScope)
+      }
+      return n
+    })
+  }
+
+  const setVisitPageSize = (ps: PageSize) => {
+    setSearchParams((prev) => {
+      const n = new URLSearchParams(prev)
+      n.set('tab', 'visits')
+      n.set('visit_scope', visitScope)
+      n.set('visit_page', '1')
+      n.set('visit_page_size', String(ps))
+      return n
+    })
+  }
+
   const [masterSearch, setMasterSearch] = useState('')
-  const [inviteCopyHint, setInviteCopyHint] = useState(false)
   const [mockBookingExtras, setMockBookingExtras] = useState<BookingClientListItem[]>([])
   const [bookingModalOpen, setBookingModalOpen] = useState(false)
   const [bookingModalMasterId, setBookingModalMasterId] = useState<string | null>(null)
   const [bookingModalNonce, setBookingModalNonce] = useState(0)
   const [demoBookingNotice, setDemoBookingNotice] = useState(false)
-  const [demoTelegram, setDemoTelegram] = useState<{
-    linked: boolean
-    username: string | null
-    reminders: boolean
-  }>(() => ({
-    linked: false,
-    username: null,
-    reminders: true,
-  }))
+  const [visitManage, setVisitManage] = useState<{
+    booking: BookingClientListItem
+    mode: 'reschedule' | 'cancel'
+  } | null>(null)
+  const [bookingSuccessNotice, setBookingSuccessNotice] = useState(false)
 
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
-  const bookingsLive = useQuery({
-    queryKey: ['bookings', 'me'],
-    queryFn: bookingsMyListApi,
+  const bookingsOverview = useQuery({
+    queryKey: ['bookings', 'me', 'overview', 'upcoming'],
+    queryFn: () => bookingsMyListApi({ scope: 'upcoming', page: 1, page_size: 10 }),
     enabled: !useMocks && me.isSuccess,
+    retry: false,
+  })
+  const visitsLive = useQuery({
+    queryKey: ['bookings', 'me', visitScope, visitPage, visitPageSize],
+    queryFn: () =>
+      bookingsMyListApi({
+        scope: visitScopeToApi(visitScope),
+        page: visitPage,
+        page_size: visitPageSize,
+      }),
+    enabled: !useMocks && me.isSuccess && tab === 'visits',
     retry: false,
   })
   const myMastersLive = useQuery({
@@ -200,6 +287,21 @@ export function ClientDashboardPage() {
     enabled: !useMocks && me.isSuccess,
     retry: false,
   })
+  const invalidateCabinetData = () => {
+    void queryClient.invalidateQueries({ queryKey: ['bookings', 'me'] })
+    void queryClient.invalidateQueries({ queryKey: ['notifications', 'me'] })
+    void queryClient.invalidateQueries({ queryKey: ['availability'] })
+  }
+
+  useEffect(() => {
+    if (!visitsLive.isSuccess || !visitsLive.data) {
+      return
+    }
+    const totalPages = Math.max(1, Math.ceil(visitsLive.data.total / visitPageSize))
+    if (visitPage > totalPages) {
+      setVisitPage(totalPages)
+    }
+  }, [visitsLive.isSuccess, visitsLive.data, visitPage, visitPageSize])
 
   useEffect(() => {
     if (me.isError) {
@@ -207,37 +309,62 @@ export function ClientDashboardPage() {
     }
   }, [me.isError, navigate])
 
-  const bookingsLiveData = bookingsLive.data
+  useEffect(() => {
+    if (searchParams.get('tab') === 'notifications') {
+      navigate('/notifications', { replace: true })
+    }
+  }, [navigate, searchParams])
+
   const myMastersLiveData = myMastersLive.data
 
-  const bookings = useMemo(() => {
-    const base = useMocks ? (mockBundle?.bookings ?? EMPTY_BOOKINGS) : (bookingsLiveData ?? EMPTY_BOOKINGS)
-    if (!useMocks) {
-      return base
-    }
+  const mockBookings = useMemo(() => {
+    const base = mockBundle?.bookings ?? EMPTY_BOOKINGS
     return [...base, ...mockBookingExtras]
-  }, [bookingsLiveData, mockBookingExtras, mockBundle, useMocks])
+  }, [mockBookingExtras, mockBundle])
 
-  const masters = useMemo(() => {
+  const mockVisitsForScope = useMemo(() => {
+    const now = new Date()
+    if (visitScope === 'upcoming') {
+      return mockBookings.filter((b) => isBookingUpcoming(b, now))
+    }
+    return mockBookings.filter((b) => !isBookingUpcoming(b, now))
+  }, [mockBookings, visitScope])
+
+  const masters = useMemo((): ClientMasterView[] | ClientMyMasterItem[] => {
     if (useMocks) {
       return mockBundle?.masters ?? EMPTY_MASTERS
     }
-    return (myMastersLiveData ?? EMPTY_MASTERS) as ClientMasterView[]
+    return myMastersLiveData ?? EMPTY_MASTERS
   }, [mockBundle, myMastersLiveData, useMocks])
 
-  const notifications: ClientNotificationMock[] = useMocks ? (mockBundle?.notifications ?? []) : []
   const bookableServices: MockBookableService[] = useMocks ? (mockBundle?.bookableServices ?? []) : []
-  const telegramBot: MockTelegramBotInfo | undefined = mockBundle?.telegramBot
 
-  const openDemoBookingModal = (masterId: string | null) => {
+  const openBookingModal = (masterId: string | null) => {
     setBookingModalNonce((n) => n + 1)
     setBookingModalMasterId(masterId)
     setBookingModalOpen(true)
   }
 
-  const firstName = useMemo(() => me.data?.email?.split('@')[0] ?? 'Вы', [me.data?.email])
+  const canManageVisit = (b: BookingClientListItem) => isBookingUpcoming(b, new Date())
 
-  const stats = useMemo(() => computeVisitStats(bookings), [bookings])
+  const firstName = useMemo(() => {
+    const name = me.data?.client_display_name?.trim()
+    if (name) {
+      return name.split(/\s+/)[0] ?? name
+    }
+    return me.data?.email?.split('@')[0] ?? 'Вы'
+  }, [me.data?.client_display_name, me.data?.email])
+
+  const stats = useMemo(() => {
+    if (useMocks) {
+      return computeOverviewStats(
+        mockBookings.filter((b) => isBookingUpcoming(b, new Date())),
+        mockBookings.filter((b) => blocksCalendar(b.status)).length,
+      )
+    }
+    const items = (bookingsOverview.data?.items ?? []).slice(0, 6)
+    return computeOverviewStats(items, bookingsOverview.data?.total ?? 0)
+  }, [bookingsOverview.data, mockBookings, useMocks])
 
   const filteredMasters = useMemo(() => {
     const q = masterSearch.trim().toLowerCase()
@@ -247,33 +374,20 @@ export function ClientDashboardPage() {
     return masters.filter(
       (m) =>
         m.display_name.toLowerCase().includes(q) ||
-        m.client_display_name.toLowerCase().includes(q) ||
-        (m.alias?.toLowerCase().includes(q) ?? false),
+        (m.alias?.toLowerCase().includes(q) ?? false) ||
+        m.contact_email.toLowerCase().includes(q),
     )
   }, [masters, masterSearch])
 
-  const visitsForFilter = useMemo(() => {
-    const now = new Date()
-    const list = [...bookings]
-    if (visitFilter === 'upcoming') {
-      return list
-        .filter((b) => isBookingUpcoming(b, now))
-        .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
-    }
-    if (visitFilter === 'past') {
-      return list
-        .filter((b) => b.status !== BookingStatus.CANCELLED && !isBookingUpcoming(b, now))
-        .sort((a, b) => new Date(b.start_at).getTime() - new Date(a.start_at).getTime())
-    }
-    return list
-      .filter((b) => b.status === BookingStatus.CANCELLED)
-      .sort((a, b) => new Date(b.start_at).getTime() - new Date(a.start_at).getTime())
-  }, [bookings, visitFilter])
+  const visitItems = useMocks ? mockVisitsForScope : (visitsLive.data?.items ?? [])
+  const visitTotal = useMocks ? mockVisitsForScope.length : (visitsLive.data?.total ?? 0)
 
-  const dataLoading = !useMocks && (bookingsLive.isLoading || myMastersLive.isLoading)
-  const dataError = !useMocks && (bookingsLive.isError || myMastersLive.isError)
+  const overviewLoading = !useMocks && (bookingsOverview.isLoading || myMastersLive.isLoading)
+  const visitsLoading = !useMocks && visitsLive.isLoading
+  const dataError = !useMocks && (bookingsOverview.isError || myMastersLive.isError)
 
   const linkedMasterCount = masters.length
+  const unreadNotificationCount = useNotificationsUnreadCount(!useMocks && me.isSuccess)
 
   if (me.isLoading || !me.data) {
     return <p className="text-stone-500 dark:text-stone-400">Загрузка…</p>
@@ -299,30 +413,23 @@ export function ClientDashboardPage() {
           Личный кабинет: записи к мастерам и напоминания. Расписание студии и учёт клиентов — в режиме мастера.
         </p>
 
-        <div
-          role="tablist"
-          aria-label="Разделы личного кабинета"
-          className="flex flex-wrap gap-2 border-b border-stone-200 pb-2 dark:border-stone-700"
-        >
-          {tabs.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === t.id}
-              onClick={() => setTab(t.id)}
-              className={cn(
-                'rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                tab === t.id
-                  ? 'bg-teal-600 text-white shadow-sm shadow-teal-900/15 dark:bg-teal-500 dark:text-stone-950'
-                  : 'text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-800/70',
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <SegmentTabs
+          tabs={tabs.map((t) => ({ value: t.id, label: t.label }))}
+          value={tab}
+          onChange={setTab}
+          ariaLabel="Разделы личного кабинета"
+          className="flex-wrap"
+        />
       </header>
+
+      {bookingSuccessNotice ? (
+        <div
+          role="status"
+          className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-100"
+        >
+          Запись сохранена.
+        </div>
+      ) : null}
 
       {demoBookingNotice ? (
         <div
@@ -333,15 +440,32 @@ export function ClientDashboardPage() {
         </div>
       ) : null}
 
+      {!useMocks && !me.data.email_verified ? (
+        <div
+          role="status"
+          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
+        >
+          Подтвердите email по ссылке из письма — после этого станут доступны записи, уведомления и запись к мастеру.
+        </div>
+      ) : null}
+
       {!useMocks && dataError ? (
-        <p className="text-sm text-rose-600 dark:text-rose-300">Не удалось загрузить данные. Обновите страницу или попробуйте позже.</p>
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-200">
+          <p>Не удалось загрузить данные. Обновите страницу или попробуйте позже.</p>
+          {bookingsOverview.isError ? (
+            <p className="mt-1 text-xs opacity-90">Записи: {getUserFacingError(bookingsOverview.error)}</p>
+          ) : null}
+          {myMastersLive.isError ? (
+            <p className="mt-1 text-xs opacity-90">Мастера: {getUserFacingError(myMastersLive.error)}</p>
+          ) : null}
+        </div>
       ) : null}
 
       {tab === 'overview' ? (
         <div className="space-y-8">
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
-              value={dataLoading ? '—' : stats.upcomingCount}
+              value={overviewLoading ? '—' : stats.upcomingCount}
               label="Предстоящих визитов"
               sub={stats.nextLabel ? `Ближайший · ${stats.nextLabel}` : undefined}
               iconBg="bg-teal-100 dark:bg-teal-950/50"
@@ -349,7 +473,7 @@ export function ClientDashboardPage() {
               icon={<IconCalendar className="h-5 w-5 shrink-0 overflow-visible" />}
             />
             <StatCard
-              value={dataLoading ? '—' : linkedMasterCount}
+              value={overviewLoading ? '—' : linkedMasterCount}
               label="Мастеров в кабинете"
               sub={
                 stats.mastersUpcoming > 0
@@ -361,14 +485,14 @@ export function ClientDashboardPage() {
               icon={<IconUsers className="h-5 w-5 shrink-0 overflow-visible" />}
             />
             <StatCard
-              value={dataLoading ? '—' : stats.todayCount}
+              value={overviewLoading ? '—' : stats.todayCount}
               label="Записей сегодня"
               iconBg="bg-amber-100/90 dark:bg-amber-950/35"
               iconColor="text-amber-800 dark:text-amber-200"
               icon={<IconOverview className="h-5 w-5 shrink-0 overflow-visible" />}
             />
             <StatCard
-              value={dataLoading ? '—' : stats.monthCount}
+              value={overviewLoading ? '—' : stats.monthCount}
               label="В этом месяце"
               sub="Активные записи"
               iconBg="bg-violet-100/90 dark:bg-violet-950/40"
@@ -384,15 +508,30 @@ export function ClientDashboardPage() {
               <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">
                 {stats.nextBooking.service_name} · {formatSlotShort(stats.nextBooking.start_at)}
               </p>
-              <p className="mt-3 text-xs text-stone-500 dark:text-stone-400">
-                Перенос и отмена — по договорённости с мастером; самообслуживание появится позже.
-              </p>
+              {!useMocks && canManageVisit(stats.nextBooking) ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setVisitManage({ booking: stats.nextBooking!, mode: 'reschedule' })}
+                    className="rounded-lg border border-stone-200 px-3 py-1.5 text-xs font-medium hover:bg-white dark:border-stone-600 dark:hover:bg-stone-800"
+                  >
+                    Перенести
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVisitManage({ booking: stats.nextBooking!, mode: 'cancel' })}
+                    className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-800 dark:border-rose-900/50 dark:text-rose-300"
+                  >
+                    Отменить
+                  </button>
+                </div>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setTab('visits')}
                 className="mt-4 text-sm font-medium text-teal-800 underline decoration-teal-600/40 decoration-dotted hover:text-teal-900 dark:text-teal-300 dark:hover:text-teal-200"
               >
-                Все записи →
+                Все записи
               </button>
             </section>
           ) : null}
@@ -406,10 +545,10 @@ export function ClientDashboardPage() {
                   onClick={() => setTab('visits')}
                   className="text-sm font-medium text-teal-700 hover:text-teal-600 dark:text-teal-400 dark:hover:text-teal-300"
                 >
-                  Раздел «Записи» →
+                  Раздел «Записи»
                 </button>
               </div>
-              {dataLoading ? (
+              {overviewLoading ? (
                 <p className="text-sm text-stone-500 dark:text-stone-400">Загружаем записи…</p>
               ) : stats.topUpcoming.length === 0 ? (
                 <p className="text-sm text-stone-500 dark:text-stone-400">
@@ -427,15 +566,14 @@ export function ClientDashboardPage() {
             <div className="rounded-xl border border-stone-200/90 bg-white p-5 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80 lg:col-span-2">
               <h2 className="mb-4 text-lg font-semibold text-stone-900 dark:text-stone-50">Быстрые действия</h2>
               <ul className="space-y-1">
-                {useMocks ? (
+                {masters.length > 0 ? (
                   <li>
                     <button
                       type="button"
-                      onClick={() => openDemoBookingModal(null)}
-                      className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium text-stone-800 transition hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-stone-800/60"
+                      onClick={() => openBookingModal(null)}
+                      className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-stone-800 transition hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-stone-800/60"
                     >
-                      Записаться к мастеру (демо)
-                      <IconChevronRight className="h-4 w-4 text-stone-400" />
+                      {useMocks ? 'Записаться к мастеру (демо)' : 'Записаться к мастеру'}
                     </button>
                   </li>
                 ) : null}
@@ -443,70 +581,28 @@ export function ClientDashboardPage() {
                   <button
                     type="button"
                     onClick={() => setTab('masters')}
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium text-stone-800 transition hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-stone-800/60"
+                    className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-stone-800 transition hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-stone-800/60"
                   >
                     Мои мастера
-                    <IconChevronRight className="h-4 w-4 text-stone-400" />
                   </button>
                 </li>
                 <li>
-                  <button
-                    type="button"
-                    onClick={() => setTab('notifications')}
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium text-stone-800 transition hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-stone-800/60"
+                  <Link
+                    to="/notifications"
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-stone-800 transition hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-stone-800/60"
                   >
                     Уведомления
-                    <IconChevronRight className="h-4 w-4 text-stone-400" />
-                  </button>
-                </li>
-                <li>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const invite = sessionStorage.getItem('last_invite_url')
-                      if (invite) {
-                        try {
-                          await navigator.clipboard.writeText(invite)
-                          setInviteCopyHint(true)
-                          window.setTimeout(() => setInviteCopyHint(false), 2500)
-                        } catch {
-                          setInviteCopyHint(false)
-                        }
-                      }
-                    }}
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium text-stone-800 transition hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-stone-800/60"
-                  >
-                    Скопировать последнюю ссылку приглашения
-                    <IconChevronRight className="h-4 w-4 text-stone-400" />
-                  </button>
-                  <p className="px-3 pb-1 text-xs text-stone-500 dark:text-stone-400">
-                    Если вы открывали приглашение в этом браузере, URL мог сохраниться.
-                  </p>
-                  {inviteCopyHint ? (
-                    <p className="px-3 text-xs text-teal-700 dark:text-teal-300" role="status">
-                      Скопировано в буфер.
-                    </p>
-                  ) : null}
+                    {unreadNotificationCount > 0 ? (
+                      <span className="rounded-full bg-teal-600 px-2 py-0.5 text-[10px] font-semibold text-white dark:bg-teal-500 dark:text-stone-950">
+                        {unreadNotificationCount}
+                      </span>
+                    ) : null}
+                  </Link>
                 </li>
                 <li className="rounded-lg border border-dashed border-stone-200 px-3 py-3 text-xs text-stone-500 dark:border-stone-600 dark:text-stone-400">
                   Нужна помощь по шагам — откройте вкладку «Как это работает».
                 </li>
               </ul>
-            </div>
-          </section>
-
-          <section className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-stone-200/90 bg-white p-5 dark:border-stone-700/90 dark:bg-stone-900/80">
-              <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Учётная запись</p>
-              <p className="mt-2 text-lg font-semibold text-stone-900 dark:text-stone-50">{me.data.email}</p>
-              <p className="mt-1 text-xs text-stone-500">
-                {me.data.email_verified ? 'Email подтверждён' : 'Подтвердите email'}
-              </p>
-            </div>
-            <div className="rounded-xl border border-stone-200/90 bg-white p-5 dark:border-stone-700/90 dark:bg-stone-900/80">
-              <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Визиты</p>
-              <p className="mt-2 text-lg font-semibold text-stone-900 dark:text-stone-50">{stats.totalScheduled}</p>
-              <p className="mt-1 text-xs text-stone-500">Всего активных записей в списке (не отменённые).</p>
             </div>
           </section>
         </div>
@@ -521,12 +617,12 @@ export function ClientDashboardPage() {
               <input
                 value={masterSearch}
                 onChange={(e) => setMasterSearch(e.target.value)}
-                placeholder="Поиск по имени мастера или карточке"
+                placeholder="Поиск по имени мастера"
                 className="w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-900 shadow-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-100"
               />
             </label>
           </div>
-          {dataLoading ? (
+          {overviewLoading ? (
             <p className="text-sm text-stone-500 dark:text-stone-400">Загружаем…</p>
           ) : filteredMasters.length === 0 ? (
             <p className="text-sm text-stone-500 dark:text-stone-400">
@@ -555,24 +651,20 @@ export function ClientDashboardPage() {
                   {m.alias ? (
                     <p className="text-sm text-stone-600 dark:text-stone-400">Как вас зовут у мастера: {m.alias}</p>
                   ) : null}
-                  <p className="text-xs text-stone-500 dark:text-stone-400">Карточка: {m.client_display_name}</p>
-                  {m.contact_hint ? (
-                    <p className="text-xs text-stone-600 dark:text-stone-300">{m.contact_hint}</p>
-                  ) : (
-                    <p className="text-xs text-stone-500 dark:text-stone-400">Связь — по контактам из напоминания или уточните у мастера.</p>
-                  )}
+                  <p className="text-sm text-stone-600 dark:text-stone-300">
+                    <span className="text-stone-500 dark:text-stone-400">Email: </span>
+                    <a
+                      href={`mailto:${m.contact_email}`}
+                      className="font-medium text-teal-800 hover:underline dark:text-teal-300"
+                    >
+                      {m.contact_email}
+                    </a>
+                  </p>
                   <div className="flex flex-wrap gap-2 pt-1">
                     <button
                       type="button"
-                      disabled={!useMocks}
-                      onClick={() => openDemoBookingModal(m.master_id)}
-                      className={cn(
-                        'rounded-lg px-3 py-1.5 text-xs font-medium',
-                        useMocks
-                          ? 'border border-teal-600 bg-teal-600 text-white hover:bg-teal-500 dark:bg-teal-500 dark:text-stone-950 dark:hover:bg-teal-400'
-                          : 'cursor-not-allowed border border-stone-200 text-stone-400 dark:border-stone-600',
-                      )}
-                      title={!useMocks ? 'Доступно в демо-режиме кабинета' : undefined}
+                      onClick={() => openBookingModal(m.master_id)}
+                      className="rounded-lg border border-teal-600 bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-500 dark:bg-teal-500 dark:text-stone-950 dark:hover:bg-teal-400"
                     >
                       Записаться
                     </button>
@@ -594,168 +686,48 @@ export function ClientDashboardPage() {
 
       {tab === 'visits' ? (
         <section className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            {(
-              [
-                { id: 'upcoming' as const, label: 'Предстоящие' },
-                { id: 'past' as const, label: 'Прошедшие' },
-                { id: 'cancelled' as const, label: 'Отменённые' },
-              ] satisfies { id: VisitFilter; label: string }[]
-            ).map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setVisitFilter(f.id)}
-                className={cn(
-                  'rounded-full px-3 py-1.5 text-sm font-medium transition-colors',
-                  visitFilter === f.id
-                    ? 'bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900'
-                    : 'bg-stone-100 text-stone-600 hover:bg-stone-200 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700',
-                )}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-          {dataLoading ? (
+          <SegmentTabs
+            tabs={[
+              { value: 'upcoming', label: 'Предстоящие' },
+              { value: 'past', label: 'Прошедшие' },
+            ]}
+            value={visitScope}
+            onChange={setVisitScope}
+            ariaLabel="Фильтр записей"
+          />
+          <p className="text-sm text-stone-500 dark:text-stone-400">
+            {visitScope === 'past'
+              ? 'Завершённые, отменённые и прошедшие визиты. Отменённые отмечены в списке.'
+              : 'Активные записи, которые ещё предстоят.'}
+          </p>
+          {visitsLoading ? (
             <p className="text-sm text-stone-500 dark:text-stone-400">Загружаем записи…</p>
-          ) : visitsForFilter.length === 0 ? (
+          ) : visitItems.length === 0 ? (
             <p className="text-sm text-stone-500 dark:text-stone-400">В этой категории пока пусто.</p>
           ) : (
-            <ul className="space-y-2">
-              {visitsForFilter.map((b, i) => (
-                <VisitRow key={b.id} b={b} i={i} />
-              ))}
-            </ul>
-          )}
-        </section>
-      ) : null}
-
-      {tab === 'notifications' ? (
-        <section className="space-y-6">
-          <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-50">Уведомления</h2>
-
-          {useMocks && telegramBot ? (
-            <div className="rounded-xl border border-sky-200/90 bg-gradient-to-br from-sky-50/90 to-white p-5 shadow-sm dark:border-sky-900/40 dark:from-sky-950/30 dark:to-stone-900/80">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-sky-800 dark:text-sky-200">Telegram</p>
-                  <h3 className="mt-1 text-base font-semibold text-stone-900 dark:text-stone-50">Бот для напоминаний</h3>
-                  <p className="mt-2 max-w-xl text-sm text-stone-600 dark:text-stone-400">
-                    Чтобы получать уведомления в Telegram, нужен бот сервиса: он отправляет сообщения от своего имени. Вы один раз
-                    открываете бота и нажимаете Start — так мы узнаём ваш чат и сможем слать напоминания о записях.
-                  </p>
-                </div>
-              </div>
-
-              {!demoTelegram.linked ? (
-                <div className="mt-4 space-y-4 border-t border-sky-100 pt-4 dark:border-sky-900/40">
-                  <ol className="list-decimal space-y-2 pl-5 text-sm text-stone-600 dark:text-stone-400">
-                    <li>
-                      Откройте бота по ссылке и нажмите <span className="font-medium text-stone-800 dark:text-stone-200">Start</span>.
-                    </li>
-                    <li>Вернитесь сюда и подтвердите привязку — в продукте шаг подтвердится автоматически после ответа бота.</li>
-                  </ol>
-                  <div className="flex flex-wrap gap-2">
-                    <a
-                      href={telegramBot.deep_link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 dark:bg-sky-500 dark:text-stone-950 dark:hover:bg-sky-400"
-                    >
-                      Открыть @{telegramBot.username}
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setDemoTelegram((prev) => ({
-                          ...prev,
-                          linked: true,
-                          username: '@demo_elena_linked',
-                        }))
-                      }
-                      className="rounded-lg border border-stone-200 bg-white px-4 py-2 text-sm font-medium text-stone-800 hover:bg-stone-50 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100 dark:hover:bg-stone-800"
-                    >
-                      Я нажала Start (имитация привязки)
-                    </button>
-                  </div>
-                  <p className="text-xs text-stone-500 dark:text-stone-400">
-                    Ссылка и бот вымышленные — для демонстрации интерфейса.
-                  </p>
-                </div>
-              ) : (
-                <div className="mt-4 space-y-4 border-t border-sky-100 pt-4 dark:border-sky-900/40">
-                  <p className="text-sm text-stone-700 dark:text-stone-300">
-                    Привязано:{' '}
-                    <span className="font-mono font-medium text-stone-900 dark:text-stone-50">{demoTelegram.username}</span>
-                  </p>
-                  <label className="flex cursor-pointer items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={demoTelegram.reminders}
-                      onChange={(e) => setDemoTelegram((prev) => ({ ...prev, reminders: e.target.checked }))}
-                      className="mt-1 h-4 w-4 rounded border-stone-300 text-teal-600 focus:ring-teal-500"
-                    />
-                    <span className="text-sm text-stone-600 dark:text-stone-400">
-                      <span className="font-medium text-stone-900 dark:text-stone-100">Напоминания о визитах</span>
-                      <span className="block text-xs text-stone-500 dark:text-stone-500">За сутки и за два часа до записи (как в продукте).</span>
-                    </span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDemoTelegram({
-                        linked: false,
-                        username: null,
-                        reminders: true,
-                      })
-                    }
-                    className="text-sm font-medium text-rose-700 hover:underline dark:text-rose-400"
-                  >
-                    Отвязать Telegram
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : null}
-
-          {!useMocks ? (
-            <div className="rounded-xl border border-dashed border-stone-300 bg-white/80 p-6 dark:border-stone-600 dark:bg-stone-900/60">
-              <p className="text-sm text-stone-600 dark:text-stone-400">
-                Лента уведомлений в приложении появится позже. Сейчас важные сообщения приходят на email.
-              </p>
-              <Link
-                to="/settings"
-                className="mt-4 inline-flex text-sm font-medium text-teal-700 hover:text-teal-600 dark:text-teal-400"
-              >
-                Настройки почты →
-              </Link>
-            </div>
-          ) : notifications.length === 0 ? (
-            <p className="text-sm text-stone-500 dark:text-stone-400">В демо-ленте пока нет записей.</p>
-          ) : (
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-stone-700 dark:text-stone-300">Лента</h3>
-            <ul className="space-y-2">
-              {notifications.map((n) => (
-                <li
-                  key={n.id}
-                  className={cn(
-                    'rounded-xl border border-stone-100 bg-white px-4 py-3 shadow-sm dark:border-stone-800 dark:bg-stone-900/80',
-                    n.unread ? 'ring-1 ring-teal-500/25' : '',
-                  )}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <p className="font-medium text-stone-900 dark:text-stone-50">{n.title}</p>
-                    <time className="text-xs text-stone-500 dark:text-stone-400" dateTime={n.created_at}>
-                      {formatRelativeDay(n.created_at)}
-                    </time>
-                  </div>
-                  <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">{n.body}</p>
-                </li>
-              ))}
-            </ul>
-            </div>
+            <>
+              <ul className="space-y-2">
+                {visitItems.map((b, i) => (
+                  <VisitRow
+                    key={b.id}
+                    b={b}
+                    i={i}
+                    showActions={!useMocks && visitScope === 'upcoming' && canManageVisit(b)}
+                    onReschedule={() => setVisitManage({ booking: b, mode: 'reschedule' })}
+                    onCancel={() => setVisitManage({ booking: b, mode: 'cancel' })}
+                  />
+                ))}
+              </ul>
+              {!useMocks && visitTotal > 0 ? (
+                <ListPagination
+                  page={visitPage}
+                  pageSize={visitPageSize}
+                  total={visitTotal}
+                  onPageChange={setVisitPage}
+                  onPageSizeChange={setVisitPageSize}
+                />
+              ) : null}
+            </>
           )}
         </section>
       ) : null}
@@ -773,12 +745,12 @@ export function ClientDashboardPage() {
               вкладке «Мои мастера» или через быстрое действие на обзоре; в продакшене слоты проверяются по расписанию мастера.
             </li>
             <li>
-              <span className="font-medium text-stone-800 dark:text-stone-200">Напоминания.</span> Письма на email и, при
-              подключении, сообщения от Telegram-бота сервиса (во вкладке «Уведомления» — блок про бота).
+              <span className="font-medium text-stone-800 dark:text-stone-200">Напоминания.</span> Письма на email и лента в разделе
+              «Уведомления» в меню слева.
             </li>
             <li>
-              <span className="font-medium text-stone-800 dark:text-stone-200">Изменения.</span> Перенос и отмена пока
-              согласуются напрямую с мастером; онлайн-самообслуживание запланировано отдельно.
+              <span className="font-medium text-stone-800 dark:text-stone-200">Изменения.</span> Предстоящие записи можно
+              перенести или отменить во вкладке «Записи»; отменённые попадают в «Прошедшие».
             </li>
           </ol>
           <p className="text-xs text-stone-500 dark:text-stone-400">
@@ -787,18 +759,44 @@ export function ClientDashboardPage() {
         </section>
       ) : null}
 
-      {useMocks && bookingModalOpen ? (
+      {bookingModalOpen && useMocks ? (
         <ClientDemoBookingModal
           key={bookingModalNonce}
           onClose={() => setBookingModalOpen(false)}
-          masters={masters}
+          masters={masters as ClientMasterView[]}
           services={bookableServices}
-          existingBookings={bookings}
+          existingBookings={mockBookings}
           initialMasterId={bookingModalMasterId}
           onConfirm={(b) => {
             setMockBookingExtras((prev) => [...prev, b])
             setDemoBookingNotice(true)
             window.setTimeout(() => setDemoBookingNotice(false), 4500)
+          }}
+        />
+      ) : null}
+
+      {bookingModalOpen && !useMocks && masters.length > 0 ? (
+        <ClientBookingModal
+          key={bookingModalNonce}
+          onClose={() => setBookingModalOpen(false)}
+          masters={masters as ClientMyMasterItem[]}
+          initialMasterId={bookingModalMasterId}
+          onSuccess={() => {
+            invalidateCabinetData()
+            setBookingSuccessNotice(true)
+            window.setTimeout(() => setBookingSuccessNotice(false), 4500)
+          }}
+        />
+      ) : null}
+
+      {visitManage && !useMocks ? (
+        <ClientVisitManageModal
+          booking={visitManage.booking}
+          mode={visitManage.mode}
+          onClose={() => setVisitManage(null)}
+          onSuccess={() => {
+            invalidateCabinetData()
+            setVisitManage(null)
           }}
         />
       ) : null}

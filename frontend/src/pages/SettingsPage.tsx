@@ -20,12 +20,19 @@ type FormState = {
   currency: string
   clientDisplayName: string
   clientPhone: string
-  locale: string
   notificationsEmail: boolean
   remindersEmail: boolean
 }
 
-function initials(email: string) {
+function profileInitials(displayName: string | null | undefined, email: string) {
+  const name = displayName?.trim()
+  if (name) {
+    const parts = name.split(/\s+/).filter(Boolean)
+    if (parts.length >= 2) {
+      return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase()
+    }
+    return name.slice(0, 2).toUpperCase()
+  }
   return email.slice(0, 2).toUpperCase()
 }
 
@@ -37,19 +44,20 @@ export function SettingsPage() {
   const [saved, setSaved] = useState(false)
 
   const email = me.data?.email ?? ''
+  const clientDisplayName = me.data?.client_display_name?.trim() ?? ''
+  const clientPhone = me.data?.client_phone?.trim() ?? ''
   const defaultState = useMemo<FormState>(
     () => ({
       masterDisplayName: master.data?.display_name ?? '',
       publicSlug: master.data?.public_slug ?? '',
       timezone: master.data?.timezone ?? 'Europe/Minsk',
       currency: master.data?.default_currency ?? 'BYN',
-      clientDisplayName: email.split('@')[0] || 'Клиент',
-      clientPhone: '',
-      locale: 'ru',
+      clientDisplayName,
+      clientPhone,
       notificationsEmail: true,
       remindersEmail: true,
     }),
-    [email, master.data],
+    [clientDisplayName, clientPhone, email, master.data],
   )
   const [draft, setDraft] = useState<Partial<FormState>>({})
   const form = { ...defaultState, ...draft }
@@ -102,30 +110,17 @@ export function SettingsPage() {
         <section className="rounded-2xl border border-stone-200/90 bg-white p-6 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-teal-600 text-sm font-semibold text-white">
-              {initials(email)}
+              {profileInitials(me.data.client_display_name, email)}
             </div>
             <div className="min-w-0">
               <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Аккаунт</h2>
               <p className="truncate text-sm text-stone-500 dark:text-stone-400">{email}</p>
             </div>
           </div>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Email для входа</span>
-              <input value={email} readOnly className={cn(fieldClass, readOnlyFieldClass, 'mt-1')} />
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Язык интерфейса</span>
-              <select
-                value={form.locale}
-                onChange={(e) => setDraft((prev) => ({ ...prev, locale: e.target.value }))}
-                className={cn(fieldClass, 'mt-1')}
-              >
-                <option value="ru">Русский</option>
-                <option value="en">English</option>
-              </select>
-            </label>
-          </div>
+          <label className="mt-5 block">
+            <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Email для входа</span>
+            <input value={email} readOnly className={cn(fieldClass, readOnlyFieldClass, 'mt-1')} />
+          </label>
         </section>
 
         {!isClientOnly ? (
@@ -184,24 +179,26 @@ export function SettingsPage() {
         <section className="rounded-2xl border border-stone-200/90 bg-white p-6 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
           <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Профиль клиента</h2>
           <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-            Эти данные пригодятся при записи к мастерам и уведомлениях.
+            Имя и телефон из вашей карточки у мастера. Редактирование на сервере появится позже.
           </p>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Имя клиента</span>
+              <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Имя</span>
               <input
                 value={form.clientDisplayName}
-                onChange={(e) => setDraft((prev) => ({ ...prev, clientDisplayName: e.target.value }))}
-                className={cn(fieldClass, 'mt-1')}
+                readOnly
+                className={cn(fieldClass, readOnlyFieldClass, 'mt-1')}
+                placeholder="Укажите при принятии приглашения"
               />
             </label>
             <label className="block">
               <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Телефон</span>
               <input
                 value={form.clientPhone}
-                onChange={(e) => setDraft((prev) => ({ ...prev, clientPhone: e.target.value }))}
+                readOnly
                 type="tel"
-                className={cn(fieldClass, 'mt-1')}
+                className={cn(fieldClass, readOnlyFieldClass, 'mt-1')}
+                placeholder="Не указан"
               />
             </label>
           </div>

@@ -1,8 +1,10 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_user
+from app.core.database import get_db_session
 from app.core.verification_token import EmailVerificationTokenError
 from app.models.user import User
 from app.schemas.auth import (
@@ -13,7 +15,8 @@ from app.schemas.auth import (
     VerifyEmailPayload,
 )
 from app.schemas.errors import ErrorDetail
-from app.schemas.user import UserSchema
+from app.repositories.clients import ClientRepository
+from app.schemas.user import UserMeOut, UserSchema
 from app.services.notifications.dispatcher import (
     NotificationDispatcher,
     get_notification_dispatcher,
@@ -207,7 +210,7 @@ async def login(
         "`/auth/login` or `/auth/verify-email`. Responds with 401 if there is no valid session, and 403 if the "
         "user’s email is not verified."
     ),
-    response_model=UserSchema,
+    response_model=UserMeOut,
     response_description="Profile for the session user.",
     responses={
         status.HTTP_401_UNAUTHORIZED: {
@@ -220,8 +223,17 @@ async def login(
         },
     },
 )
-async def me(current: Annotated[User, Depends(require_user)]) -> UserSchema:
-    return UserSchema.model_validate(current)
+async def me(
+    current: Annotated[User, Depends(require_user)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> UserMeOut:
+    base = UserSchema.model_validate(current)
+    client = await ClientRepository(session).primary_client_profile_for_user(current.id)
+    return UserMeOut(
+        **base.model_dump(),
+        client_display_name=client.display_name if client else None,
+        client_phone=client.phone if client else None,
+    )
 
 
 @router.post(

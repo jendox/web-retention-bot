@@ -19,6 +19,14 @@ class BookingCreate(BaseModel):
     start_at: datetime
 
 
+class ClientBookingCreate(BaseModel):
+    """Client self-service booking against a linked master."""
+
+    master_id: UUID
+    service_id: UUID
+    start_at: datetime
+
+
 class BookingOut(BaseModel):
     id: UUID
     master_id: UUID

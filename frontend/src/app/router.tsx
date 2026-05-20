@@ -14,6 +14,7 @@ import { PendingVerificationPage } from '../pages/PendingVerificationPage'
 import { RegisterPage } from '../pages/RegisterPage'
 import { SchedulePage } from '../pages/SchedulePage'
 import { ServicesPage } from '../pages/ServicesPage'
+import { NotificationsPage } from '../pages/NotificationsPage'
 import { SettingsPage } from '../pages/SettingsPage'
 import { VerifyEmailPage } from '../pages/VerifyEmailPage'
 
@@ -35,6 +36,7 @@ export function AppRouter() {
       <Route element={<AppLayout />}>
         <Route path="/client" element={<ClientDashboardPage />} />
         <Route path="/my-visits" element={<Navigate to="/client" replace />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route element={<RequireMasterOutlet />}>
           <Route path="/dashboard" element={<DashboardPage />} />

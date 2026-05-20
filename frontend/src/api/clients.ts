@@ -1,4 +1,5 @@
 import { apiFetch } from './client'
+import type { Service } from './services'
 
 export type ClientBookingStats = {
   no_show_count: number
@@ -40,10 +41,15 @@ export type ClientMyMasterItem = {
   client_id: string
   client_display_name: string
   alias: string | null
+  contact_email: string
 }
 
 export async function clientsMyMastersApi() {
   return apiFetch<ClientMyMasterItem[]>('/api/clients/me/masters')
+}
+
+export async function clientsMyMasterServicesApi(masterId: string) {
+  return apiFetch<Service[]>(`/api/clients/me/masters/${masterId}/services`)
 }
 
 export async function clientsListApi(params?: { page?: number; page_size?: number; q?: string }) {

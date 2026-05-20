@@ -15,14 +15,20 @@ from app.repositories.clients import ClientRepository
 from app.schemas.client import ClientCreate, ClientMyMasterItem, ClientUpdate, ClientWithLinkResponse
 from app.schemas.errors import ErrorDetail
 from app.schemas.pagination import PaginatedResponse
+from app.schemas.service import ServiceSchema
 from app.use_cases.clients.create_client import CreateClientUseCase, get_create_client_use_case
 from app.use_cases.clients.delete_client import DeleteClientUseCase, get_delete_client_use_case
 from app.use_cases.clients.exceptions import (
     ClientEmailLockedError,
     ClientHasBlockingRelationsError,
+    ClientMasterLinkError,
     ClientNameLockedError,
     ClientNotFoundError,
     ClientNothingToUpdateError,
+)
+from app.use_cases.clients.list_master_services import (
+    ListMasterServicesForClientUseCase,
+    get_list_master_services_for_client_use_case,
 )
 from app.use_cases.clients.get_client import GetClientUseCase, get_get_client_use_case
 from app.use_cases.clients.list_clients import ListClientsUseCase, get_list_clients_use_case
@@ -58,9 +64,34 @@ async def list_my_masters(
                 client_id=client.id,
                 client_display_name=client.display_name,
                 alias=link.alias,
+                contact_email=master.user.email,
             ),
         )
     return out
+
+
+@router.get(
+    "/me/masters/{master_id}/services",
+    summary="Active services for a linked master (client view)",
+    response_model=list[ServiceSchema],
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail},
+        status.HTTP_403_FORBIDDEN: {"model": ErrorDetail},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorDetail, "description": "Not linked to this master."},
+    },
+)
+async def list_master_services_for_client(
+    master_id: UUID,
+    user: Annotated[User, Depends(require_user)],
+    use_case: Annotated[
+        ListMasterServicesForClientUseCase,
+        Depends(get_list_master_services_for_client_use_case),
+    ],
+) -> list[ServiceSchema]:
+    try:
+        return await use_case(user, master_id)
+    except ClientMasterLinkError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.error_message) from None
 
 
 def _blocking_delete_detail(exc: ClientHasBlockingRelationsError) -> str:

@@ -140,6 +140,16 @@ class BookingRepository(BaseRepository):
         rows = await self.session.execute(stmt)
         return rows.scalar_one_or_none()
 
+    async def get_for_user(self, booking_id: UUID, user_id: UUID) -> Booking | None:
+        stmt = (
+            select(Booking)
+            .join(Client, Booking.client_id == Client.id)
+            .where(Booking.id == booking_id, Client.user_id == user_id)
+            .limit(1)
+        )
+        rows = await self.session.execute(stmt)
+        return rows.scalar_one_or_none()
+
     async def active_between(
         self,
         master_id: UUID,
@@ -195,15 +205,42 @@ class BookingRepository(BaseRepository):
         rows = await self.session.execute(stmt)
         return {client_id: int(count) for client_id, count in rows.all()}
 
-    async def list_with_details_for_linked_user(self, user_id: UUID) -> list[tuple[Booking, str, str]]:
-        stmt = (
+    def _client_bookings_base(self, user_id: UUID):
+        return (
             select(Booking, MasterProfile.display_name, Service.name)
             .join(Client, Booking.client_id == Client.id)
             .join(MasterProfile, Booking.master_id == MasterProfile.id)
             .join(Service, Booking.service_id == Service.id)
             .where(Client.user_id == user_id)
-            .order_by(Booking.start_at.asc())
-            .limit(500)
+        )
+
+    async def count_for_client_user(self, user_id: UUID, *, scope: BookingListScope) -> int:
+        now = datetime.now(UTC)
+        stmt = (
+            select(func.count())
+            .select_from(Booking)
+            .join(Client, Booking.client_id == Client.id)
+            .where(Client.user_id == user_id, _scope_clause(scope, now))
+        )
+        result = await self.session.execute(stmt)
+        return int(result.scalar_one())
+
+    async def list_for_client_user_page(
+        self,
+        user_id: UUID,
+        *,
+        scope: BookingListScope,
+        limit: int,
+        offset: int,
+    ) -> list[tuple[Booking, str, str]]:
+        now = datetime.now(UTC)
+        order = Booking.start_at.asc() if scope == BookingListScope.UPCOMING else Booking.start_at.desc()
+        stmt = (
+            self._client_bookings_base(user_id)
+            .where(_scope_clause(scope, now))
+            .order_by(order)
+            .limit(limit)
+            .offset(offset)
         )
         rows = await self.session.execute(stmt)
         return [(row[0], row[1], row[2]) for row in rows.all()]

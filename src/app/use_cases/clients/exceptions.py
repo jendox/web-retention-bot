@@ -1,5 +1,7 @@
 """Client use case exceptions."""
 
+from fastapi import status
+
 
 class ClientNotFoundError(Exception):
     """No client for this master or client id does not exist."""
@@ -23,3 +25,8 @@ class ClientHasBlockingRelationsError(Exception):
     def __init__(self, *, reason: str) -> None:
         super().__init__(reason)
         self.reason = reason
+
+
+class ClientMasterLinkError(Exception):
+    status_code = status.HTTP_404_NOT_FOUND
+    error_message = "Not linked to this master"

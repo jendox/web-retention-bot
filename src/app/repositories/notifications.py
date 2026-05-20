@@ -4,7 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -67,6 +67,50 @@ class UserNotificationRepository(BaseRepository):
         self.session.add(notification_entity)
         await self.session.flush()
         return notification_entity
+
+    async def count_for_user(self, user_id: UUID) -> int:
+        stmt = select(func.count()).select_from(UserNotification).where(
+            UserNotification.recipient_user_id == user_id,
+        )
+        result = await self.session.execute(stmt)
+        return int(result.scalar_one())
+
+    async def list_for_user_page(
+        self,
+        user_id: UUID,
+        *,
+        limit: int,
+        offset: int,
+    ) -> list[UserNotification]:
+        stmt = (
+            select(UserNotification)
+            .where(UserNotification.recipient_user_id == user_id)
+            .order_by(UserNotification.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        rows = await self.session.execute(stmt)
+        return list(rows.scalars())
+
+    async def get_for_user(self, notification_id: UUID, user_id: UUID) -> UserNotification | None:
+        stmt = (
+            select(UserNotification)
+            .where(
+                UserNotification.id == notification_id,
+                UserNotification.recipient_user_id == user_id,
+            )
+            .limit(1)
+        )
+        row = await self.session.execute(stmt)
+        return row.scalar_one_or_none()
+
+    async def count_unread_for_user(self, user_id: UUID) -> int:
+        stmt = select(func.count()).select_from(UserNotification).where(
+            UserNotification.recipient_user_id == user_id,
+            UserNotification.read_at.is_(None),
+        )
+        result = await self.session.execute(stmt)
+        return int(result.scalar_one())
 
 
 class NotificationDeliveryRepository(BaseRepository):

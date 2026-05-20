@@ -1,9 +1,7 @@
 import type { BookingClientListItem } from '../api/bookings'
 import type { ClientMyMasterItem } from '../api/clients'
 
-export type ClientMasterView = ClientMyMasterItem & {
-  contact_hint?: string
-}
+export type ClientMasterView = ClientMyMasterItem
 
 export type ClientNotificationMock = {
   id: string
@@ -208,7 +206,7 @@ export function buildClientCabinetMocks(now = new Date()) {
       client_id: 'mock-client-self',
       client_display_name: 'Елена Волкова',
       alias: 'Лена',
-      contact_hint: 'Telegram @liniya_book · ответ в течение рабочего дня',
+      contact_email: 'studio.liniya@example.com',
     },
     {
       master_id: 'mock-master-2',
@@ -219,7 +217,7 @@ export function buildClientCabinetMocks(now = new Date()) {
       client_id: 'mock-client-self',
       client_display_name: 'Елена Волкова',
       alias: null,
-      contact_hint: 'WhatsApp по номеру из напоминания о записи',
+      contact_email: 'irina.lebedeva@example.com',
     },
   ]
 
@@ -291,6 +289,7 @@ export function buildClientCabinetMocks(now = new Date()) {
   }
 }
 
+/** Real API by default; set VITE_CLIENT_DASHBOARD_USE_MOCKS=true for offline UI demo. */
 export function clientDashboardUsesMocks() {
-  return import.meta.env.VITE_CLIENT_DASHBOARD_USE_API !== 'true'
+  return import.meta.env.VITE_CLIENT_DASHBOARD_USE_MOCKS === 'true'
 }

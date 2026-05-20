@@ -6,6 +6,7 @@ import { meApi } from '../api/auth'
 import { ApiError } from '../api/client'
 import { getScheduleApi, putScheduleApi, type SchedulePayload } from '../api/masters'
 import { getUserFacingError } from '../lib/apiErrors'
+import { SegmentTabs } from '../components/ui/SegmentTabs'
 import { cn } from '../lib/forms'
 import { queryClient } from '../lib/query'
 
@@ -484,26 +485,14 @@ export function SchedulePage() {
       ) : null}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="inline-flex rounded-xl border border-stone-200 bg-white p-1 shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
-          {[
-            ['calendar', 'Календарь'],
-            ['template', 'Шаблон недели'],
-          ].map(([tab, label]) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab as ScheduleTab)}
-              className={cn(
-                'rounded-lg px-4 py-2 text-sm font-medium transition',
-                activeTab === tab
-                  ? 'bg-teal-100 text-teal-900 dark:bg-teal-950/60 dark:text-teal-100'
-                  : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-stone-800 dark:hover:text-stone-50',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <SegmentTabs
+          tabs={[
+            { value: 'calendar', label: 'Календарь' },
+            { value: 'template', label: 'Шаблон недели' },
+          ]}
+          value={activeTab}
+          onChange={setActiveTab}
+        />
         <button
           type="button"
           onClick={() => save.mutate()}

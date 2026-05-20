@@ -8,10 +8,11 @@ import { clientsListApi } from '../api/clients'
 import { invitationsCreateApi } from '../api/invitations'
 import { useMasterMe } from '../hooks/useMasterMe'
 import { servicesListApi } from '../api/services'
-import { IconBriefcase, IconChevronRight, IconClipboard, IconUsers } from '../components/layout/navIcons'
+import { IconBriefcase, IconClipboard, IconUsers } from '../components/layout/navIcons'
 import { blocksCalendar } from '../lib/bookingStatus'
 import { cn } from '../lib/forms'
 import { ALLOWED_PAGE_SIZES } from '../lib/pagination'
+import { visitCardAccentClass } from '../lib/visitListCard'
 
 function isSameLocalDay(iso: string, ref: Date) {
   const d = new Date(iso)
@@ -48,8 +49,6 @@ function formatSlotShort(iso: string) {
     minute: '2-digit',
   }).format(dt)
 }
-
-const accentBar = ['border-l-teal-600', 'border-l-amber-500', 'border-l-rose-400', 'border-l-sky-500'] as const
 
 type StatProps = {
   icon: ReactNode
@@ -290,7 +289,7 @@ export function DashboardPage() {
               to="/bookings"
               className="text-sm font-medium text-teal-700 hover:text-teal-600 dark:text-teal-400 dark:hover:text-teal-300"
             >
-              Записи →
+              Записи
             </Link>
           </div>
           {stats.upcoming.length === 0 ? (
@@ -298,14 +297,7 @@ export function DashboardPage() {
           ) : (
             <ul className="space-y-2">
               {stats.upcoming.map((b: Booking, i: number) => (
-                <li
-                  key={b.id}
-                  className={cn(
-                    'flex gap-3 rounded-lg border border-stone-100 bg-stone-50/80 py-3 pl-3 pr-3 dark:border-stone-800 dark:bg-stone-950/40',
-                    'border-l-4',
-                    accentBar[i % accentBar.length],
-                  )}
-                >
+                <li key={b.id} className={visitCardAccentClass(i, 'flex gap-3 py-3 pl-3 pr-3')}>
                   <div className="min-w-[7.5rem] shrink-0 text-xs font-medium text-stone-600 dark:text-stone-400">
                     {formatSlotShort(b.start_at)}
                   </div>
@@ -336,10 +328,9 @@ export function DashboardPage() {
               <li key={item.to}>
                 <Link
                   to={item.to}
-                  className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-stone-800 transition hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-stone-800/60"
+                  className="block rounded-lg px-3 py-2.5 text-sm font-medium text-stone-800 transition hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-stone-800/60"
                 >
                   {item.label}
-                  <IconChevronRight className="h-4 w-4 text-stone-400" />
                 </Link>
               </li>
             ))}
@@ -348,10 +339,9 @@ export function DashboardPage() {
                 type="button"
                 onClick={() => createInvite.mutate()}
                 disabled={createInvite.isPending}
-                className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium text-stone-800 transition hover:bg-stone-100 disabled:opacity-50 dark:text-stone-200 dark:hover:bg-stone-800/60"
+                className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-medium text-stone-800 transition hover:bg-stone-100 disabled:opacity-50 dark:text-stone-200 dark:hover:bg-stone-800/60"
               >
                 Ссылка-приглашение для клиента
-                <IconChevronRight className="h-4 w-4 text-stone-400" />
               </button>
             </li>
           </ul>

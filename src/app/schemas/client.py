@@ -71,6 +71,7 @@ class ClientMyMasterItem(BaseModel):
     client_id: UUID
     client_display_name: str
     alias: str | None = None
+    contact_email: str
 
 
 class ClientBookingStatsOut(BaseModel):

@@ -35,7 +35,6 @@ class MasterProfile(TimeStampedModel):
         ),
         default=DEFAULT_MASTER_CURRENCY,
     )
-
     user: Mapped[User] = relationship("User", back_populates="master_profile")
 
     weekly_schedule_days: Mapped[list[WeeklyScheduleDay]] = relationship(

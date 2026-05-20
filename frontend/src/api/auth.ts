@@ -4,6 +4,8 @@ export type AuthUser = {
   id: string
   email: string
   email_verified: boolean
+  client_display_name?: string | null
+  client_phone?: string | null
 }
 
 export type RegisterAccepted = {

@@ -28,8 +28,46 @@ export type BookingClientListItem = Booking & {
 
 export type BookingListScope = 'upcoming' | 'history'
 
-export async function bookingsMyListApi() {
-  return apiFetch<BookingClientListItem[]>('/api/bookings/me')
+export type PaginatedClientBookings = {
+  items: BookingClientListItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export async function bookingsMyListApi(params: {
+  scope: BookingListScope
+  page: number
+  page_size: number
+}) {
+  const q = new URLSearchParams({
+    scope: params.scope,
+    page: String(params.page),
+    page_size: String(params.page_size),
+  })
+  return apiFetch<PaginatedClientBookings>(`/api/bookings/me?${q}`)
+}
+
+export async function bookingsMyCreateApi(body: {
+  master_id: string
+  service_id: string
+  start_at: string
+}) {
+  return apiFetch<BookingClientListItem>('/api/bookings/me', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export async function bookingsMyCancelApi(bookingId: string) {
+  await apiFetch(`/api/bookings/me/${bookingId}/cancel`, { method: 'POST' })
+}
+
+export async function bookingsMyRescheduleApi(bookingId: string, start_at: string) {
+  return apiFetch<BookingClientListItem>(`/api/bookings/me/${bookingId}/reschedule`, {
+    method: 'POST',
+    body: JSON.stringify({ start_at }),
+  })
 }
 
 export async function bookingsListApi(params: {

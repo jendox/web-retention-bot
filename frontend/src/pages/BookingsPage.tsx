@@ -15,8 +15,11 @@ import {
 } from '../api/bookings'
 import { clientsCreateApi, clientsGetApi, clientsListApi, type ClientWithLink } from '../api/clients'
 import { servicesListApi, type Service } from '../api/services'
+import { IconReschedule, IconTrash } from '../components/booking/bookingActionIcons'
+import { SegmentTabs } from '../components/ui/SegmentTabs'
 import { useMasterMe } from '../hooks/useMasterMe'
 import { getUserFacingError } from '../lib/apiErrors'
+import { bookingSlotButtonClass } from '../lib/bookingSlots'
 import { cn } from '../lib/forms'
 import {
   blocksCalendar,
@@ -141,27 +144,6 @@ function IconSearch(props: { className?: string }) {
   return (
     <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75" aria-hidden>
       <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m1.35-5.15a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z" />
-    </svg>
-  )
-}
-
-function IconReschedule(props: { className?: string }) {
-  return (
-    <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75" aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3M5 11h14M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 16h5.5a2.5 2.5 0 000-5H13m0 0l2-2m-2 2l2 2" />
-    </svg>
-  )
-}
-
-function IconTrash(props: { className?: string }) {
-  return (
-    <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-      />
     </svg>
   )
 }
@@ -607,28 +589,18 @@ export function BookingsPage() {
           <div className="space-y-5">
             <div>
               <p className="mb-2 text-sm font-medium text-stone-700 dark:text-stone-300">Клиент</p>
-              <div className="inline-grid w-full grid-cols-2 rounded-lg bg-stone-100 p-1 dark:bg-stone-800 sm:w-auto">
-                {sourceTabs.map((tab) => (
-                  <button
-                    key={tab.value}
-                    type="button"
-                    onClick={() => {
-                      setClientSource(tab.value)
-                      setSelectedSlot(null)
-                      setBookingSuccess(null)
-                      setSubmitError(null)
-                    }}
-                    className={cn(
-                      'rounded-md px-4 py-2 text-sm font-medium transition',
-                      clientSource === tab.value
-                        ? 'bg-white text-stone-950 shadow-sm dark:bg-stone-950 dark:text-stone-50'
-                        : 'text-stone-600 hover:text-stone-950 dark:text-stone-300 dark:hover:text-white',
-                    )}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
+              <SegmentTabs
+                tabs={sourceTabs}
+                value={clientSource}
+                onChange={(next) => {
+                  setClientSource(next)
+                  setSelectedSlot(null)
+                  setBookingSuccess(null)
+                  setSubmitError(null)
+                }}
+                fullWidth
+                className="sm:w-auto"
+              />
             </div>
 
             {clientSource === 'existing' ? (
@@ -888,12 +860,7 @@ export function BookingsPage() {
                             setBookingSuccess(null)
                             setSubmitError(null)
                           }}
-                          className={cn(
-                            'rounded-lg border px-3 py-2 text-sm font-medium transition',
-                            selectedSlot === slot.start_at
-                              ? 'border-teal-600 bg-teal-100 text-teal-900 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-100'
-                              : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200 dark:hover:bg-stone-800',
-                          )}
+                          className={bookingSlotButtonClass(selectedSlot === slot.start_at)}
                         >
                           {formatSlotTime(slot.start_at)}
                         </button>
@@ -958,23 +925,13 @@ export function BookingsPage() {
                 : 'Прошедшие, завершённые и отменённые.'}
             </p>
           </div>
-          <div className="inline-grid w-full grid-cols-2 rounded-lg bg-stone-100 p-1 dark:bg-stone-800 sm:w-auto">
-            {listScopeTabs.map((tab) => (
-              <button
-                key={tab.value}
-                type="button"
-                onClick={() => setListScope(tab.value)}
-                className={cn(
-                  'rounded-md px-4 py-2 text-sm font-medium transition',
-                  listScope === tab.value
-                    ? 'bg-white text-stone-950 shadow-sm dark:bg-stone-950 dark:text-stone-50'
-                    : 'text-stone-600 hover:text-stone-950 dark:text-stone-300 dark:hover:text-white',
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          <SegmentTabs
+            tabs={listScopeTabs}
+            value={listScope}
+            onChange={setListScope}
+            fullWidth
+            className="sm:w-auto"
+          />
         </div>
 
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
@@ -1312,12 +1269,7 @@ export function BookingsPage() {
                           reschedule.reset()
                           setRescheduleSlot(slot.start_at)
                         }}
-                        className={cn(
-                          'rounded-lg border px-2 py-2 text-sm font-medium transition',
-                          rescheduleSlot === slot.start_at
-                            ? 'border-teal-600 bg-teal-100 text-teal-900 dark:border-teal-500 dark:bg-teal-950/50 dark:text-teal-100'
-                            : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200',
-                        )}
+                        className={bookingSlotButtonClass(rescheduleSlot === slot.start_at)}
                       >
                         {formatSlotTime(slot.start_at)}
                       </button>

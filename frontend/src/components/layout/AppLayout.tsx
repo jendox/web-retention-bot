@@ -11,6 +11,7 @@ import { cn } from '../../lib/forms'
 import { clearClientShellRole, persistClientShellRole, readPersistedShellRole } from '../../lib/clientShellRoleStorage'
 import { queryClient } from '../../lib/query'
 import {
+  IconBell,
   IconBriefcase,
   IconCalendar,
   IconClipboard,
@@ -22,18 +23,28 @@ import {
   IconUsers,
   IconX,
 } from './navIcons'
+import { useNotificationsUnreadCount } from '../notifications/NotificationsListSection'
 
-const masterNav = [
+type NavItem = {
+  to: string
+  label: string
+  icon: typeof IconOverview
+  badge?: number
+}
+
+const clientNav = (unread: number): NavItem[] => [
+  { to: '/client', label: 'Обзор', icon: IconOverview },
+  { to: '/notifications', label: 'Уведомления', icon: IconBell, badge: unread > 0 ? unread : undefined },
+  { to: '/settings', label: 'Настройки', icon: IconSettings },
+]
+
+const masterNav = (unread: number): NavItem[] => [
   { to: '/dashboard', label: 'Обзор', icon: IconOverview },
   { to: '/schedule', label: 'Расписание', icon: IconCalendar },
   { to: '/clients', label: 'Клиенты', icon: IconUsers },
   { to: '/services', label: 'Услуги', icon: IconBriefcase },
   { to: '/bookings', label: 'Записи', icon: IconClipboard },
-  { to: '/settings', label: 'Настройки', icon: IconSettings },
-]
-
-const clientNav = [
-  { to: '/client', label: 'Обзор', icon: IconOverview },
+  { to: '/notifications', label: 'Уведомления', icon: IconBell, badge: unread > 0 ? unread : undefined },
   { to: '/settings', label: 'Настройки', icon: IconSettings },
 ]
 
@@ -97,7 +108,8 @@ export function AppLayout() {
   const displayName = isClientOnly ? (email.split('@')[0] || 'Клиент') : (name ?? 'Мастер')
   const cabinetLabel = isClientOnly ? 'кабинет клиента' : 'кабинет мастера'
   const homePath = isClientOnly ? '/client' : '/dashboard'
-  const navItems = isClientOnly ? clientNav : masterNav
+  const notificationsUnread = useNotificationsUnreadCount(me.isSuccess)
+  const navItems = isClientOnly ? clientNav(notificationsUnread) : masterNav(notificationsUnread)
 
   useEffect(() => {
     if (me.isError) {
@@ -148,7 +160,7 @@ export function AppLayout() {
           </p>
         ) : null}
         <nav className={cn('flex flex-1 flex-col gap-0.5 py-3', compact ? 'px-2' : 'px-2')}>
-          {navItems.map(({ to, label, icon: Icon }) => (
+          {navItems.map(({ to, label, icon: Icon, badge }) => (
             <NavLink
               key={to}
               to={to}
@@ -165,7 +177,18 @@ export function AppLayout() {
               }
             >
               <Icon className="h-5 w-5 shrink-0 opacity-80" />
-              {!compact ? <span>{label}</span> : <span className="sr-only">{label}</span>}
+              {!compact ? (
+                <>
+                  <span className="min-w-0 flex-1">{label}</span>
+                  {badge != null ? (
+                    <span className="rounded-full bg-teal-600 px-2 py-0.5 text-[10px] font-semibold text-white dark:bg-teal-500 dark:text-stone-950">
+                      {badge > 99 ? '99+' : badge}
+                    </span>
+                  ) : null}
+                </>
+              ) : (
+                <span className="sr-only">{label}</span>
+              )}
             </NavLink>
           ))}
         </nav>
