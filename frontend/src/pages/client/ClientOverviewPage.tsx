@@ -14,6 +14,8 @@ import {
   formatSlotShort,
 } from '../../components/client/clientCabinetUi'
 import { useNotificationsUnreadCount } from '../../components/notifications/NotificationsListSection'
+import { surfaceCardClass } from '../../lib/surface'
+import { cn } from '../../lib/forms'
 
 export function ClientOverviewPage() {
   const {
@@ -85,7 +87,7 @@ export function ClientOverviewPage() {
         </section>
 
         {stats.nextBooking ? (
-          <section className="rounded-xl border border-teal-200/80 bg-gradient-to-br from-teal-50/90 to-white p-5 shadow-sm dark:border-teal-900/40 dark:from-teal-950/25 dark:to-stone-900/80">
+          <section className="rounded-xl border border-teal-300 bg-gradient-to-br from-teal-50/90 to-white p-5 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:border-teal-900/40 dark:from-teal-950/25 dark:to-stone-900/80 dark:shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-teal-800 dark:text-teal-200">Следующий визит</p>
             <p className="mt-2 text-xl font-semibold text-stone-900 dark:text-stone-50">{stats.nextBooking.master_display_name}</p>
             <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">
@@ -119,7 +121,7 @@ export function ClientOverviewPage() {
         ) : null}
 
         <section className="grid gap-6 lg:grid-cols-5">
-          <div className="rounded-xl border border-stone-200/90 bg-white p-5 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80 lg:col-span-3">
+          <div className={cn(surfaceCardClass, 'p-5 lg:col-span-3')}>
             <div className="mb-4 flex items-center justify-between gap-2">
               <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-50">Ближайшие визиты</h2>
               <Link
@@ -144,7 +146,7 @@ export function ClientOverviewPage() {
             )}
           </div>
 
-          <div className="rounded-xl border border-stone-200/90 bg-white p-5 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80 lg:col-span-2">
+          <div className={cn(surfaceCardClass, 'p-5 lg:col-span-2')}>
             <h2 className="mb-4 text-lg font-semibold text-stone-900 dark:text-stone-50">Быстрые действия</h2>
             <ul className="space-y-1">
               {masters.length > 0 ? (

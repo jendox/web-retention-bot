@@ -1,7 +1,9 @@
 import { useSearchParams } from 'react-router-dom'
 
 import { NotificationsListSection, parseNotificationsPage } from '../components/notifications/NotificationsListSection'
+import { cn } from '../lib/forms'
 import type { PageSize } from '../lib/pagination'
+import { surfaceCardClass } from '../lib/surface'
 
 export function NotificationsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -34,7 +36,7 @@ export function NotificationsPage() {
         </p>
       </header>
 
-      <section className="rounded-xl border border-stone-200/90 bg-white p-5 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+      <section className={cn(surfaceCardClass, 'p-5')}>
         <NotificationsListSection
           page={page}
           pageSize={pageSize}

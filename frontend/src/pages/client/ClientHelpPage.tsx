@@ -1,6 +1,6 @@
 export function ClientHelpPage() {
   return (
-    <section className="space-y-6 rounded-xl border border-stone-200/90 bg-white p-6 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+    <section className="space-y-6 rounded-xl border border-stone-300 bg-white p-6 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
       <h1 className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">Как это работает</h1>
       <ol className="list-decimal space-y-4 pl-5 text-sm text-stone-600 dark:text-stone-400">
         <li>

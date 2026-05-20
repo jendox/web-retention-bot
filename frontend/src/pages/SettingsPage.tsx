@@ -145,7 +145,7 @@ export function SettingsPage() {
           }
         }}
       >
-        <section className="rounded-2xl border border-stone-200/90 bg-white p-6 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+        <section className="rounded-2xl border border-stone-300 bg-white p-6 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-teal-600 text-sm font-semibold text-white">
               {profileInitials(me.data.client_display_name, email)}
@@ -162,7 +162,7 @@ export function SettingsPage() {
         </section>
 
         {!isClientOnly ? (
-          <section className="rounded-2xl border border-stone-200/90 bg-white p-6 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+          <section className="rounded-2xl border border-stone-300 bg-white p-6 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
             <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Профиль мастера</h2>
             <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
               Эти данные видны клиентам в приглашениях и личном кабинете.
@@ -251,7 +251,7 @@ export function SettingsPage() {
           </section>
         ) : null}
 
-        <section className="rounded-2xl border border-stone-200/90 bg-white p-6 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+        <section className="rounded-2xl border border-stone-300 bg-white p-6 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
           <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Профиль клиента</h2>
           <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
             Имя и телефон из вашей карточки у мастера. Редактирование на сервере появится позже.
@@ -279,7 +279,7 @@ export function SettingsPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-stone-200/90 bg-white p-6 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+        <section className="rounded-2xl border border-stone-300 bg-white p-6 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
           <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Уведомления</h2>
           <div className="mt-4 space-y-3">
             <label className="flex items-start gap-3">

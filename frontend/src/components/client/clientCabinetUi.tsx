@@ -8,6 +8,7 @@ import {
   bookingStatusLabel,
 } from '../../lib/bookingStatus'
 import { cn } from '../../lib/forms'
+import { surfaceCardClass } from '../../lib/surface'
 import { visitCardAccentClass } from '../../lib/visitListCard'
 
 export function isSameLocalDay(iso: string, ref: Date) {
@@ -83,7 +84,7 @@ type StatProps = {
 
 export function ClientStatCard({ icon, value, label, sub, iconBg, iconColor }: StatProps) {
   return (
-    <div className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+    <div className={cn(surfaceCardClass, 'p-4')}>
       <div className="flex items-start gap-3">
         <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', iconBg, iconColor)}>{icon}</div>
         <div className="min-w-0">

@@ -462,7 +462,7 @@ export function SchedulePage() {
             назначенные будущие записи.
           </p>
         </div>
-        <div className="grid grid-cols-3 gap-2 rounded-xl border border-stone-200 bg-white p-2 shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
+        <div className="grid grid-cols-3 gap-2 rounded-xl border border-stone-300 bg-white p-2 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
           <div className="min-w-20 px-3 py-2">
             <p className="text-lg font-semibold text-stone-900 dark:text-stone-50">{workingTemplateDays}</p>
             <p className="text-xs text-stone-500 dark:text-stone-400">дней</p>
@@ -516,7 +516,7 @@ export function SchedulePage() {
 
       {activeTab === 'calendar' ? (
         <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(22rem,0.75fr)]">
-          <section className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+          <section className="rounded-xl border border-stone-300 bg-white p-4 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-50">
                 {formatMonth(monthAnchor)}
@@ -590,7 +590,7 @@ export function SchedulePage() {
           </section>
 
           <aside className="space-y-4">
-            <section className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+            <section className="rounded-xl border border-stone-300 bg-white p-4 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-50">
@@ -677,7 +677,7 @@ export function SchedulePage() {
               </div>
             </section>
 
-            <section className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+            <section className="rounded-xl border border-stone-300 bg-white p-4 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-50">Исключения</h2>
@@ -733,7 +733,7 @@ export function SchedulePage() {
           {weekRules.map((rule) => (
             <div
               key={rule.weekday}
-              className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80"
+              className="rounded-xl border border-stone-300 bg-white p-4 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80"
             >
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex min-w-48 items-center gap-3">

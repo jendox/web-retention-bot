@@ -11,6 +11,7 @@ import { servicesListApi } from '../api/services'
 import { IconBriefcase, IconClipboard, IconUsers } from '../components/layout/navIcons'
 import { blocksCalendar, BookingStatus } from '../lib/bookingStatus'
 import { cn } from '../lib/forms'
+import { surfaceCardClass } from '../lib/surface'
 import { ALLOWED_PAGE_SIZES } from '../lib/pagination'
 import { visitCardAccentClass } from '../lib/visitListCard'
 
@@ -85,7 +86,7 @@ function StatCard({ icon, value, label, sub, iconBg, iconColor, iconLinkTo, icon
     )
 
   return (
-    <div className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+    <div className={cn(surfaceCardClass, 'p-4')}>
       <div className="flex items-start gap-3">
         {iconShell}
         <div className="min-w-0">
@@ -285,7 +286,7 @@ export function DashboardPage() {
       </section>
 
       <section className="grid gap-6 lg:grid-cols-5">
-        <div className="rounded-xl border border-stone-200/90 bg-white p-5 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80 lg:col-span-3">
+        <div className={cn(surfaceCardClass, 'p-5 lg:col-span-3')}>
           <div className="mb-4 flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-50">Ближайшие записи</h2>
             <Link
@@ -319,7 +320,7 @@ export function DashboardPage() {
           )}
         </div>
 
-        <div className="rounded-xl border border-stone-200/90 bg-white p-5 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80 lg:col-span-2">
+        <div className={cn(surfaceCardClass, 'p-5 lg:col-span-2')}>
           <h2 className="mb-4 text-lg font-semibold text-stone-900 dark:text-stone-50">Быстрые действия</h2>
           <ul className="space-y-1">
             {[
@@ -352,14 +353,14 @@ export function DashboardPage() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
-        <div className="rounded-xl border border-stone-200/90 bg-white p-5 dark:border-stone-700/90 dark:bg-stone-900/80">
+        <div className={cn(surfaceCardClass, 'p-5')}>
           <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Учётная запись</p>
           <p className="mt-2 text-lg font-semibold text-stone-900 dark:text-stone-50">{me.data.email}</p>
           <p className="mt-1 text-xs text-stone-500">
             {me.data.email_verified ? 'Email подтверждён' : 'Подтвердите email'}
           </p>
         </div>
-        <div className="rounded-xl border border-stone-200/90 bg-white p-5 dark:border-stone-700/90 dark:bg-stone-900/80">
+        <div className={cn(surfaceCardClass, 'p-5')}>
           <p className="text-xs font-medium uppercase tracking-wide text-stone-500">Профиль мастера</p>
           {master.data ? (
             <>

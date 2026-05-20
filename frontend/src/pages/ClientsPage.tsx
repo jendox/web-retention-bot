@@ -380,7 +380,7 @@ export function ClientsPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-stone-200/90 bg-white shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+      <div className="overflow-hidden rounded-2xl border border-stone-300 bg-white shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
         {clients.isLoading ? (
           <p className="p-8 text-center text-sm text-stone-500">Загрузка списка…</p>
         ) : total === 0 ? (

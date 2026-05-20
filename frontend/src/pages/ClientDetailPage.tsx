@@ -14,6 +14,8 @@ import {
   shouldWarnFrequentNoShows,
 } from '../lib/clientNoShow'
 import { cn } from '../lib/forms'
+import { surfacePanelClass } from '../lib/surface'
+import { visitCardAccentClass } from '../lib/visitListCard'
 import { getUserFacingError } from '../lib/apiErrors'
 import { ALLOWED_PAGE_SIZES } from '../lib/pagination'
 import { queryClient } from '../lib/query'
@@ -21,8 +23,7 @@ import { queryClient } from '../lib/query'
 const fieldClass =
   'w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-stone-900 shadow-sm outline-none focus:border-stone-400 focus:ring-2 focus:ring-stone-400/15 dark:border-stone-600 dark:bg-stone-950 dark:text-stone-100 dark:focus:border-stone-500'
 
-const sectionCard =
-  'rounded-2xl border border-stone-200/90 bg-white p-6 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80'
+const sectionCard = cn(surfacePanelClass, 'p-6')
 
 const sectionTitle = 'text-base font-semibold text-stone-900 dark:text-stone-50'
 const sectionHint = 'mt-1 text-sm text-stone-500 dark:text-stone-400'
@@ -270,7 +271,7 @@ export function ClientDetailPage() {
           </div>
         ) : detail.data?.booking_stats && detail.data.booking_stats.no_show_count > 0 ? (
           <div
-            className="rounded-xl border border-stone-200/90 bg-stone-50/90 p-4 text-sm text-stone-800 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/50 dark:text-stone-200"
+            className="rounded-xl border border-stone-300 bg-stone-50/90 p-4 text-sm text-stone-800 shadow-sm dark:border-stone-700 dark:bg-stone-900/50 dark:text-stone-200"
             role="status"
           >
             <p className="font-medium text-stone-900 dark:text-stone-100">Записи</p>
@@ -313,7 +314,7 @@ export function ClientDetailPage() {
           </div>
         ) : null}
 
-        <div className="overflow-hidden rounded-2xl border border-stone-200/90 bg-white shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+        <div className="overflow-hidden rounded-2xl border border-stone-300 bg-white shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
           <button
             type="button"
             id={`${panelId}-heading`}
@@ -453,9 +454,12 @@ export function ClientDetailPage() {
         ) : clientBookings.upcoming.length === 0 ? (
           <p className="mt-4 text-sm text-stone-500 dark:text-stone-400">Активных будущих записей нет.</p>
         ) : (
-          <ul className="mt-4 divide-y divide-stone-100 dark:divide-stone-800">
-            {clientBookings.upcoming.map((booking) => (
-              <li key={booking.id} className="flex flex-wrap items-baseline justify-between gap-2 py-3 first:pt-0">
+          <ul className="mt-4 space-y-2">
+            {clientBookings.upcoming.map((booking, i) => (
+              <li
+                key={booking.id}
+                className={visitCardAccentClass(i, 'flex flex-wrap items-baseline justify-between gap-2 px-3 py-3')}
+              >
                 <div>
                   <p className="font-medium text-stone-900 dark:text-stone-100">
                     {serviceNameById.get(booking.service_id) ?? 'Услуга'}
@@ -483,9 +487,12 @@ export function ClientDetailPage() {
         ) : clientBookings.history.length === 0 ? (
           <p className="mt-4 text-sm text-stone-500 dark:text-stone-400">Истории записей пока нет.</p>
         ) : (
-          <ul className="mt-4 divide-y divide-stone-100 dark:divide-stone-800">
-            {clientBookings.history.map((booking) => (
-              <li key={booking.id} className="flex flex-wrap items-baseline justify-between gap-2 py-3 first:pt-0">
+          <ul className="mt-4 space-y-2">
+            {clientBookings.history.map((booking, i) => (
+              <li
+                key={booking.id}
+                className={visitCardAccentClass(i, 'flex flex-wrap items-baseline justify-between gap-2 px-3 py-3')}
+              >
                 <div>
                   <p className="font-medium text-stone-700 dark:text-stone-200">
                     {serviceNameById.get(booking.service_id) ?? 'Услуга'}

@@ -30,7 +30,7 @@ export function SegmentTabs<T extends string>({
       role={ariaLabel ? 'tablist' : undefined}
       aria-label={ariaLabel}
       className={cn(
-        'inline-flex rounded-xl border border-stone-200 bg-white p-1 shadow-sm dark:border-stone-700 dark:bg-stone-900/80',
+        'inline-flex rounded-xl border border-stone-300 bg-white p-1 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80',
         fullWidth && 'flex w-full',
         className,
       )}

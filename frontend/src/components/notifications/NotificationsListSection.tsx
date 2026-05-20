@@ -5,6 +5,7 @@ import { notificationsMarkReadApi, notificationsMyListApi } from '../../api/noti
 import { ListPagination } from '../ui/ListPagination'
 import { getUserFacingError } from '../../lib/apiErrors'
 import { cn } from '../../lib/forms'
+import { surfaceListItemClass } from '../../lib/surface'
 import { parsePage, parsePageSize, type PageSize } from '../../lib/pagination'
 
 function formatRelativeDay(iso: string) {
@@ -83,8 +84,9 @@ export function NotificationsListSection({
             <li
               key={n.id}
               className={cn(
-                'rounded-xl border border-stone-100 bg-white px-4 py-3 shadow-sm dark:border-stone-800 dark:bg-stone-900/80',
-                n.read_at == null ? 'ring-1 ring-teal-500/25' : '',
+                surfaceListItemClass,
+                'px-4 py-3',
+                n.read_at == null ? 'ring-1 ring-teal-500/30' : '',
               )}
             >
               <div className="flex flex-wrap items-start justify-between gap-2">

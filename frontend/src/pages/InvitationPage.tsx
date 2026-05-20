@@ -169,7 +169,7 @@ export function InvitationPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-8 pr-14 sm:py-12">
-      <header className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <header className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="border-b border-slate-100 bg-emerald-50/80 px-6 py-5 dark:border-slate-800 dark:bg-emerald-950/20">
           <div className="flex items-center gap-4">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-2xl font-semibold text-white dark:bg-emerald-500 dark:text-slate-950">

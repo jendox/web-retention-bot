@@ -1,4 +1,5 @@
 import { cn } from './forms'
+import { surfaceListItemClass } from './surface'
 
 /** Цветная полоса слева у карточки визита (светлая и тёмная тема). */
 export const VISIT_ACCENT_BARS = [
@@ -8,8 +9,7 @@ export const VISIT_ACCENT_BARS = [
   'border-l-sky-500 dark:border-l-sky-400',
 ] as const
 
-const visitCardShell =
-  'rounded-lg border-y border-r border-stone-100 bg-stone-50/80 border-l-4 dark:border-y-stone-800 dark:border-r-stone-800 dark:bg-stone-950/40'
+const visitCardShell = cn(surfaceListItemClass, 'border-l-4')
 
 export function visitCardAccentClass(index: number, extra?: string) {
   return cn(visitCardShell, VISIT_ACCENT_BARS[index % VISIT_ACCENT_BARS.length], extra)

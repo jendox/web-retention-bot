@@ -558,7 +558,7 @@ export function BookingsPage() {
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(21rem,0.72fr)]">
-        <section className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80 sm:p-5">
+        <section className="rounded-xl border border-stone-300 bg-white p-4 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80 sm:p-5">
           <div className="mb-5 flex items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-200">
               <IconPlus className="h-5 w-5" />
@@ -873,7 +873,7 @@ export function BookingsPage() {
         </section>
 
         <aside className="space-y-4">
-          <div className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80">
+          <div className="rounded-xl border border-stone-300 bg-white p-4 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80">
             <p className="text-xs font-semibold uppercase text-stone-500 dark:text-stone-400">Предпросмотр</p>
             <p className="mt-2 text-lg font-semibold text-stone-900 dark:text-stone-50">{previewClientName}</p>
             {selectedService ? (
@@ -897,7 +897,7 @@ export function BookingsPage() {
 
       <section
         id="bookings-list-section"
-        className="rounded-xl border border-stone-200/90 bg-white p-4 shadow-sm dark:border-stone-700/90 dark:bg-stone-900/80 sm:p-5"
+        className="rounded-xl border border-stone-300 bg-white p-4 shadow-[0_1px_3px_0_rgba(28,25,23,0.08),0_4px_12px_-2px_rgba(28,25,23,0.06)] dark:shadow-sm dark:border-stone-700 dark:bg-stone-900/80 sm:p-5"
       >
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -974,7 +974,7 @@ export function BookingsPage() {
         ) : (
           <>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-stone-200 text-sm dark:divide-stone-800">
+            <table className="min-w-full divide-y divide-stone-300 text-sm dark:divide-stone-800">
               <thead>
                 <tr className="text-left text-xs font-semibold uppercase text-stone-500 dark:text-stone-400">
                   <th className="py-2 pr-4">Время</th>
@@ -987,7 +987,7 @@ export function BookingsPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
+              <tbody className="divide-y divide-stone-200 dark:divide-stone-800">
                 {bookingItems.map((booking) => (
                   <tr key={booking.id} className="text-stone-700 dark:text-stone-200">
                     <td className="whitespace-nowrap py-3 pr-4 font-medium text-stone-900 dark:text-stone-50">
@@ -1051,7 +1051,7 @@ export function BookingsPage() {
                         ) : null}
                         {listScope === 'history' && needsAttendanceConfirmation(booking) ? (
                           <div
-                            className="inline-flex shrink-0 overflow-hidden rounded-lg border border-stone-200/90 dark:border-stone-700"
+                            className="inline-flex shrink-0 overflow-hidden rounded-lg border border-stone-300 dark:border-stone-700"
                             role="group"
                             aria-label="Отметить явку"
                           >
@@ -1062,7 +1062,7 @@ export function BookingsPage() {
                                 markAttendance.reset()
                                 markAttendance.mutate({ bookingId: booking.id, attended: true })
                               }}
-                              className="border-r border-stone-200/90 p-1.5 text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50 dark:border-stone-700 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                              className="border-r border-stone-300 p-1.5 text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-50 dark:border-stone-700 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
                               aria-label={`Клиент ${clientNameById.get(booking.client_id) ?? 'Клиент'} пришел`}
                               title="Пришел"
                             >
