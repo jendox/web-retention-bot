@@ -61,17 +61,13 @@ export function computeOverviewStats(upcomingItems: BookingClientListItem[], upc
     const t = new Date(b.start_at)
     return t >= monthStart && t <= monthEnd
   })
-  const mastersUpcoming = new Set(upcomingItems.map((b) => b.master_id)).size
   const next = upcomingItems[0]
 
   return {
     upcomingCount: upcomingTotal,
-    nextLabel: next ? formatSlotShort(next.start_at) : undefined,
-    nextMaster: next?.master_display_name,
     nextBooking: next,
     monthCount: inMonth.length,
     todayCount: today.length,
-    mastersUpcoming,
     topUpcoming: upcomingItems.slice(0, 6),
   }
 }

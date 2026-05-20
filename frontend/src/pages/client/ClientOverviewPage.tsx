@@ -57,7 +57,6 @@ export function ClientOverviewPage() {
           <ClientStatCard
             value={overviewLoading ? '—' : stats.upcomingCount}
             label="Предстоящих визитов"
-            sub={stats.nextLabel ? `Ближайший · ${stats.nextLabel}` : undefined}
             iconBg="bg-teal-100 dark:bg-teal-950/50"
             iconColor="text-teal-700 dark:text-teal-300"
             icon={<IconCalendar className="h-5 w-5 shrink-0 overflow-visible" />}
@@ -65,11 +64,6 @@ export function ClientOverviewPage() {
           <ClientStatCard
             value={overviewLoading ? '—' : linkedMasterCount}
             label="Мастеров в кабинете"
-            sub={
-              stats.mastersUpcoming > 0
-                ? `С предстоящей записью: ${stats.mastersUpcoming}`
-                : 'Пока без предстоящих визитов'
-            }
             iconBg="bg-emerald-100/90 dark:bg-emerald-950/40"
             iconColor="text-emerald-700 dark:text-emerald-300"
             icon={<IconUsers className="h-5 w-5 shrink-0 overflow-visible" />}
@@ -84,7 +78,6 @@ export function ClientOverviewPage() {
           <ClientStatCard
             value={overviewLoading ? '—' : stats.monthCount}
             label="В этом месяце"
-            sub="Активные записи"
             iconBg="bg-violet-100/90 dark:bg-violet-950/40"
             iconColor="text-violet-700 dark:text-violet-300"
             icon={<IconClipboard className="h-5 w-5 shrink-0 overflow-visible" />}

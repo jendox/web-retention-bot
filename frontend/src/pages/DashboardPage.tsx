@@ -9,7 +9,7 @@ import { invitationsCreateApi } from '../api/invitations'
 import { useMasterMe } from '../hooks/useMasterMe'
 import { servicesListApi } from '../api/services'
 import { IconBriefcase, IconClipboard, IconUsers } from '../components/layout/navIcons'
-import { blocksCalendar } from '../lib/bookingStatus'
+import { blocksCalendar, BookingStatus } from '../lib/bookingStatus'
 import { cn } from '../lib/forms'
 import { ALLOWED_PAGE_SIZES } from '../lib/pagination'
 import { visitCardAccentClass } from '../lib/visitListCard'
@@ -115,6 +115,11 @@ export function DashboardPage() {
     queryFn: () => bookingsListApi({ scope: 'upcoming', page: 1, page_size: CLIENTS_PAGE_SIZE_CAP }),
     enabled: me.isSuccess,
   })
+  const bookingsHistory = useQuery({
+    queryKey: ['bookings', 'history', 'dashboard-revenue', 1, CLIENTS_PAGE_SIZE_CAP],
+    queryFn: () => bookingsListApi({ scope: 'history', page: 1, page_size: CLIENTS_PAGE_SIZE_CAP }),
+    enabled: me.isSuccess,
+  })
   const servicesActive = useQuery({
     queryKey: ['services', 'dashboard-summary', 1, CLIENTS_PAGE_SIZE_CAP, 'active'],
     queryFn: () => servicesListApi({ page: 1, page_size: CLIENTS_PAGE_SIZE_CAP, is_active: true }),
@@ -174,18 +179,19 @@ export function DashboardPage() {
     const nowInner = new Date()
     const list = bookings.data?.items ?? []
     const scheduled = list.filter((b) => blocksCalendar(b.status))
-    const today = scheduled.filter((b) => isSameLocalDay(b.start_at, nowInner))
-    today.sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
-    const nextToday = today[0]
+    const todayCount = scheduled.filter((b) => isSameLocalDay(b.start_at, nowInner)).length
 
     const monthStart = startOfMonth(nowInner)
     const monthEnd = endOfMonth(nowInner)
-    const inMonth = scheduled.filter((b) => {
-      const t = new Date(b.start_at)
-      return t >= monthStart && t <= monthEnd
-    })
     let revenue = 0
-    for (const b of inMonth) {
+    for (const b of bookingsHistory.data?.items ?? []) {
+      if (b.status !== BookingStatus.COMPLETED) {
+        continue
+      }
+      const t = new Date(b.start_at)
+      if (t < monthStart || t > monthEnd) {
+        continue
+      }
       const n = Number.parseFloat(b.price_snapshot)
       if (!Number.isNaN(n)) {
         revenue += n
@@ -200,12 +206,11 @@ export function DashboardPage() {
     return {
       clientCount: clients.data?.total ?? 0,
       serviceCount: servicesActive.data?.total ?? 0,
-      todayCount: today.length,
-      nextTodayLabel: nextToday ? formatSlotShort(nextToday.start_at) : undefined,
+      todayCount,
       revenueMonth: revenue,
       upcoming,
     }
-  }, [bookings.data, clients.data, servicesActive.data])
+  }, [bookings.data, bookingsHistory.data, clients.data, servicesActive.data])
 
   const firstName = useMemo(() => {
     const n = master.data?.display_name?.trim()
@@ -250,7 +255,6 @@ export function DashboardPage() {
         <StatCard
           value={stats.todayCount}
           label="Записей сегодня"
-          sub={stats.nextTodayLabel ? `Ближайшая · ${stats.nextTodayLabel}` : undefined}
           iconBg="bg-amber-100/90 dark:bg-amber-950/35"
           iconColor="text-amber-800 dark:text-amber-200"
           iconLinkTo="/bookings"
@@ -260,7 +264,6 @@ export function DashboardPage() {
         <StatCard
           value={stats.revenueMonth > 0 ? `${stats.revenueMonth.toLocaleString('ru-RU')}` : '—'}
           label="Выручка за месяц"
-          sub="По активным записям"
           iconBg="bg-violet-100/90 dark:bg-violet-950/40"
           iconColor="text-violet-700 dark:text-violet-300"
           icon={
