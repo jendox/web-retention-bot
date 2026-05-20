@@ -168,7 +168,9 @@ make test
 make lint
 ```
 
-Backend: pytest + httpx, aiosqlite в тестах; ruff. Frontend: ESLint, `tsc -b` при `frontend-build`.
+Backend: pytest + httpx; ruff. После миграции префиксов — `tests/test_api_route_migration.py` (старые `/api/bookings` и т.п. → 404, новые `/api/client/*` и `/api/master/*` зарегистрированы). In-app `link_url` и фильтр ленты — только `/client/*` и `/master/*`.
+
+Frontend: ESLint, `tsc -b` при `frontend-build`, `npm run test` (vitest: `cabinetFromPathname` и контракт URL кабинетов). Playwright/E2E пока не подключён — достаточно API smoke и unit-тестов роутов на этапе разработки.
 
 ## Что логично дальше
 

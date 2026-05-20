@@ -46,9 +46,12 @@ frontend-build:
 frontend-lint:
 	cd frontend && npm run lint
 
+frontend-test:
+	cd frontend && npm run test
+
 frontend-test-check:
 	cd frontend && npm run lint
 
-test: backend-test frontend-test-check
+test: backend-test frontend-test-check frontend-test
 
 lint: backend-lint frontend-lint
