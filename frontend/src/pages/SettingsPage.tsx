@@ -130,7 +130,7 @@ export function SettingsPage() {
           <p className="mt-1 max-w-2xl text-sm text-stone-600 dark:text-stone-400">
             {isClientCabinet
               ? 'Аккаунт и профиль клиента. Настройки студии — в кабинете мастера.'
-              : 'Профили и параметры аккаунта. Профиль мастера и контакты сохраняются на сервере.'}
+              : 'Аккаунт и профиль студии. Контакты мастера сохраняются на сервере.'}
           </p>
         </div>
         {saved ? (
@@ -155,7 +155,10 @@ export function SettingsPage() {
         <section className={surfacePanel('p-6')}>
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-teal-600 text-sm font-semibold text-white">
-              {profileInitials(me.data.client_display_name, email)}
+              {profileInitials(
+                isClientCabinet ? me.data.client_display_name : master.data?.display_name,
+                email,
+              )}
             </div>
             <div className="min-w-0">
               <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Аккаунт</h2>
@@ -258,33 +261,35 @@ export function SettingsPage() {
           </section>
         ) : null}
 
-        <section className={surfacePanel('p-6')}>
-          <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Профиль клиента</h2>
-          <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-            Имя и телефон из вашей карточки у мастера. Редактирование на сервере появится позже.
-          </p>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Имя</span>
-              <input
-                value={form.clientDisplayName}
-                readOnly
-                className={cn(fieldClass, readOnlyFieldClass, 'mt-1')}
-                placeholder="Укажите при принятии приглашения"
-              />
-            </label>
-            <label className="block">
-              <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Телефон</span>
-              <input
-                value={form.clientPhone}
-                readOnly
-                type="tel"
-                className={cn(fieldClass, readOnlyFieldClass, 'mt-1')}
-                placeholder="Не указан"
-              />
-            </label>
-          </div>
-        </section>
+        {isClientCabinet ? (
+          <section className={surfacePanel('p-6')}>
+            <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Профиль клиента</h2>
+            <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+              Имя и телефон из вашей карточки у мастера. Редактирование на сервере появится позже.
+            </p>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="block">
+                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Имя</span>
+                <input
+                  value={form.clientDisplayName}
+                  readOnly
+                  className={cn(fieldClass, readOnlyFieldClass, 'mt-1')}
+                  placeholder="Укажите при принятии приглашения"
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Телефон</span>
+                <input
+                  value={form.clientPhone}
+                  readOnly
+                  type="tel"
+                  className={cn(fieldClass, readOnlyFieldClass, 'mt-1')}
+                  placeholder="Не указан"
+                />
+              </label>
+            </div>
+          </section>
+        ) : null}
 
         <section className={surfacePanel('p-6')}>
           <h2 className="text-base font-semibold text-stone-900 dark:text-stone-50">Уведомления</h2>
