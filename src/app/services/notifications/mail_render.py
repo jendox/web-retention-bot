@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
@@ -75,4 +76,106 @@ def booking_created_in_app_copy(
     title = "Новая запись"
     body = f"{master_display_name}: {service_name}, {start_at_local}"
     link_url = f"{get_settings().security.frontend_public_origin.rstrip('/')}/client"
+    return title, body, link_url
+
+
+def append_master_comment_to_body(body: str, comment: str | None) -> str:
+    if not comment:
+        return body
+    return f"{body}\n\nКомментарий мастера: {comment}"
+
+
+@dataclass(frozen=True)
+class BookingCancelledEmailRenderContext:
+    recipient_email: str
+    master_name: str
+    service_name: str
+    start_at_local: str
+    duration_min: int
+    cabinet_url: str
+    master_comment: str | None = None
+
+
+def render_booking_cancelled(render_ctx: BookingCancelledEmailRenderContext) -> tuple[str, str, str]:
+    env = _jinja_env()
+    ctx = {
+        "recipient_email": render_ctx.recipient_email,
+        "master_name": render_ctx.master_name,
+        "service_name": render_ctx.service_name,
+        "start_at_local": render_ctx.start_at_local,
+        "duration_min": render_ctx.duration_min,
+        "cabinet_url": render_ctx.cabinet_url,
+        "master_comment": render_ctx.master_comment,
+    }
+    subject = env.get_template("booking_cancelled.subject.txt").render(**ctx).strip()
+    text_body = env.get_template("booking_cancelled.txt").render(**ctx)
+    html_body = env.get_template("booking_cancelled.html").render(**ctx)
+    return subject, text_body, html_body
+
+
+def booking_cancelled_in_app_copy(
+    *,
+    master_display_name: str,
+    service_name: str,
+    start_at: datetime,
+    master_timezone: str,
+    master_comment: str | None = None,
+) -> tuple[str, str, str | None]:
+    start_at_local = format_booking_start_local(start_at, master_timezone)
+    title = "Запись отменена"
+    body = append_master_comment_to_body(
+        f"{master_display_name}: {service_name}, {start_at_local} — отменена",
+        master_comment,
+    )
+    link_url = f"{get_settings().security.frontend_public_origin.rstrip('/')}/client/visits"
+    return title, body, link_url
+
+
+@dataclass(frozen=True)
+class BookingMovedEmailRenderContext:
+    recipient_email: str
+    master_name: str
+    service_name: str
+    start_at_local: str
+    duration_min: int
+    cabinet_url: str
+    previous_start_at_local: str
+    master_comment: str | None = None
+
+
+def render_booking_moved(render_ctx: BookingMovedEmailRenderContext) -> tuple[str, str, str]:
+    env = _jinja_env()
+    ctx = {
+        "recipient_email": render_ctx.recipient_email,
+        "master_name": render_ctx.master_name,
+        "service_name": render_ctx.service_name,
+        "previous_start_at_local": render_ctx.previous_start_at_local,
+        "start_at_local": render_ctx.start_at_local,
+        "duration_min": render_ctx.duration_min,
+        "cabinet_url": render_ctx.cabinet_url,
+        "master_comment": render_ctx.master_comment,
+    }
+    subject = env.get_template("booking_moved.subject.txt").render(**ctx).strip()
+    text_body = env.get_template("booking_moved.txt").render(**ctx)
+    html_body = env.get_template("booking_moved.html").render(**ctx)
+    return subject, text_body, html_body
+
+
+def booking_moved_in_app_copy(
+    *,
+    master_display_name: str,
+    service_name: str,
+    previous_start_at: datetime,
+    start_at: datetime,
+    master_timezone: str,
+    master_comment: str | None = None,
+) -> tuple[str, str, str | None]:
+    previous_local = format_booking_start_local(previous_start_at, master_timezone)
+    start_at_local = format_booking_start_local(start_at, master_timezone)
+    title = "Запись перенесена"
+    body = append_master_comment_to_body(
+        f"{master_display_name}: {service_name}, {previous_local} → {start_at_local}",
+        master_comment,
+    )
+    link_url = f"{get_settings().security.frontend_public_origin.rstrip('/')}/client/visits"
     return title, body, link_url

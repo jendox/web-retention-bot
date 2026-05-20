@@ -5,7 +5,18 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+BOOKING_COMMENT_MAX_LENGTH = 500
+
+
+def normalize_booking_comment(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        return None
+    return stripped
 
 
 class BookingListScope(enum.StrEnum):
@@ -39,6 +50,8 @@ class BookingOut(BaseModel):
     currency_snapshot: str
     status: str
     attendance_confirmed_at: datetime | None = None
+    cancel_comment: str | None = None
+    reschedule_comment: str | None = None
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -54,5 +67,28 @@ class BookingClientListItem(BookingOut):
     service_name: str
 
 
+class BookingCancel(BaseModel):
+    comment: str | None = Field(
+        default=None,
+        max_length=BOOKING_COMMENT_MAX_LENGTH,
+        description="Optional message to the client about the cancellation.",
+    )
+
+    @field_validator("comment")
+    @classmethod
+    def _normalize_comment(cls, value: str | None) -> str | None:
+        return normalize_booking_comment(value)
+
+
 class BookingReschedule(BaseModel):
     start_at: datetime = Field(description="UTC start instant for the reservation")
+    comment: str | None = Field(
+        default=None,
+        max_length=BOOKING_COMMENT_MAX_LENGTH,
+        description="Optional message to the client about the reschedule.",
+    )
+
+    @field_validator("comment")
+    @classmethod
+    def _normalize_comment(cls, value: str | None) -> str | None:
+        return normalize_booking_comment(value)

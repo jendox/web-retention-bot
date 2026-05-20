@@ -82,6 +82,10 @@ class Booking(TimeStampedModel):
         DateTime(timezone=True),
         nullable=True,
     )
+    #: Optional message to the client when the booking was cancelled.
+    cancel_comment: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    #: Optional message to the client from the latest reschedule.
+    reschedule_comment: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     master: Mapped[MasterProfile] = relationship("MasterProfile", back_populates="bookings")
     client: Mapped[Client] = relationship("Client", back_populates="bookings")

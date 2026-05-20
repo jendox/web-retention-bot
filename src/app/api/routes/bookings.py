@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated, NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 
 from app.api.deps import require_master_profile, require_user
 from app.core.pagination import Pagination, get_pagination
@@ -11,6 +11,7 @@ from app.models.master import MasterProfile
 from app.models.user import User
 from app.schemas.booking import (
     BookingAttendanceMark,
+    BookingCancel,
     BookingClientListItem,
     BookingCreate,
     BookingListScope,
@@ -264,9 +265,14 @@ async def post_cancel(
     booking_id: UUID,
     master: Annotated[MasterProfile, Depends(require_master_profile)],
     use_case: Annotated[CancelBookingUseCase, Depends(get_cancel_booking_use_case)],
+    payload: Annotated[BookingCancel | None, Body()] = None,
 ) -> Response:
     try:
-        await use_case(master_id=master.id, booking_id=booking_id)
+        await use_case(
+            master=master,
+            booking_id=booking_id,
+            comment=payload.comment if payload else None,
+        )
     except BookingsError as error:
         _raise_http_error(error)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -307,7 +313,12 @@ async def post_reschedule(
     use_case: Annotated[RescheduleBookingUseCase, Depends(get_reschedule_booking_use_case)],
 ) -> BookingOut:
     try:
-        return await use_case(master=master, booking_id=booking_id, start_at=payload.start_at)
+        return await use_case(
+            master=master,
+            booking_id=booking_id,
+            start_at=payload.start_at,
+            comment=payload.comment,
+        )
     except BookingsError as error:
         _raise_http_error(error)
 

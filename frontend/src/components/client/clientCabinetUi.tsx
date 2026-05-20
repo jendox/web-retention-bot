@@ -100,6 +100,16 @@ export function ClientStatCard({ icon, value, label, sub, iconBg, iconColor }: S
   )
 }
 
+export function visitActionComment(b: BookingClientListItem): string | null {
+  if (b.status === 'CANCELLED' && b.cancel_comment) {
+    return b.cancel_comment
+  }
+  if (b.status === 'SCHEDULED' && b.reschedule_comment) {
+    return b.reschedule_comment
+  }
+  return null
+}
+
 export function ClientVisitRow({
   b,
   i,
@@ -113,6 +123,8 @@ export function ClientVisitRow({
   onReschedule?: () => void
   onCancel?: () => void
 }) {
+  const actionComment = visitActionComment(b)
+
   return (
     <li className={visitCardAccentClass(i, 'flex flex-col gap-2 py-3 pl-3 pr-3 sm:flex-row sm:items-center sm:gap-3')}>
       <div className="min-w-[7.5rem] shrink-0 text-xs font-medium text-stone-600 dark:text-stone-400">{formatSlotShort(b.start_at)}</div>
@@ -131,6 +143,12 @@ export function ClientVisitRow({
             </span>
           ) : null}
         </p>
+        {actionComment ? (
+          <p className="mt-1 text-xs text-stone-600 dark:text-stone-400">
+            <span className="font-medium text-stone-700 dark:text-stone-300">Комментарий мастера: </span>
+            {actionComment}
+          </p>
+        ) : null}
       </div>
       {showActions && onReschedule && onCancel ? (
         <VisitBookingActions

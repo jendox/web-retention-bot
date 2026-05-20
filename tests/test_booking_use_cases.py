@@ -205,9 +205,17 @@ async def test_cancel_booking_marks_booking_cancelled_and_flushes():
     master_id = uuid.uuid4()
     booking = _booking(master_id=master_id)
     booking_repo = FakeBookingRepository(booking)
-    use_case = CancelBookingUseCase(booking_repo)
+    master = SimpleNamespace(id=master_id, display_name="Master", public_slug=None, timezone="UTC")
+    dispatcher = SimpleNamespace()
+    use_case = CancelBookingUseCase(
+        booking_repo,
+        SimpleNamespace(get_client=AsyncMock(return_value=None)),
+        SimpleNamespace(get_for_master=AsyncMock(return_value=SimpleNamespace(id=uuid.uuid4(), name="Услуга"))),
+        SimpleNamespace(),
+        dispatcher,
+    )
 
-    await use_case(master_id=master_id, booking_id=booking.id)
+    await use_case(master=master, booking_id=booking.id)
 
     assert booking.status == BookingStatus.CANCELLED
     assert booking_repo.flushed is True
@@ -231,7 +239,10 @@ async def test_reschedule_booking_rejects_unavailable_slot():
     use_case = RescheduleBookingUseCase(
         FakeBookingRepository(booking),
         FakeServiceRepository(),
+        SimpleNamespace(get_client=AsyncMock(return_value=None)),
+        SimpleNamespace(),
         FakeAvailableSlotsUseCase(),
+        SimpleNamespace(),
     )
     master = SimpleNamespace(id=master_id, display_name="Master", public_slug=None, timezone="UTC")
 

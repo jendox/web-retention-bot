@@ -19,7 +19,11 @@ export type Booking = {
   currency_snapshot: string
   status: string
   attendance_confirmed_at?: string | null
+  cancel_comment?: string | null
+  reschedule_comment?: string | null
 }
+
+export const BOOKING_COMMENT_MAX_LENGTH = 500
 
 export type BookingClientListItem = Booking & {
   master_display_name: string
@@ -99,14 +103,22 @@ export async function bookingsCreateApi(body: {
   return apiFetch<Booking>('/api/bookings', { method: 'POST', body: JSON.stringify(body) })
 }
 
-export async function bookingsCancelApi(id: string) {
-  await apiFetch(`/api/bookings/${id}/cancel`, { method: 'POST' })
+export async function bookingsCancelApi(id: string, comment?: string | null) {
+  const trimmed = comment?.trim()
+  await apiFetch(`/api/bookings/${id}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify(trimmed ? { comment: trimmed } : {}),
+  })
 }
 
-export async function bookingsRescheduleApi(id: string, start_at: string) {
+export async function bookingsRescheduleApi(id: string, start_at: string, comment?: string | null) {
+  const trimmed = comment?.trim()
   return apiFetch<Booking>(`/api/bookings/${id}/reschedule`, {
     method: 'POST',
-    body: JSON.stringify({ start_at }),
+    body: JSON.stringify({
+      start_at,
+      ...(trimmed ? { comment: trimmed } : {}),
+    }),
   })
 }
 

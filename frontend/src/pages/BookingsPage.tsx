@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { availabilityApi } from '../api/availability'
 import { meApi } from '../api/auth'
 import {
+  BOOKING_COMMENT_MAX_LENGTH,
   bookingsCancelApi,
   bookingsCreateApi,
   bookingsListApi,
@@ -273,6 +274,8 @@ export function BookingsPage() {
   const [rescheduleSlot, setRescheduleSlot] = useState<string | null>(null)
   const [bookingActionError, setBookingActionError] = useState<string | null>(null)
   const [pendingCancel, setPendingCancel] = useState<Booking | null>(null)
+  const [cancelComment, setCancelComment] = useState('')
+  const [rescheduleComment, setRescheduleComment] = useState('')
 
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
   const master = useMasterMe(me.isSuccess)
@@ -431,11 +434,13 @@ export function BookingsPage() {
   })
 
   const cancelBooking = useMutation({
-    mutationFn: (bookingId: string) => bookingsCancelApi(bookingId),
+    mutationFn: ({ bookingId, comment }: { bookingId: string; comment: string }) =>
+      bookingsCancelApi(bookingId, comment),
     onSuccess: async () => {
       setBookingActionError(null)
       setRescheduleBooking(null)
       setPendingCancel(null)
+      setCancelComment('')
       await queryClient.invalidateQueries({ queryKey: ['bookings'] })
     },
     onError: (error) => setBookingActionError(getUserFacingError(error)),
@@ -446,12 +451,13 @@ export function BookingsPage() {
       if (!rescheduleBooking || !rescheduleSlot) {
         throw new Error('Выберите новое время.')
       }
-      return bookingsRescheduleApi(rescheduleBooking.id, rescheduleSlot)
+      return bookingsRescheduleApi(rescheduleBooking.id, rescheduleSlot, rescheduleComment)
     },
     onSuccess: async () => {
       setBookingActionError(null)
       setRescheduleBooking(null)
       setRescheduleSlot(null)
+      setRescheduleComment('')
       await queryClient.invalidateQueries({ queryKey: ['bookings'] })
       await queryClient.invalidateQueries({ queryKey: ['availability'] })
     },
@@ -1015,6 +1021,7 @@ export function BookingsPage() {
                               type="button"
                               onClick={() => {
                                 setBookingActionError(null)
+                                setRescheduleComment('')
                                 setRescheduleBooking(booking)
                                 setRescheduleDate(toDateInputValue(new Date(booking.start_at)))
                                 setRescheduleSlot(null)
@@ -1030,6 +1037,8 @@ export function BookingsPage() {
                               disabled={cancelBooking.isPending}
                               onClick={() => {
                                 cancelBooking.reset()
+                                setBookingActionError(null)
+                                setCancelComment('')
                                 setPendingCancel(booking)
                               }}
                               className="rounded-lg p-2 text-stone-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50 dark:hover:bg-rose-950/40 dark:hover:text-rose-400"
@@ -1140,6 +1149,7 @@ export function BookingsPage() {
           onClick={(event) => {
             if (event.target === event.currentTarget && !cancelBooking.isPending) {
               setPendingCancel(null)
+              setCancelComment('')
             }
           }}
         >
@@ -1154,6 +1164,20 @@ export function BookingsPage() {
               Запись клиента «{clientNameById.get(pendingCancel.client_id) ?? 'Клиент'}» на{' '}
               {formatSlotFull(pendingCancel.start_at)} будет отменена.
             </p>
+            <label className="mt-4 block">
+              <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                Комментарий для клиента (необязательно)
+              </span>
+              <textarea
+                value={cancelComment}
+                onChange={(event) => setCancelComment(event.target.value)}
+                maxLength={BOOKING_COMMENT_MAX_LENGTH}
+                rows={3}
+                disabled={cancelBooking.isPending}
+                placeholder="Например: перенёс запись на другой день — напишите в чат."
+                className={cn(fieldClass, 'mt-1 resize-y')}
+              />
+            </label>
             {cancelBooking.isError ? (
               <p className="mt-3 text-sm text-red-700 dark:text-red-300" role="alert">
                 {getUserFacingError(cancelBooking.error)}
@@ -1163,7 +1187,10 @@ export function BookingsPage() {
               <button
                 type="button"
                 disabled={cancelBooking.isPending}
-                onClick={() => setPendingCancel(null)}
+                onClick={() => {
+                  setPendingCancel(null)
+                  setCancelComment('')
+                }}
                 className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-800"
               >
                 Оставить
@@ -1171,7 +1198,9 @@ export function BookingsPage() {
               <button
                 type="button"
                 disabled={cancelBooking.isPending}
-                onClick={() => cancelBooking.mutate(pendingCancel.id)}
+                onClick={() =>
+                  cancelBooking.mutate({ bookingId: pendingCancel.id, comment: cancelComment })
+                }
                 className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-50 dark:bg-rose-600 dark:hover:bg-rose-500"
               >
                 {cancelBooking.isPending ? 'Отмена...' : 'Отменить запись'}
@@ -1191,6 +1220,7 @@ export function BookingsPage() {
             if (event.target === event.currentTarget && !reschedule.isPending) {
               setRescheduleBooking(null)
               setRescheduleSlot(null)
+              setRescheduleComment('')
             }
           }}
         >
@@ -1255,6 +1285,21 @@ export function BookingsPage() {
                 )}
               </div>
 
+              <label className="block">
+                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">
+                  Комментарий для клиента (необязательно)
+                </span>
+                <textarea
+                  value={rescheduleComment}
+                  onChange={(event) => setRescheduleComment(event.target.value)}
+                  maxLength={BOOKING_COMMENT_MAX_LENGTH}
+                  rows={3}
+                  disabled={reschedule.isPending}
+                  placeholder="Например: перенёс из‑за болезни — если неудобно, напишите."
+                  className={cn(fieldClass, 'mt-1 resize-y')}
+                />
+              </label>
+
               {reschedule.isError ? (
                 <p className="text-sm text-red-700 dark:text-red-300" role="alert">
                   {getUserFacingError(reschedule.error)}
@@ -1269,6 +1314,7 @@ export function BookingsPage() {
                 onClick={() => {
                   setRescheduleBooking(null)
                   setRescheduleSlot(null)
+                  setRescheduleComment('')
                 }}
                 className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-800"
               >

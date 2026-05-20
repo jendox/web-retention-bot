@@ -21,7 +21,11 @@ from app.repositories.notifications import (
     UserNotificationCreate,
     UserNotificationRepository,
 )
-from app.services.notifications.booking_mail import deliver_booking_created_email
+from app.services.notifications.booking_mail import (
+    deliver_booking_cancelled_email,
+    deliver_booking_created_email,
+    deliver_booking_moved_email,
+)
 from app.services.notifications.channel_policy import delivery_channels_for_user
 from app.services.notifications.mail_render import email_verification_user_notification_copy
 from app.services.notifications.recipients import BookingClientRecipient
@@ -30,6 +34,8 @@ from app.services.notifications.tasks import process_notification_delivery
 
 EMAIL_VERIFY_DEDUP = "email_verify:user:{user_id}"
 BOOKING_CREATED_DEDUP = "booking_created:booking:{booking_id}"
+BOOKING_CANCELLED_DEDUP = "booking_cancelled:booking:{booking_id}"
+BOOKING_MOVED_DEDUP = "booking_moved:booking:{booking_id}:{start_at_iso}"
 
 logger = get_logger("app.notifications.dispatcher")
 
@@ -59,6 +65,39 @@ class NotificationDispatcher:
         self._user_notification_repo = UserNotificationRepository(session)
         self._notification_delivery_repo = NotificationDeliveryRepository(session)
 
+    async def _deliver_booking_email(self, user_note: UserNotification, *, to_email: str) -> None:
+        payload = user_note.payload or {}
+        booking_id = UUID(payload["booking_id"])
+        if user_note.event_type is NotificationEventType.BOOKING_CREATED:
+            await deliver_booking_created_email(
+                settings=self._settings,
+                session=self._session,
+                booking_id=booking_id,
+                to_email=to_email,
+            )
+            return
+        if user_note.event_type is NotificationEventType.BOOKING_CANCELLED:
+            await deliver_booking_cancelled_email(
+                settings=self._settings,
+                session=self._session,
+                booking_id=booking_id,
+                to_email=to_email,
+            )
+            return
+        if user_note.event_type is NotificationEventType.BOOKING_MOVED:
+            previous_start_at_iso = payload.get("previous_start_at")
+            if not previous_start_at_iso:
+                raise ValueError("missing previous_start_at for booking_moved")
+            await deliver_booking_moved_email(
+                settings=self._settings,
+                session=self._session,
+                booking_id=booking_id,
+                to_email=to_email,
+                previous_start_at_iso=previous_start_at_iso,
+            )
+            return
+        raise ValueError(f"unsupported booking email event: {user_note.event_type.value}")
+
     async def _deliver_eager(self, user_note: UserNotification) -> None:
         payload = user_note.payload or {}
         to_email = payload.get("to_email")
@@ -75,13 +114,12 @@ class NotificationDispatcher:
             )
             return
 
-        if user_note.event_type is NotificationEventType.BOOKING_CREATED:
-            await deliver_booking_created_email(
-                settings=self._settings,
-                session=self._session,
-                booking_id=UUID(payload["booking_id"]),
-                to_email=to_email,
-            )
+        if user_note.event_type in {
+            NotificationEventType.BOOKING_CREATED,
+            NotificationEventType.BOOKING_CANCELLED,
+            NotificationEventType.BOOKING_MOVED,
+        }:
+            await self._deliver_booking_email(user_note, to_email=to_email)
             return
 
         raise ValueError(f"unsupported eager event type: {user_note.event_type.value}")
@@ -243,6 +281,120 @@ class NotificationDispatcher:
             for channel in delivery_channels_for_user(
                 user_id=recipient.user_id,
                 event_type=NotificationEventType.BOOKING_CREATED,
+            ):
+                delivery = await self._notification_delivery_repo.create(
+                    NotificationDeliveryCreate(
+                        user_notification_id=user_note.id,
+                        channel=channel,
+                        status=DeliveryStatus.PENDING,
+                        scheduled_at=datetime.now(UTC),
+                    ),
+                )
+                await self._enqueue_delivery(event=event, delivery=delivery, user_note=user_note)
+
+    async def dispatch_booking_cancelled(
+        self,
+        *,
+        booking_id: UUID,
+        master_profile_id: UUID,
+        client_id: UUID,
+        recipient: BookingClientRecipient,
+        email_ctx: BookingEmailContext,
+    ) -> None:
+        with log_context(notification="dispatch_booking_cancelled", channel="email"):
+            payload = {
+                **email_ctx.payload,
+                "booking_id": str(booking_id),
+                "to_email": recipient.email,
+            }
+            event = await self._notification_event_repo.create(
+                NotificationEventCreate(
+                    type=NotificationEventType.BOOKING_CANCELLED,
+                    target_user_id=recipient.user_id,
+                    master_profile_id=master_profile_id,
+                    client_id=client_id,
+                    booking_id=booking_id,
+                    payload=payload,
+                ),
+            )
+
+            user_note = await self._user_notification_repo.create(
+                UserNotificationCreate(
+                    event_id=event.id,
+                    recipient_user_id=recipient.user_id,
+                    recipient_client_id=client_id,
+                    event_type=NotificationEventType.BOOKING_CANCELLED,
+                    title=email_ctx.title,
+                    body=email_ctx.body,
+                    link_url=email_ctx.link_url,
+                    payload=payload,
+                    dedup_key=BOOKING_CANCELLED_DEDUP.format(booking_id=booking_id),
+                ),
+            )
+
+            for channel in delivery_channels_for_user(
+                user_id=recipient.user_id,
+                event_type=NotificationEventType.BOOKING_CANCELLED,
+            ):
+                delivery = await self._notification_delivery_repo.create(
+                    NotificationDeliveryCreate(
+                        user_notification_id=user_note.id,
+                        channel=channel,
+                        status=DeliveryStatus.PENDING,
+                        scheduled_at=datetime.now(UTC),
+                    ),
+                )
+                await self._enqueue_delivery(event=event, delivery=delivery, user_note=user_note)
+
+    async def dispatch_booking_moved(
+        self,
+        *,
+        booking_id: UUID,
+        master_profile_id: UUID,
+        client_id: UUID,
+        recipient: BookingClientRecipient,
+        email_ctx: BookingEmailContext,
+        previous_start_at_iso: str,
+    ) -> None:
+        with log_context(notification="dispatch_booking_moved", channel="email"):
+            payload = {
+                **email_ctx.payload,
+                "booking_id": str(booking_id),
+                "to_email": recipient.email,
+                "previous_start_at": previous_start_at_iso,
+                "new_start_at": email_ctx.payload["new_start_at"],
+            }
+            event = await self._notification_event_repo.create(
+                NotificationEventCreate(
+                    type=NotificationEventType.BOOKING_MOVED,
+                    target_user_id=recipient.user_id,
+                    master_profile_id=master_profile_id,
+                    client_id=client_id,
+                    booking_id=booking_id,
+                    payload=payload,
+                ),
+            )
+
+            user_note = await self._user_notification_repo.create(
+                UserNotificationCreate(
+                    event_id=event.id,
+                    recipient_user_id=recipient.user_id,
+                    recipient_client_id=client_id,
+                    event_type=NotificationEventType.BOOKING_MOVED,
+                    title=email_ctx.title,
+                    body=email_ctx.body,
+                    link_url=email_ctx.link_url,
+                    payload=payload,
+                    dedup_key=BOOKING_MOVED_DEDUP.format(
+                        booking_id=booking_id,
+                        start_at_iso=payload["new_start_at"],
+                    ),
+                ),
+            )
+
+            for channel in delivery_channels_for_user(
+                user_id=recipient.user_id,
+                event_type=NotificationEventType.BOOKING_MOVED,
             ):
                 delivery = await self._notification_delivery_repo.create(
                     NotificationDeliveryCreate(
