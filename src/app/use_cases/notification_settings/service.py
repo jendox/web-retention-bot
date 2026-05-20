@@ -32,7 +32,6 @@ from app.services.notifications.settings_catalog import (
 
 _CHANNEL_TO_PROVIDER = {
     DeliveryChannel.TELEGRAM: MessengerProvider.TELEGRAM,
-    DeliveryChannel.VIBER: MessengerProvider.VIBER,
 }
 
 
@@ -113,7 +112,6 @@ class NotificationSettingsService:
                 )
             for kind, enabled in (
                 (DeliveryChannel.TELEGRAM, ch.telegram),
-                (DeliveryChannel.VIBER, ch.viber),
                 (DeliveryChannel.SMS, ch.sms),
             ):
                 if enabled is None:
@@ -195,9 +193,6 @@ class NotificationSettingsService:
         if provider == MessengerProvider.TELEGRAM:
             username = bots.telegram_bot_username.lstrip("@")
             return f"https://t.me/{username}?start={token}"
-        if provider == MessengerProvider.VIBER:
-            # Viber public account deep link; URI scheme may vary by PA setup.
-            return f"viber://pa?chatURI={bots.viber_pa_uri}&context={token}"
         raise ValueError(f"Unsupported provider: {provider}")
 
     async def _can_enable_external(self, user_id: UUID, kind: DeliveryChannel) -> bool:
@@ -229,7 +224,6 @@ class NotificationSettingsService:
         return TopicChannelPrefsOut(
             email=enabled_for(DeliveryChannel.EMAIL),
             telegram=enabled_for(DeliveryChannel.TELEGRAM),
-            viber=enabled_for(DeliveryChannel.VIBER),
             sms=enabled_for(DeliveryChannel.SMS),
         )
 

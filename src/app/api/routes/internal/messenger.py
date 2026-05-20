@@ -31,7 +31,7 @@ def _provider_from_path(kind: str) -> MessengerProvider:
 @router.post(
     "/{provider}/complete-link",
     response_model=MessengerCompleteLinkOut,
-    summary="Bot sidecar: confirm user linked messenger (chat_id / viber id)",
+    summary="Bot sidecar: confirm user linked messenger (chat_id)",
 )
 async def complete_messenger_link(
     provider: str,

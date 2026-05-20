@@ -29,6 +29,7 @@ from app.services.notifications.booking_mail import (
     deliver_booking_moved_email,
 )
 from app.services.notifications.channel_policy import delivery_channels_for_user
+from app.services.notifications.messenger_delivery import deliver_user_notification_telegram
 from app.services.notifications.mail_render import (
     BOOKING_EMAIL_AUDIENCE_MASTER,
     email_verification_user_notification_copy,
@@ -111,7 +112,7 @@ class NotificationDispatcher:
             return
         raise ValueError(f"unsupported booking email event: {user_note.event_type.value}")
 
-    async def _deliver_eager(self, user_note: UserNotification) -> None:
+    async def _deliver_email_eager(self, user_note: UserNotification) -> None:
         payload = user_note.payload or {}
         to_email = payload.get("to_email")
         if not to_email:
@@ -137,6 +138,24 @@ class NotificationDispatcher:
 
         raise ValueError(f"unsupported eager event type: {user_note.event_type.value}")
 
+    async def _deliver_delivery(
+        self,
+        delivery: NotificationDelivery,
+        user_note: UserNotification,
+    ) -> None:
+        if delivery.channel == DeliveryChannel.EMAIL:
+            await self._deliver_email_eager(user_note)
+            return
+        if delivery.channel == DeliveryChannel.TELEGRAM:
+            await deliver_user_notification_telegram(
+                settings=self._settings,
+                preference_repo=self._preference_repo,
+                delivery=delivery,
+            )
+            return
+        delivery.status = DeliveryStatus.SKIPPED
+        delivery.error_message = f"channel not supported: {delivery.channel.value}"
+
     async def _enqueue_delivery(
         self,
         *,
@@ -145,10 +164,27 @@ class NotificationDispatcher:
         user_note: UserNotification,
     ) -> None:
         if self._settings.notifications.eager_deliveries:
-            await self._deliver_eager(user_note)
-            delivery.sent_at = datetime.now(UTC)
-            delivery.status = DeliveryStatus.SENT
-            logger.info("sent_eagerly", event_id=str(event.id), delivery_id=str(delivery.id))
+            await self._deliver_delivery(delivery, user_note)
+            if delivery.channel == DeliveryChannel.EMAIL and delivery.status == DeliveryStatus.PENDING:
+                delivery.sent_at = datetime.now(UTC)
+                delivery.status = DeliveryStatus.SENT
+            if delivery.status in {DeliveryStatus.SENT, DeliveryStatus.SKIPPED}:
+                logger.info(
+                    "sent_eagerly",
+                    event_id=str(event.id),
+                    delivery_id=str(delivery.id),
+                    channel=delivery.channel.value,
+                    status=delivery.status.value,
+                )
+            elif delivery.status == DeliveryStatus.FAILED:
+                logger.warning(
+                    "eager_delivery_failed",
+                    event_id=str(event.id),
+                    delivery_id=str(delivery.id),
+                    channel=delivery.channel.value,
+                    error=delivery.error_message,
+                )
+                raise RuntimeError(delivery.error_message or "eager delivery failed")
         else:
             process_notification_delivery.apply_async(
                 args=[str(delivery.id)],
@@ -261,7 +297,7 @@ class NotificationDispatcher:
         recipient: BookingClientRecipient,
         email_ctx: BookingEmailContext,
     ) -> None:
-        with log_context(notification="dispatch_booking_created", channel="email"):
+        with log_context(notification="dispatch_booking_created"):
             payload = {
                 **email_ctx.payload,
                 "booking_id": str(booking_id),
@@ -319,7 +355,7 @@ class NotificationDispatcher:
         recipient: BookingClientRecipient,
         email_ctx: BookingEmailContext,
     ) -> None:
-        with log_context(notification="dispatch_booking_cancelled", channel="email"):
+        with log_context(notification="dispatch_booking_cancelled"):
             payload = {
                 **email_ctx.payload,
                 "booking_id": str(booking_id),
@@ -378,7 +414,7 @@ class NotificationDispatcher:
         email_ctx: BookingEmailContext,
         previous_start_at_iso: str,
     ) -> None:
-        with log_context(notification="dispatch_booking_moved", channel="email"):
+        with log_context(notification="dispatch_booking_moved"):
             payload = {
                 **email_ctx.payload,
                 "booking_id": str(booking_id),

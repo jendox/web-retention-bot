@@ -44,7 +44,6 @@ export type ClientMyMasterItem = {
   contact_email: string | null
   contact_phone: string | null
   telegram: string | null
-  viber: string | null
 }
 
 export function clientMasterLabel(master: Pick<ClientMyMasterItem, 'client_alias' | 'display_name'>) {

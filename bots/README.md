@@ -1,8 +1,8 @@
-# Messenger bot sidecars
+# Messenger bot sidecar (Telegram)
 
-Отдельные лёгкие сервисы для Telegram и Viber. **Не импортируют** код основного приложения (`src/app`) — только доставку уведомлений через Bot API и вызов internal API Retention.
+Лёгкий сервис для Telegram. **Не импортирует** код основного приложения (`src/app`) — только доставку уведомлений через Bot API и вызов internal API Retention.
 
-Роль каналов: **только push-уведомления** (текст + ссылка в приложение). Запись, настройки и привязка каналов — в веб-кабинете.
+Роль канала: **только push-уведомления** (текст + ссылка в приложение). Запись, настройки и привязка каналов — в веб-кабинете.
 
 ## Структура (uv workspace)
 
@@ -10,16 +10,15 @@
 
 ```toml
 [tool.uv.workspace]
-members = ["bots/shared", "bots/telegram", "bots/viber"]
+members = ["bots/shared", "bots/telegram"]
 ```
 
 | Путь | Пакет | Назначение |
 |------|-------|------------|
 | `bots/shared/` | `retention-messenger-shared` | HTTP-клиент к API (`retention_shared.api`) |
 | `bots/telegram/` | `retention-telegram-bot` | Telegram sidecar |
-| `bots/viber/` | `retention-viber-bot` | Viber sidecar (заготовка) |
 
-Зависимость между workspace-пакетами в `bots/telegram/pyproject.toml` и `bots/viber/pyproject.toml`:
+Зависимость в `bots/telegram/pyproject.toml`:
 
 ```toml
 [tool.uv.sources]
@@ -39,9 +38,12 @@ retention-messenger-shared = { workspace = true }
         (X-Bot-Secret, token, external_id = chat_id)
     → API: notification_channels.address = chat_id
 
-Отправка (из API, когда подключено в dispatcher)
-    → POST http://telegram-bot:8091/v1/send { external_id, text }
+Отправка (из API при событии записи и т.п.)
+    → API проверяет настройки пользователя (prefs) и linked chat_id
+    → POST http://telegram-bot:8091/v1/send { external_id: chat_id, text }
     → Telegram Bot API sendMessage
+
+На стороне API в `.env` нужен `MESSENGER_BOTS__TELEGRAM_SERVICE_URL` (не только токен в контейнере бота).
 ```
 
 ## Переменные окружения
@@ -64,7 +66,7 @@ MESSENGER_BOTS__TELEGRAM_BOT_USERNAME=retention_studio_bot
 | `RETENTION_API_URL` | URL API: `http://127.0.0.1:8000` (локально) или `http://host.docker.internal:8000` (Docker → хост) |
 | `TELEGRAM_MODE` | `polling` (dev) или `webhook` (prod) |
 
-Порты sidecar: **8091** (Telegram), **8092** (Viber) — health, `/v1/send`, webhook.
+Порт sidecar: **8091** — health, `/v1/send`, webhook.
 
 ## Локальная разработка (uv + один `.venv` в корне)
 
@@ -73,8 +75,8 @@ MESSENGER_BOTS__TELEGRAM_BOT_USERNAME=retention_studio_bot
 uv sync
 
 make infra-up          # Redis (токены привязки), Postgres
-make backend-run     # API :8000
-make frontend-run    # SPA :5173 (опционально)
+make backend-run       # API :8000
+make frontend-run      # SPA :5173 (опционально)
 ```
 
 Запуск Telegram-бота:
@@ -114,8 +116,7 @@ Breakpoints: `bots/telegram/app/handlers.py`, `app/main.py`.
 make backend-run
 
 # бот в контейнере
-make bots-up          # Telegram
-make bots-up-viber    # Telegram + Viber (profile viber)
+make bots-up
 make bots-down
 ```
 
@@ -126,11 +127,3 @@ make bots-down
 ```bash
 curl "https://api.telegram.org/bot<TOKEN>/deleteWebhook"
 ```
-
-## Viber
-
-Профиль `viber` в compose. Без `VIBER_AUTH_TOKEN` контейнер поднимается, но не отвечает в чат. Код и workspace-зависимости те же, что у Telegram.
-
-## Файлы `requirements.txt` в `bots/*/`
-
-Для Docker **не используются** (зависимости ставятся через `pip install` из `pyproject.toml` в Dockerfile). Файлы можно удалить или оставить как справку; источник истины — workspace и `uv.lock` в корне.

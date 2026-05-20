@@ -10,7 +10,7 @@
 | `tests/` | Pytest (API, use cases, уведомления) |
 | `frontend/` | SPA: React 19, TypeScript, Vite, Tailwind 4, TanStack Query |
 | `deploy/` | Dev‑инфра: PostgreSQL, Redis, [smtp4dev](https://github.com/rnwood/smtp4dev) |
-| `bots/` | Лёгкие sidecar‑контейнеры Telegram / Viber (отдельно от `src/app`) |
+| `bots/` | Лёгкий sidecar Telegram (отдельно от `src/app`) |
 | `docs/` | Продуктовый промпт и заметки |
 
 Корень: `pyproject.toml`, `alembic.ini`, `.env.example`, `Makefile`.
@@ -92,7 +92,7 @@ make frontend-run      # http://127.0.0.1:5173 — proxy /api → :8000
 - **SMTP** — исходящая почта
 - **BOOKING** — шаг слотов, горизонт записи, интервал автозавершения
 - **NOTIFICATIONS** — `EAGER_DELIVERIES` (синхронная доставка email без Celery)
-- **MESSENGER_BOTS** — секрет для sidecar, URL Telegram/Viber‑сервисов, имя бота `retention_studio_bot`; токен бота — `TELEGRAM_BOT_TOKEN` для контейнера (см. [`bots/README.md`](bots/README.md))
+- **MESSENGER_BOTS** — секрет для sidecar, URL Telegram‑сервиса, имя бота `retention_studio_bot`; токен бота — `TELEGRAM_BOT_TOKEN` для контейнера (см. [`bots/README.md`](bots/README.md))
 
 ## Реализованный функционал
 
@@ -107,7 +107,7 @@ make frontend-run      # http://127.0.0.1:5173 — proxy /api → :8000
 - Дашборд, **расписание** (недельные правила и исключения), **услуги**, **клиенты** (карточка, alias, заметки)
 - **Записи**: создание, список (upcoming/history), отмена и перенос с опциональным комментарием для клиента
 - Подтверждение явки (attended / no‑show) для завершённых визитов
-- **Настройки**: контакты мастера (email, телефон, Telegram, Viber), публичное имя
+- **Настройки**: контакты мастера (email, телефон, Telegram), публичное имя
 - Страница **уведомлений** (in‑app лента, отметка прочитанным)
 
 ### Кабинет клиента (UI + API)
@@ -129,7 +129,7 @@ make frontend-run      # http://127.0.0.1:5173 — proxy /api → :8000
 
 Шаблоны писем: `src/app/services/notifications/templates/email/`. Отдельные тексты для аудитории master/client.
 
-Заготовки в модели (без полной продуктовой логики): напоминания перед визитом, re‑engagement, Telegram/Viber/SMS в enum каналов.
+Заготовки в модели (без полной продуктовой логики): напоминания перед визитом, re‑engagement, Telegram/SMS в enum каналов.
 
 ### Записи и слоты
 
@@ -179,7 +179,7 @@ Frontend: ESLint, `tsc -b` при `frontend-build`, `npm run test` (vitest: `cab
 
 - Настройки каналов уведомлений (отключение email и др., кроме in‑app) — UI частично заглушка
 - Напоминания перед визитом и retention‑цепочки (модели есть, доставка не завершена)
-- Telegram / Viber / SMS как каналы
+- Telegram / SMS как каналы
 - Расширение прав и границ «кто может что» между мастером и клиентом
 - Оплата, буферы между записями, публичная страница записи без инвайта
 

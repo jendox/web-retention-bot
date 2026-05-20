@@ -37,7 +37,6 @@ def test_client_master_item_maps_contact_fields():
         contact_email="a@b.c",
         contact_phone="+1",
         telegram="@s",
-        viber="viber",
     )
     link = SimpleNamespace(
         id=uuid.uuid4(),
@@ -52,7 +51,6 @@ def test_client_master_item_maps_contact_fields():
     assert item.contact_email == "a@b.c"
     assert item.contact_phone == "+1"
     assert item.telegram == "@s"
-    assert item.viber == "viber"
 
 
 @pytest.mark.asyncio
@@ -68,7 +66,6 @@ async def test_update_client_master_link_sets_alias():
         contact_email="studio@example.com",
         contact_phone=None,
         telegram=None,
-        viber=None,
     )
     link = SimpleNamespace(
         id=uuid.uuid4(),

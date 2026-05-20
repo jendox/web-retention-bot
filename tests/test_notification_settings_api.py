@@ -169,7 +169,7 @@ async def test_delivery_channels_respects_disabled_email_pref() -> None:
     )
     assert channels == []
     assert repo.is_channel_enabled_for_event.await_count == len(
-        (DeliveryChannel.EMAIL, DeliveryChannel.TELEGRAM, DeliveryChannel.VIBER, DeliveryChannel.SMS),
+        (DeliveryChannel.EMAIL, DeliveryChannel.TELEGRAM, DeliveryChannel.SMS),
     )
     email_calls = [
         c

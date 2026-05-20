@@ -150,7 +150,13 @@ async def test_dispatch_booking_created_persists_event_note_and_delivery(mail_se
     booking_id = uuid.uuid4()
     recipient = SimpleNamespace(user_id=uuid.uuid4(), email="client@example.com")
 
-    with patch.object(dispatcher, "_deliver_eager", new_callable=AsyncMock) as mock_deliver:
+    with (
+        patch(
+            "app.services.notifications.dispatcher.delivery_channels_for_user",
+            AsyncMock(return_value=[DeliveryChannel.EMAIL]),
+        ),
+        patch.object(dispatcher, "_deliver_delivery", new_callable=AsyncMock) as mock_deliver,
+    ):
         await dispatcher.dispatch_booking_created(
             booking_id=booking_id,
             master_profile_id=uuid.uuid4(),
@@ -443,7 +449,13 @@ async def test_dispatch_booking_cancelled_persists_event(mail_settings: Settings
 
     recipient = SimpleNamespace(user_id=uuid.uuid4(), email="client@example.com")
 
-    with patch.object(dispatcher, "_deliver_eager", new_callable=AsyncMock):
+    with (
+        patch(
+            "app.services.notifications.dispatcher.delivery_channels_for_user",
+            AsyncMock(return_value=[DeliveryChannel.EMAIL]),
+        ),
+        patch.object(dispatcher, "_deliver_delivery", new_callable=AsyncMock),
+    ):
         await dispatcher.dispatch_booking_cancelled(
             booking_id=uuid.uuid4(),
             master_profile_id=uuid.uuid4(),

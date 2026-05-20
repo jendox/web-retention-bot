@@ -102,7 +102,6 @@ class ClientMyMasterItem(BaseModel):
     contact_email: str | None = None
     contact_phone: str | None = None
     telegram: str | None = None
-    viber: str | None = None
 
 
 class ClientBookingStatsOut(BaseModel):

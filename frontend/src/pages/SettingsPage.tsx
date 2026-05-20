@@ -27,7 +27,6 @@ type FormState = {
   contactEmail: string
   contactPhone: string
   telegram: string
-  viber: string
   clientDisplayName: string
   clientPhone: string
 }
@@ -68,7 +67,6 @@ export function SettingsPage() {
       contactEmail: master.data?.contact_email ?? '',
       contactPhone: master.data?.contact_phone ?? '',
       telegram: master.data?.telegram ?? '',
-      viber: master.data?.viber ?? '',
       clientDisplayName,
       clientPhone,
     }),
@@ -104,7 +102,6 @@ export function SettingsPage() {
         contact_email: form.contactEmail.trim() || null,
         contact_phone: form.contactPhone.trim() || null,
         telegram: form.telegram.trim() || null,
-        viber: form.viber.trim() || null,
       }),
     onSuccess: async () => {
       setDraft({})
@@ -262,14 +259,6 @@ export function SettingsPage() {
                   value={form.telegram}
                   onChange={(e) => setDraft((prev) => ({ ...prev, telegram: e.target.value }))}
                   placeholder="@username"
-                  className={cn(fieldClass, 'mt-1')}
-                />
-              </label>
-              <label className="block sm:col-span-2">
-                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Viber</span>
-                <input
-                  value={form.viber}
-                  onChange={(e) => setDraft((prev) => ({ ...prev, viber: e.target.value }))}
                   className={cn(fieldClass, 'mt-1')}
                 />
               </label>

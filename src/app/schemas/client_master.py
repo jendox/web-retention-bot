@@ -25,7 +25,6 @@ def client_master_item(
         contact_email=master.contact_email,
         contact_phone=master.contact_phone,
         telegram=master.telegram,
-        viber=master.viber,
     )
 
 

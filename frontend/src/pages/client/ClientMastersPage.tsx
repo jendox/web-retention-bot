@@ -71,9 +71,6 @@ function MasterContacts({ master }: { master: ClientMasterView }) {
     const handle = master.telegram.replace(/^@/, '')
     rows.push({ label: 'Telegram', value: master.telegram, href: `https://t.me/${handle}` })
   }
-  if (master.viber) {
-    rows.push({ label: 'Viber', value: master.viber })
-  }
 
   if (rows.length === 0) {
     return <p className="mt-3 text-sm text-stone-500 dark:text-stone-400">Контакты мастера не указаны.</p>

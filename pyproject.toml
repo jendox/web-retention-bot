@@ -129,5 +129,4 @@ testpaths = ["tests"]
 members = [
     "bots/shared",
     "bots/telegram",
-    "bots/viber",
 ]

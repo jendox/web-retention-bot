@@ -23,8 +23,6 @@ class MessengerBotClients:
     def _service_url(self, provider: MessengerProvider) -> str | None:
         if provider == MessengerProvider.TELEGRAM:
             return self._settings.telegram_service_url
-        if provider == MessengerProvider.VIBER:
-            return self._settings.viber_service_url
         return None
 
     async def send_text(

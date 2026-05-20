@@ -71,14 +71,6 @@ CHANNEL_DEFS: tuple[ChannelDef, ...] = (
         connectable=True,
     ),
     ChannelDef(
-        kind=DeliveryChannel.VIBER,
-        label="Viber",
-        description="Сообщения в Viber.",
-        connectable=True,
-        available=False,
-        coming_soon_label="Скоро",
-    ),
-    ChannelDef(
         kind=DeliveryChannel.SMS,
         label="SMS",
         description="Сообщения на номер телефона.",
@@ -88,7 +80,7 @@ CHANNEL_DEFS: tuple[ChannelDef, ...] = (
     ),
 )
 
-BOT_LINKABLE_CHANNELS = frozenset({DeliveryChannel.TELEGRAM, DeliveryChannel.VIBER})
+BOT_LINKABLE_CHANNELS = frozenset({DeliveryChannel.TELEGRAM})
 
 
 def topics_for_cabinet(cabinet: CabinetKind) -> tuple[NotificationTopicDef, ...]:

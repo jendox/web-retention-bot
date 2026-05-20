@@ -21,23 +21,3 @@ services:
       - "8091:8091"
     mem_limit: 128m
     cpus: 0.5
-
-  viber-bot:
-    build:
-      context: ../bots
-      dockerfile: viber/Dockerfile
-    container_name: retention-viber-bot
-    restart: unless-stopped
-    profiles:
-      - viber
-    environment:
-      VIBER_AUTH_TOKEN: ${VIBER_AUTH_TOKEN:-}
-      BOT_INTERNAL_SECRET: ${MESSENGER_BOTS__INTERNAL_SECRET:-dev-bot-internal-secret-change-me}
-      RETENTION_API_URL: ${RETENTION_API_URL:-http://host.docker.internal:8000}
-      LISTEN_PORT: "8092"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "8092:8092"
-    mem_limit: 128m
-    cpus: 0.5

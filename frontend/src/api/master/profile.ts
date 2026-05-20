@@ -9,7 +9,6 @@ export type MasterProfile = {
   contact_email: string | null
   contact_phone: string | null
   telegram: string | null
-  viber: string | null
 }
 
 export type MasterProfileUpdate = {
@@ -20,7 +19,6 @@ export type MasterProfileUpdate = {
   contact_email?: string | null
   contact_phone?: string | null
   telegram?: string | null
-  viber?: string | null
 }
 
 export async function masterMeApi() {

@@ -13,9 +13,6 @@ infra-clean:
 bots-up:
 	$(DOCKER_COMPOSE_BOTS) up -d --build telegram-bot
 
-bots-up-viber:
-	$(DOCKER_COMPOSE_BOTS) --profile viber up -d --build
-
 bots-down:
 	$(DOCKER_COMPOSE_BOTS) down
 

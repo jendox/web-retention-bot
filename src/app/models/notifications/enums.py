@@ -15,7 +15,6 @@ class DeliveryChannel(enum.StrEnum):
     IN_APP = "in_app"
     EMAIL = "email"
     TELEGRAM = "telegram"
-    VIBER = "viber"
     SMS = "sms"
 
 

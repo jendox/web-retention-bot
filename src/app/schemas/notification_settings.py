@@ -26,7 +26,6 @@ class ExternalChannelOut(BaseModel):
 class TopicChannelPrefsOut(BaseModel):
     email: bool = False
     telegram: bool = False
-    viber: bool = False
     sms: bool = False
 
 
@@ -46,7 +45,6 @@ class NotificationSettingsOut(BaseModel):
 class TopicChannelPrefsPatch(BaseModel):
     email: bool | None = None
     telegram: bool | None = None
-    viber: bool | None = None
     sms: bool | None = None
 
 

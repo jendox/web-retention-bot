@@ -32,7 +32,6 @@ class MasterProfileSchema(BaseModel):
     contact_email: str | None = None
     contact_phone: str | None = None
     telegram: str | None = None
-    viber: str | None = None
 
     tzinfo: ZoneInfo | None = None
 
@@ -57,7 +56,6 @@ class MasterProfileUpdate(BaseModel):
     contact_email: str | None = Field(default=None, max_length=320)
     contact_phone: str | None = Field(default=None, max_length=50)
     telegram: str | None = Field(default=None, max_length=100)
-    viber: str | None = Field(default=None, max_length=100)
 
     @field_validator("contact_email", mode="before")
     @classmethod
@@ -66,7 +64,7 @@ class MasterProfileUpdate(BaseModel):
             return None
         return value.strip().lower() if isinstance(value, str) else value
 
-    @field_validator("contact_phone", "telegram", "viber", mode="before")
+    @field_validator("contact_phone", "telegram", mode="before")
     @classmethod
     def empty_optional_str_to_none(cls, value: str | None) -> str | None:
         if value is None or (isinstance(value, str) and not value.strip()):

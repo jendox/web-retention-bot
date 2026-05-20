@@ -20,7 +20,6 @@ export type ExternalChannel = {
 export type TopicChannelPrefs = {
   email: boolean
   telegram: boolean
-  viber: boolean
   sms: boolean
 }
 
@@ -40,7 +39,6 @@ export type NotificationSettings = {
 export type TopicChannelPrefsPatch = {
   email?: boolean
   telegram?: boolean
-  viber?: boolean
   sms?: boolean
 }
 

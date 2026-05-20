@@ -13,7 +13,9 @@ from app.core.worker_db import worker_db_session
 from app.models.notifications import NotificationEventType
 from app.models.notifications.enums import DeliveryChannel, DeliveryStatus
 from app.models.notifications.models import NotificationDelivery
+from app.repositories.notification_preferences import NotificationPreferenceRepository
 from app.repositories.notifications import NotificationDeliveryRepository
+from app.services.notifications.messenger_delivery import deliver_user_notification_telegram
 from app.services.notifications.booking_mail import (
     BookingEmailDeliveryOptions,
     BookingNotificationSkip,
@@ -201,6 +203,20 @@ async def _process_notification_delivery_async(delivery_id: UUID) -> None:
             return
         if delivery.status != DeliveryStatus.PENDING:
             logger.info("skipped", reason="status_not_pending", status=delivery.status.value)
+            return
+
+        if delivery.channel == DeliveryChannel.TELEGRAM:
+            preference_repo = NotificationPreferenceRepository(session)
+            logger.info(
+                "processing",
+                event_type=delivery.user_notification.event_type.value,
+                channel=delivery.channel.value,
+            )
+            await deliver_user_notification_telegram(
+                settings=settings,
+                preference_repo=preference_repo,
+                delivery=delivery,
+            )
             return
 
         if delivery.channel != DeliveryChannel.EMAIL:

@@ -19,7 +19,7 @@ import { surfacePanel } from '../lib/surface'
 
 type Cabinet = 'client' | 'master'
 
-const channelKeys = ['email', 'telegram', 'viber', 'sms'] as const
+const channelKeys = ['email', 'telegram', 'sms'] as const
 type ChannelKey = (typeof channelKeys)[number]
 
 const checkboxClass =
@@ -64,7 +64,7 @@ function channelMeta(
   }
 }
 
-const BOT_CHANNELS = new Set(['telegram', 'viber'])
+const BOT_CHANNELS = new Set(['telegram'])
 
 function ChannelConnectRow({
   channel,
@@ -174,7 +174,7 @@ function ChannelConnectRow({
             rel="noreferrer"
             className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-500"
           >
-            {channel.kind === 'telegram' ? 'Открыть @retention_studio_bot' : 'Открыть Viber'}
+            Открыть @retention_studio_bot
           </a>
         )}
         {connectUrl ? (

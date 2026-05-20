@@ -9,7 +9,6 @@ from app.services.notifications.settings_catalog import category_for_event_type
 EXTERNAL_CHANNELS = (
     DeliveryChannel.EMAIL,
     DeliveryChannel.TELEGRAM,
-    DeliveryChannel.VIBER,
     DeliveryChannel.SMS,
 )
 

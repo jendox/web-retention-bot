@@ -210,7 +210,6 @@ export function buildClientCabinetMocks(now = new Date()) {
       contact_email: 'studio.liniya@example.com',
       contact_phone: '+375291234567',
       telegram: '@liniya_studio',
-      viber: null,
     },
     {
       master_id: 'mock-master-2',
@@ -225,7 +224,6 @@ export function buildClientCabinetMocks(now = new Date()) {
       contact_email: 'irina.lebedeva@example.com',
       contact_phone: null,
       telegram: null,
-      viber: null,
     },
   ]
 

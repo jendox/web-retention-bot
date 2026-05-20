@@ -19,7 +19,6 @@ def _master_profile() -> SimpleNamespace:
         contact_email="old@example.com",
         contact_phone=None,
         telegram=None,
-        viber=None,
     )
 
 
@@ -83,14 +82,12 @@ async def test_update_master_profile_updates_contact_fields():
             contact_email="new@example.com",
             contact_phone="+375291112233",
             telegram="@studio",
-            viber="viber-user",
         ),
     )
 
     assert result.contact_email == "new@example.com"
     assert result.contact_phone == "+375291112233"
     assert result.telegram == "@studio"
-    assert result.viber == "viber-user"
     assert master.contact_email == "new@example.com"
     assert repo.flush_called is True
 
