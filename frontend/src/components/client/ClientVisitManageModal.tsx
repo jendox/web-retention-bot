@@ -16,7 +16,7 @@ import {
   toDateInputValue,
 } from '../../lib/bookingSchedule'
 import { bookingSlotButtonClass } from '../../lib/bookingSlots'
-import { cn, fieldClass } from '../../lib/forms'
+import { cn } from '../../lib/forms'
 
 const dateLongFormatter = new Intl.DateTimeFormat('ru-RU', {
   weekday: 'long',
@@ -145,7 +145,7 @@ export function ClientVisitManageModal({ booking, mode, onClose, onSuccess }: Pr
               rows={3}
               disabled={cancelBooking.isPending}
               placeholder="Например: не смогу прийти — прошу перенести."
-              className={cn(fieldClass, 'mt-1 resize-y')}
+              className={cn(bookingDateFieldClass, 'mt-1 resize-y')}
             />
           </label>
           {cancelBooking.isError ? (
@@ -253,7 +253,7 @@ export function ClientVisitManageModal({ booking, mode, onClose, onSuccess }: Pr
               rows={3}
               disabled={reschedule.isPending}
               placeholder="Например: переношу из‑за работы."
-              className={cn(fieldClass, 'mt-1 resize-y')}
+              className={cn(bookingDateFieldClass, 'mt-1 resize-y')}
             />
           </label>
 
