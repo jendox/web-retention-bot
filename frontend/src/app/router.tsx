@@ -4,7 +4,11 @@ import { AppLayout } from '../components/layout/AppLayout'
 import { HomeRedirect } from '../components/routing/HomeRedirect'
 import { RequireMasterOutlet } from '../components/routing/RequireMasterOutlet'
 import { BookingsPage } from '../pages/BookingsPage'
-import { ClientDashboardPage } from '../pages/ClientDashboardPage'
+import { ClientCabinetLayout } from '../pages/client/ClientCabinetLayout'
+import { ClientHelpPage } from '../pages/client/ClientHelpPage'
+import { ClientMastersPage } from '../pages/client/ClientMastersPage'
+import { ClientOverviewPage } from '../pages/client/ClientOverviewPage'
+import { ClientVisitsPage } from '../pages/client/ClientVisitsPage'
 import { ClientDetailPage } from '../pages/ClientDetailPage'
 import { ClientsPage } from '../pages/ClientsPage'
 import { DashboardPage } from '../pages/DashboardPage'
@@ -34,7 +38,12 @@ export function AppRouter() {
       <Route path="/invite/:token" element={<InvitationRoute />} />
 
       <Route element={<AppLayout />}>
-        <Route path="/client" element={<ClientDashboardPage />} />
+        <Route path="/client" element={<ClientCabinetLayout />}>
+          <Route index element={<ClientOverviewPage />} />
+          <Route path="masters" element={<ClientMastersPage />} />
+          <Route path="visits" element={<ClientVisitsPage />} />
+          <Route path="help" element={<ClientHelpPage />} />
+        </Route>
         <Route path="/my-visits" element={<Navigate to="/client" replace />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/settings" element={<SettingsPage />} />

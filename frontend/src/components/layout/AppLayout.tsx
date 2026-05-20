@@ -34,6 +34,8 @@ type NavItem = {
 
 const clientNav = (unread: number): NavItem[] => [
   { to: '/client', label: 'Обзор', icon: IconOverview },
+  { to: '/client/masters', label: 'Мои мастера', icon: IconUsers },
+  { to: '/client/visits', label: 'Записи', icon: IconClipboard },
   { to: '/notifications', label: 'Уведомления', icon: IconBell, badge: unread > 0 ? unread : undefined },
   { to: '/settings', label: 'Настройки', icon: IconSettings },
 ]
@@ -105,7 +107,10 @@ export function AppLayout() {
 
   const shellLoading = me.isLoading || (me.isSuccess && !master.isFetched)
 
-  const displayName = isClientOnly ? (email.split('@')[0] || 'Клиент') : (name ?? 'Мастер')
+  const clientDisplayName = me.data?.client_display_name?.trim()
+  const displayName = isClientOnly
+    ? clientDisplayName || email.split('@')[0] || 'Клиент'
+    : (name ?? 'Мастер')
   const cabinetLabel = isClientOnly ? 'кабинет клиента' : 'кабинет мастера'
   const homePath = isClientOnly ? '/client' : '/dashboard'
   const notificationsUnread = useNotificationsUnreadCount(me.isSuccess)
@@ -164,6 +169,7 @@ export function AppLayout() {
             <NavLink
               key={to}
               to={to}
+              end={to === '/client'}
               title={compact ? label : undefined}
               onClick={mode === 'drawer' ? () => setMobileNavOpen(false) : undefined}
               className={({ isActive }) =>
