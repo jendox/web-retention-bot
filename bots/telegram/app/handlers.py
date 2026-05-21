@@ -9,10 +9,12 @@ from app.telegram_api import TelegramApi
 
 logger = logging.getLogger("telegram_bot.handlers")
 
+START_COMMAND_PARTS = 2
+
 
 def _extract_start_token(text: str) -> str | None:
     parts = text.strip().split(maxsplit=1)
-    if len(parts) < 2:
+    if len(parts) < START_COMMAND_PARTS:
         return None
     return parts[1].strip() or None
 

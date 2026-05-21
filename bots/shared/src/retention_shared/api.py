@@ -1,5 +1,3 @@
-"""Minimal HTTP client for bot containers → Retention API (no app imports)."""
-
 from __future__ import annotations
 
 import httpx
@@ -38,7 +36,7 @@ class RetentionApi:
                 json=payload,
                 headers=self._headers(),
             )
-        if resp.status_code >= 400:
+        if resp.status_code >= httpx.codes.BAD_REQUEST:
             detail = resp.text
             try:
                 body = resp.json()
