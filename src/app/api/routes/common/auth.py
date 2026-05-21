@@ -1,10 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.api.deps import require_user
-from app.core.password_reset_token import PasswordResetTokenError
-from app.core.verification_token import EmailVerificationTokenError
 from app.models.user import User
 from app.schemas.auth import (
     ChangePasswordPayload,
@@ -12,37 +10,28 @@ from app.schemas.auth import (
     LoginPayload,
     RegisterAcceptedOut,
     RegisterClientPayload,
-    RegisterPayload,
+    RegisterMasterPayload,
     ResetPasswordPayload,
     VerifyEmailPayload,
 )
 from app.schemas.errors import ErrorDetail
 from app.schemas.user import UserMeOut, UserSchema
-from app.services.notifications.dispatcher import (
-    NotificationDispatcher,
-    get_notification_dispatcher,
-)
 from app.services.sessions import SessionManager, get_session_manager
 from app.use_cases.auth import (
     ChangePasswordUseCase,
-    EmailNotVerifiedError,
     ForgotPasswordUseCase,
-    InactiveUserError,
-    InvalidCredentialsError,
-    InvalidCurrentPasswordError,
     LoginUseCase,
     MeUseCase,
-    RegisterMasterUseCase,
-    RegisterUserUseCase,
+    RegisterClientAccountUseCase,
+    RegisterMasterAccountUseCase,
     ResetPasswordUseCase,
-    UserAlreadyExists,
     VerifyEmailUseCase,
     get_change_password_use_case,
     get_forgot_password_use_case,
     get_login_use_case,
     get_me_use_case,
-    get_register_master_use_case,
-    get_register_user_use_case,
+    get_register_client_account_use_case,
+    get_register_master_account_use_case,
     get_reset_password_use_case,
     get_verify_email_use_case,
 )
@@ -68,7 +57,7 @@ async def csrf_token(
 
 
 @router.post(
-    path="/register",
+    path="/register-master",
     summary="Register a master account",
     description=(
         "Creates a user and linked master profile, sends a verification email, and returns public "
@@ -84,20 +73,11 @@ async def csrf_token(
         },
     },
 )
-async def register(
-    payload: RegisterPayload,
-    register_user_use_case: Annotated[RegisterUserUseCase, Depends(get_register_user_use_case)],
-    register_master_use_case: Annotated[RegisterMasterUseCase, Depends(get_register_master_use_case)],
-    dispatcher: Annotated[NotificationDispatcher, Depends(get_notification_dispatcher)],
+async def register_master(
+    payload: RegisterMasterPayload,
+    use_case: Annotated[RegisterMasterAccountUseCase, Depends(get_register_master_account_use_case)],
 ) -> RegisterAcceptedOut:
-    try:
-        user = await register_user_use_case(payload)
-        await register_master_use_case(user, display_name=payload.master_display_name)
-        await dispatcher.dispatch_email_verification(user_id=user.id, to_email=user.email)
-
-        return RegisterAcceptedOut(id=user.id, email=user.email)
-    except UserAlreadyExists:
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="User already exists.") from None
+    return await use_case(payload)
 
 
 @router.post(
@@ -118,18 +98,9 @@ async def register(
 )
 async def register_client(
     payload: RegisterClientPayload,
-    register_user_use_case: Annotated[RegisterUserUseCase, Depends(get_register_user_use_case)],
-    dispatcher: Annotated[NotificationDispatcher, Depends(get_notification_dispatcher)],
+    use_case: Annotated[RegisterClientAccountUseCase, Depends(get_register_client_account_use_case)],
 ) -> RegisterAcceptedOut:
-    try:
-        user = await register_user_use_case.register_client(
-            email=str(payload.email),
-            password=payload.password,
-        )
-        await dispatcher.dispatch_email_verification(user_id=user.id, to_email=user.email)
-        return RegisterAcceptedOut(id=user.id, email=user.email)
-    except UserAlreadyExists:
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="User already exists.") from None
+    return await use_case(payload)
 
 
 @router.post(
@@ -153,19 +124,13 @@ async def verify_email(
     request: Request,
     payload: VerifyEmailPayload,
     response: Response,
-    verify_email_use_case: Annotated[VerifyEmailUseCase, Depends(get_verify_email_use_case)],
+    use_case: Annotated[VerifyEmailUseCase, Depends(get_verify_email_use_case)],
     session_manager: Annotated[SessionManager, Depends(get_session_manager)],
 ) -> UserSchema:
     settings = request.app.state.settings
-    try:
-        user = await verify_email_use_case(secret=settings.security.secret_key, token=payload.token)
-        await session_manager.attach_session(response, user.id)
-        return user
-    except EmailVerificationTokenError:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired verification link",
-        ) from None
+    user = await use_case(secret=settings.security.secret_key, token=payload.token)
+    await session_manager.attach_session(response, user.id)
+    return user
 
 
 @router.post(
@@ -191,23 +156,10 @@ async def verify_email(
 async def login(
     response: Response,
     payload: LoginPayload,
-    login_use_case: Annotated[LoginUseCase, Depends(get_login_use_case)],
+    use_case: Annotated[LoginUseCase, Depends(get_login_use_case)],
     session_manager: Annotated[SessionManager, Depends(get_session_manager)],
 ) -> UserSchema:
-    try:
-        user = await login_use_case(email=payload.email, password=payload.password)
-    except InvalidCredentialsError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials") from None
-    except EmailNotVerifiedError:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            detail="Email address is not verified yet",
-        ) from None
-    except InactiveUserError:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            detail="Account is disabled",
-        ) from None
+    user = await use_case(email=payload.email, password=payload.password)
     await session_manager.attach_session(response, user.id)
     return user
 
@@ -300,17 +252,11 @@ async def reset_password(
     use_case: Annotated[ResetPasswordUseCase, Depends(get_reset_password_use_case)],
 ) -> Response:
     settings = request.app.state.settings
-    try:
-        await use_case(
-            secret=settings.security.secret_key,
-            token=payload.token,
-            new_password=payload.new_password,
-        )
-    except PasswordResetTokenError:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail="Ссылка для сброса пароля недействительна или устарела.",
-        ) from None
+    await use_case(
+        secret=settings.security.secret_key,
+        token=payload.token,
+        new_password=payload.new_password,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -339,15 +285,9 @@ async def change_password(
     current: Annotated[User, Depends(require_user)],
     use_case: Annotated[ChangePasswordUseCase, Depends(get_change_password_use_case)],
 ) -> Response:
-    try:
-        await use_case(
-            user=current,
-            current_password=payload.current_password,
-            new_password=payload.new_password,
-        )
-    except InvalidCurrentPasswordError:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail="Текущий пароль указан неверно.",
-        ) from None
+    await use_case(
+        user=current,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

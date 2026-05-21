@@ -8,25 +8,12 @@ from app.core.security import verify_password
 from app.core.structured_logging import get_logger, log_context
 from app.repositories.users import UserRepository, get_user_repo
 from app.schemas.user import UserSchema
+from app.use_cases.auth.exceptions import EmailNotVerifiedError, InactiveUserError, InvalidCredentialsError
 
-__all__ = [
-    "EmailNotVerifiedError",
-    "InactiveUserError",
-    "InvalidCredentialsError",
-    "LoginUseCase",
-    "get_login_use_case",
-]
+__all__ = ["LoginUseCase", "get_login_use_case"]
+
 
 logger = get_logger("app.login")
-
-
-class InvalidCredentialsError(Exception): ...
-
-
-class EmailNotVerifiedError(Exception): ...
-
-
-class InactiveUserError(Exception): ...
 
 
 class LoginUseCase:

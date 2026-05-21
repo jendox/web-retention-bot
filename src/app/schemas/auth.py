@@ -74,7 +74,7 @@ def validate_password(password: str) -> PasswordValidationResult:
     return PasswordValidationResult.success()
 
 
-class RegisterPayload(BaseModel):
+class RegisterMasterPayload(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     master_display_name: str = Field(min_length=2, max_length=200)
@@ -104,7 +104,7 @@ class RegisterClientPayload(BaseModel):
 
 
 class RegisterAcceptedOut(BaseModel):
-    """Successful registration: user + master row created; session only after verify-email."""
+    """Successful registration; session only after verify-email."""
 
     id: UUID
     email: EmailStr

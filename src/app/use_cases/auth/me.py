@@ -9,10 +9,7 @@ from app.models.user import User
 from app.repositories.clients import ClientRepository, get_client_repo
 from app.schemas.user import UserMeOut, UserSchema
 
-__all__ = [
-    "MeUseCase",
-    "get_me_use_case",
-]
+__all__ = ["MeUseCase", "get_me_use_case"]
 
 logger = get_logger("app.me")
 

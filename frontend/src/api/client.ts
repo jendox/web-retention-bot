@@ -1,4 +1,4 @@
-import { ApiError, parseFastApiDetail } from '../lib/apiErrors'
+import { ApiError, parseFastApiError } from '../lib/apiErrors'
 
 const base = import.meta.env.VITE_API_BASE_URL ?? ''
 const csrfCookieName = 'csrf_token'
@@ -31,7 +31,8 @@ async function fetchCsrfToken(): Promise<string> {
   })
   if (!res.ok) {
     const text = await res.text()
-    throw new ApiError(res.status, parseFastApiDetail(text || `${res.status}`))
+    const error = parseFastApiError(text || `${res.status}`)
+    throw new ApiError(res.status, error.detail, error.code)
   }
   const data = (await res.json()) as { csrf_token?: string }
   const token = data.csrf_token ?? readCookie(csrfCookieName)
@@ -64,8 +65,8 @@ async function requestWithHeaders(path: string, init: RequestInit, headers: Head
 
 async function parseResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    const detail = await responseErrorDetail(res)
-    throw new ApiError(res.status, detail)
+    const error = await responseErrorPayload(res)
+    throw new ApiError(res.status, error.detail, error.code)
   }
   if (res.status === 204) {
     return undefined as T
@@ -73,9 +74,9 @@ async function parseResponse<T>(res: Response): Promise<T> {
   return (await res.json()) as T
 }
 
-async function responseErrorDetail(res: Response): Promise<string> {
+async function responseErrorPayload(res: Response) {
   const text = await res.text()
-  return parseFastApiDetail(text || `${res.status}`)
+  return parseFastApiError(text || `${res.status}`)
 }
 
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -91,9 +92,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
 
   const res = await requestWithHeaders(path, init, headers)
   if (res.status === 403 && shouldAttachCsrf) {
-    const detail = await responseErrorDetail(res)
-    if (detail !== csrfErrorDetail) {
-      throw new ApiError(res.status, detail)
+    const error = await responseErrorPayload(res)
+    if (error.detail !== csrfErrorDetail) {
+      throw new ApiError(res.status, error.detail, error.code)
     }
     const refreshedHeaders = new Headers(headers)
     refreshedHeaders.set(csrfHeaderName, await ensureCsrfToken(true))

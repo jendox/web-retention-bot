@@ -5,9 +5,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import app.worker.celery_app as _celery_app  # noqa: F401  # side effect: configure Celery before task imports
+from app.api.errors import app_error_handler
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.database import Database
+from app.core.exceptions import AppError
 from app.core.middlewares import REQUEST_ID_HEADER, CSRFMiddleware, RateLimitMiddleware, RequestContextMiddleware
 from app.core.structured_logging import configure_structlog
 
@@ -34,6 +36,8 @@ def create_application() -> FastAPI:
         lifespan=lifespan,
     )
     _app.state.settings = settings
+
+    _app.add_exception_handler(AppError, app_error_handler)
 
     _app.add_middleware(CSRFMiddleware)
     _app.add_middleware(RateLimitMiddleware)

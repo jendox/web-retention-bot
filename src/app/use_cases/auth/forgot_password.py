@@ -12,10 +12,7 @@ from app.repositories.users import UserRepository, get_user_repo
 from app.services.notifications.email_send import send_multipart_email
 from app.services.notifications.mail_render import render_password_reset
 
-__all__ = [
-    "ForgotPasswordUseCase",
-    "get_forgot_password_use_case",
-]
+__all__ = ["ForgotPasswordUseCase", "get_forgot_password_use_case"]
 
 logger = get_logger("app.forgot_password")
 

@@ -19,7 +19,7 @@ export async function registerApi(body: {
   password: string
   master_display_name: string
 }) {
-  return apiFetch<RegisterAccepted>('/api/auth/register', { method: 'POST', body: JSON.stringify(body) })
+  return apiFetch<RegisterAccepted>('/api/auth/register-master', { method: 'POST', body: JSON.stringify(body) })
 }
 
 export async function registerClientApi(body: { email: string; password: string }) {

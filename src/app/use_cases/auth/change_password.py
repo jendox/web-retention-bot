@@ -8,17 +8,11 @@ from app.core.security import hash_password, verify_password
 from app.core.structured_logging import get_logger, log_context
 from app.models.user import User
 from app.repositories.users import UserRepository, get_user_repo
+from app.use_cases.auth.exceptions import InvalidCurrentPasswordError
 
-__all__ = [
-    "ChangePasswordUseCase",
-    "InvalidCurrentPasswordError",
-    "get_change_password_use_case",
-]
+__all__ = ["ChangePasswordUseCase", "get_change_password_use_case"]
 
 logger = get_logger("app.change_password")
-
-
-class InvalidCurrentPasswordError(Exception): ...
 
 
 class ChangePasswordUseCase:

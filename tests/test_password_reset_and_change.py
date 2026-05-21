@@ -67,7 +67,7 @@ def _issue_csrf(client: TestClient) -> None:
 def _register_verified_master(client: TestClient, *, email: str, ip: str) -> str:
     _issue_csrf(client)
     reg = client.post(
-        "/api/auth/register",
+        "/api/auth/register-master",
         json={"email": email, "password": MASTER_PASSWORD, "master_display_name": "Reset Studio"},
         headers=_csrf_headers(client, ip=ip),
     )

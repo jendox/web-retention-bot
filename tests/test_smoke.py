@@ -62,7 +62,7 @@ def test_auth_register_verify_login_flow():
     try:
         with TestClient(app) as client:
             _issue_csrf(client)
-            reg = client.post("/api/auth/register", json=register_body, headers=_csrf_headers_with_ip(client))
+            reg = client.post("/api/auth/register-master", json=register_body, headers=_csrf_headers_with_ip(client))
             assert reg.status_code == 201
             data = reg.json()
             assert data["email"] == email

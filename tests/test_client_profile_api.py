@@ -100,7 +100,7 @@ def test_client_profile_patch_after_invitation_accept() -> None:
         with TestClient(app) as client:
             _issue_csrf(client)
             master_reg = client.post(
-                "/api/auth/register",
+                "/api/auth/register-master",
                 json={
                     "email": master_email,
                     "password": "masterpass1",

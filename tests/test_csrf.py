@@ -50,7 +50,7 @@ def _register_verified_master(client: TestClient) -> None:
 
     _issue_csrf(client)
     reg = client.post(
-        "/api/auth/register",
+        "/api/auth/register-master",
         json={
             "email": email,
             "password": password,

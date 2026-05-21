@@ -8,11 +8,10 @@ from app.core.password_reset_token import PasswordResetTokenError, parse_passwor
 from app.core.security import hash_password
 from app.core.structured_logging import get_logger, log_context
 from app.repositories.users import UserRepository, get_user_repo
+from app.use_cases.auth.exceptions import InvalidPasswordResetTokenError
 
-__all__ = [
-    "ResetPasswordUseCase",
-    "get_reset_password_use_case",
-]
+__all__ = ["ResetPasswordUseCase", "get_reset_password_use_case"]
+
 
 logger = get_logger("app.reset_password")
 
@@ -22,16 +21,19 @@ class ResetPasswordUseCase:
         self._user_repo = user_repo
 
     async def __call__(self, *, secret: str, token: str, new_password: str) -> None:
-        user_id, email_snap = parse_password_reset_token(secret=secret, token=token.strip())
+        try:
+            user_id, email_snap = parse_password_reset_token(secret=secret, token=token.strip())
 
-        with log_context(use_case="reset_password", user_id=str(user_id)):
-            user = await self._user_repo.get_by_id(user_id)
-            if user is None or user.email != email_snap:
-                logger.warning("failed", reason="user_missing_or_email_mismatch")
-                raise PasswordResetTokenError("invalid")
+            with log_context(use_case="reset_password", user_id=str(user_id)):
+                user = await self._user_repo.get_by_id(user_id)
+                if user is None or user.email != email_snap:
+                    logger.warning("failed", reason="user_missing_or_email_mismatch")
+                    raise InvalidPasswordResetTokenError("User missing or email mismatch")
 
-            user.password_hash = hash_password(new_password)
-            logger.info("success")
+                user.password_hash = hash_password(new_password)
+                logger.info("success")
+        except PasswordResetTokenError as error:
+            raise InvalidPasswordResetTokenError() from error
 
 
 def get_reset_password_use_case(
