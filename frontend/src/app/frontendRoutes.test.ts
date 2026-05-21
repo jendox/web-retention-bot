@@ -16,6 +16,7 @@ const CLIENT_ROUTES = [
 const MASTER_ROUTES = [
   '/master',
   '/master/schedule',
+  '/master/analytics',
   '/master/clients',
   '/master/services',
   '/master/bookings',

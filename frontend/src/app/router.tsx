@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 
 import { AppLayout } from '../components/layout/AppLayout'
+import { AnalyticsPage } from '../pages/AnalyticsPage'
 import { HomeRedirect } from '../components/routing/HomeRedirect'
 import { RequireMasterOutlet } from '../components/routing/RequireMasterOutlet'
 import { BookingsPage } from '../pages/BookingsPage'
@@ -55,6 +56,7 @@ export function AppRouter() {
         <Route path="/master" element={<RequireMasterOutlet />}>
           <Route index element={<DashboardPage />} />
           <Route path="schedule" element={<SchedulePage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="clients" element={<ClientsPage />} />
           <Route path="clients/:id" element={<ClientDetailPage />} />
           <Route path="services" element={<ServicesPage />} />

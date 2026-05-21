@@ -40,6 +40,15 @@ export function IconClipboard(props: SVGProps<SVGSVGElement>) {
   )
 }
 
+export function IconAnalytics(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 19V5m0 14h16M7.5 15.5l3.25-4 2.75 2.5 4-6" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 15.5h.01M10.75 11.5h.01M13.5 14h.01M17.5 8h.01" />
+    </svg>
+  )
+}
+
 export function IconUserCircle(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden {...props}>

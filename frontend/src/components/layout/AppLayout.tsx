@@ -11,6 +11,7 @@ import { cn } from '../../lib/forms'
 import { queryClient } from '../../lib/query'
 import {
   IconBell,
+  IconAnalytics,
   IconBriefcase,
   IconCalendar,
   IconClipboard,
@@ -47,6 +48,7 @@ const clientNav = (unread: number): NavItem[] => [
 const masterNav = (unread: number): NavItem[] => [
   { to: '/master', label: 'Обзор', icon: IconOverview },
   { to: '/master/schedule', label: 'Расписание', icon: IconCalendar },
+  { to: '/master/analytics', label: 'Аналитика', icon: IconAnalytics },
   { to: '/master/clients', label: 'Клиенты', icon: IconUsers },
   { to: '/master/services', label: 'Услуги', icon: IconBriefcase },
   { to: '/master/bookings', label: 'Записи', icon: IconClipboard },
