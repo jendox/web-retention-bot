@@ -2,14 +2,18 @@ import uuid
 from datetime import date, time
 from types import SimpleNamespace
 
+import pytest
+
 from app.core.currency import Currency
+from app.models.master import MasterProfile
 from app.schemas.master import MasterProfileUpdate
+from app.use_cases.master.exceptions import MasterProfileEmptyPatchError, MasterProfileNoFieldsToUpdateError
 from app.use_cases.master.update_profile import UpdateMasterProfileUseCase
 from app.use_cases.schedule.get_schedule import GetMasterScheduleUseCase
 
 
-def _master_profile() -> SimpleNamespace:
-    return SimpleNamespace(
+def _master_profile() -> MasterProfile:
+    return MasterProfile(
         id=uuid.uuid4(),
         user_id=uuid.uuid4(),
         display_name="Old name",
@@ -90,6 +94,41 @@ async def test_update_master_profile_updates_contact_fields():
     assert result.telegram == "@studio"
     assert master.contact_email == "new@example.com"
     assert repo.flush_called is True
+
+
+async def test_update_master_profile_rejects_empty_patch():
+    master = _master_profile()
+    repo = FakeMasterRepository()
+    use_case = UpdateMasterProfileUseCase(master, repo)
+
+    with pytest.raises(MasterProfileEmptyPatchError) as exc_info:
+        await use_case(MasterProfileUpdate())
+
+    assert exc_info.value.code == "master_profile.empty_patch"
+    assert exc_info.value.message == "No fields to update."
+    assert repo.flush_called is False
+
+
+async def test_update_master_profile_rejects_patch_with_only_ignored_nulls():
+    master = _master_profile()
+    repo = FakeMasterRepository()
+    use_case = UpdateMasterProfileUseCase(master, repo)
+
+    with pytest.raises(MasterProfileNoFieldsToUpdateError) as exc_info:
+        await use_case(
+            MasterProfileUpdate(
+                display_name=None,
+                timezone=None,
+                default_currency=None,
+            ),
+        )
+
+    assert exc_info.value.code == "master_profile.no_fields_to_update"
+    assert exc_info.value.message == "No fields to update."
+    assert master.display_name == "Old name"
+    assert master.timezone == "UTC"
+    assert master.default_currency == Currency.BYN
+    assert repo.flush_called is False
 
 
 class FakeScheduleRepository:

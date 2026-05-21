@@ -169,6 +169,24 @@ def test_authenticated_master_hits_new_master_routes() -> None:
         raise
 
 
+def test_master_profile_empty_patch_returns_error_code() -> None:
+    email = f"master_empty_patch_{uuid.uuid4().hex[:8]}@example.com"
+    try:
+        with TestClient(app) as client:
+            _register_verified_master(client, email=email)
+
+            resp = client.put("/api/master/profile", json={}, headers=_csrf_headers(client))
+
+            assert resp.status_code == 400, resp.text
+            assert resp.json() == {
+                "code": "master_profile.empty_patch",
+                "detail": "No fields to update.",
+            }
+    except Exception as exc:
+        _skip_if_unreachable(exc)
+        raise
+
+
 def test_authenticated_client_hits_new_client_routes() -> None:
     email = f"client_routes_{uuid.uuid4().hex[:8]}@example.com"
     try:

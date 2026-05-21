@@ -20,6 +20,8 @@ const CODE_RU: Record<string, string> = {
   'invitations.own_account': 'Нельзя принять собственное приглашение.',
   'invitations.client_login_already_linked': 'У клиента уже есть вход в приложение.',
   'invitations.active_already_exists': 'Для этого клиента уже есть активное приглашение.',
+  'master_profile.empty_patch': 'Нечего сохранить: не переданы поля.',
+  'master_profile.no_fields_to_update': 'Нечего сохранить: переданные поля не меняют профиль.',
   'availability.master_not_found': 'Профиль мастера не найден.',
   'availability.service_not_found': 'Услуга не найдена.',
   'availability.date_in_past': 'Нельзя выбрать прошедшую дату.',

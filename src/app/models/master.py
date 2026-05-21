@@ -7,7 +7,7 @@ from sqlalchemy import Enum as SAEnum, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.currency import DEFAULT_MASTER_CURRENCY, Currency
-from app.models.base import TimeStampedModel
+from app.models.base import PatchableMixin, TimeStampedModel
 
 if TYPE_CHECKING:
     from app.models.booking import Booking
@@ -18,8 +18,22 @@ if TYPE_CHECKING:
     from app.models.user import User
 
 
-class MasterProfile(TimeStampedModel):
+class MasterProfile(TimeStampedModel, PatchableMixin):
     __tablename__ = "master_profiles"
+    __patchable_fields__ = frozenset({
+        "display_name",
+        "public_slug",
+        "timezone",
+        "default_currency",
+        "contact_email",
+        "contact_phone",
+        "telegram",
+    })
+    __patch_ignore_none_fields__ = frozenset({
+        "display_name",
+        "timezone",
+        "default_currency",
+    })
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id"), unique=True)
