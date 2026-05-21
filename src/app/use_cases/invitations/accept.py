@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, status
+from fastapi import Depends
 
 from app.core.structured_logging import get_logger, log_context
 from app.models import Invitation, MasterProfile
@@ -12,8 +12,19 @@ from app.models.client import InvitationStatus
 from app.models.user import User
 from app.repositories.clients import ClientRepository, get_client_repo
 from app.repositories.invitations import InvitationRepository, get_invitation_repo
+from app.schemas.invitation import InvitationAccept, InvitationAcceptOut
 from app.services.notifications.dispatcher import NotificationDispatcher, get_notification_dispatcher
-from app.use_cases.invitations.exceptions import AcceptInvitationError
+from app.use_cases.invitations.exceptions import (
+    InvitationAlreadyAcceptedError,
+    InvitationAlreadyLinkedToMasterError,
+    InvitationClientAlreadyLinkedError,
+    InvitationClientMismatchError,
+    InvitationClientNotFoundError,
+    InvitationExpiredError,
+    InvitationNotFoundError,
+    InvitationOwnAccountError,
+    InvitationRevokedError,
+)
 
 __all__ = [
     "AcceptInvitationUseCase",
@@ -38,24 +49,16 @@ class AcceptInvitationUseCase:
     def _check_invite(invite: Invitation | None) -> Invitation:
         if not invite:
             logger.error("failed", reason="invitation_not_found")
-            raise AcceptInvitationError(
-                status_code=status.HTTP_404_NOT_FOUND, error_message="Invitation not found",
-            )
+            raise InvitationNotFoundError()
         if invite.revoked_at is not None:
             logger.warning("failed", reason="invitation_revoked")
-            raise AcceptInvitationError(
-                status_code=status.HTTP_410_GONE, error_message="Invitation revoked",
-            )
+            raise InvitationRevokedError()
         if invite.accepted_at is not None:
             logger.warning("failed", reason="invitation_already_accepted")
-            raise AcceptInvitationError(
-                status_code=status.HTTP_409_CONFLICT, error_message="Invitation already accepted",
-            )
+            raise InvitationAlreadyAcceptedError()
         if invite.expires_at < datetime.now(UTC):
             logger.warning("failed", reason="invitation_expired")
-            raise AcceptInvitationError(
-                status_code=status.HTTP_410_GONE, error_message="Invitation expired",
-            )
+            raise InvitationExpiredError()
         return invite
 
     async def _accept_targeted_invite(
@@ -77,9 +80,7 @@ class AcceptInvitationUseCase:
                 reason="target_client_not_found",
                 target_client_id=str(invite.target_client_id) if invite.target_client_id else None,
             )
-            raise AcceptInvitationError(
-                status_code=status.HTTP_404_NOT_FOUND, error_message="Client not found.",
-            ) from None
+            raise InvitationClientNotFoundError()
 
         link, client = row
         if invite.target_client_id != client.id:
@@ -89,9 +90,7 @@ class AcceptInvitationUseCase:
                 target_client_id=str(invite.target_client_id) if invite.target_client_id else None,
                 client_id=str(client.id),
             )
-            raise AcceptInvitationError(
-                status_code=status.HTTP_400_BAD_REQUEST, error_message="Invitation client mismatch.",
-            ) from None
+            raise InvitationClientMismatchError()
 
         if client.user_id is not None and client.user_id != user_id:
             logger.warning(
@@ -100,10 +99,7 @@ class AcceptInvitationUseCase:
                 target_client_id=str(invite.target_client_id) if invite.target_client_id else None,
                 client_user_id=str(client.user_id),
             )
-            raise AcceptInvitationError(
-                status_code=status.HTTP_409_CONFLICT,
-                error_message="This client card is already linked to another account.",
-            ) from None
+            raise InvitationClientAlreadyLinkedError()
 
         stored_profile_email = client.email.strip().lower() if client.email else None
 
@@ -147,10 +143,7 @@ class AcceptInvitationUseCase:
         existing = await self._client_repo.client_ids_for_master_user(invite.master_id, user_id)
         if existing:
             logger.warning("failed", reason="already_linked_to_master")
-            raise AcceptInvitationError(
-                status_code=status.HTTP_409_CONFLICT,
-                error_message="You are already linked to this master.",
-            ) from None
+            raise InvitationAlreadyLinkedToMasterError()
 
         matching_clients = await self._client_repo.unlinked_clients_by_master_email(
             master_id=invite.master_id,
@@ -194,10 +187,9 @@ class AcceptInvitationUseCase:
         self,
         *,
         token: str,
-        display_name: str,
-        phone: str | None,
         user: User,
-    ) -> tuple[UUID, bool]:
+        payload: InvitationAccept,
+    ) -> InvitationAcceptOut:
         invite = await self._invite_repo.get_by_token(token)
 
         with log_context(
@@ -211,16 +203,13 @@ class AcceptInvitationUseCase:
             master_profile = invite.master
             if master_profile.user_id == user.id:
                 logger.warning("failed", reason="master_trying_to_link_himself")
-                raise AcceptInvitationError(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    error_message="You cannot accept your own invitation.",
-                )
+                raise InvitationOwnAccountError()
 
             account_email = user.email.strip().lower()
             email_mismatch = False
 
-            display_name = display_name.strip()
-            phone = phone.strip() if phone and phone.strip() else None
+            display_name = payload.display_name.strip()
+            phone = payload.phone.strip() if payload.phone and payload.phone.strip() else None
 
             if invite.target_client_id is not None:
                 client_id, email_mismatch = await self._accept_targeted_invite(
@@ -251,7 +240,10 @@ class AcceptInvitationUseCase:
                 email_mismatch=email_mismatch,
             )
 
-            return client_id, email_mismatch
+            return InvitationAcceptOut(
+                client_id=client_id,
+                email_mismatch_with_master_record=email_mismatch,
+            )
 
 
 def get_accept_invitation_use_case(

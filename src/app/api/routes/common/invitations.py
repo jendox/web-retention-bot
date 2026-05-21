@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 from app.api.deps import require_master_profile, require_user
 from app.models.master import MasterProfile
@@ -16,12 +16,9 @@ from app.schemas.invitation import (
     InvitationOut,
 )
 from app.use_cases.invitations import (
-    AcceptInvitationError,
     AcceptInvitationUseCase,
-    CreateInvitationError,
     CreateInvitationUseCase,
     InvitationLandingUseCase,
-    LandingInvitationError,
     get_accept_invitation_use_case,
     get_create_invitation_use_case,
     get_invitation_landing_use_case,
@@ -62,23 +59,12 @@ router = APIRouter(prefix="/invitations", tags=["invitations"])
         },
     },
 )
-async def post_invitation(
+async def create_invitation(
     payload: InvitationCreate,
     use_case: Annotated[CreateInvitationUseCase, Depends(get_create_invitation_use_case)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
 ) -> InvitationOut:
-    try:
-        return await use_case(
-            master_id=master.id,
-            expires_hours=payload.expires_hours,
-            target_email=str(payload.target_email).lower() if payload.target_email else None,
-            target_client_id=payload.target_client_id,
-            replace=payload.replace,
-        )
-    except CreateInvitationError as error:
-        status_code = error.status_code if error.status_code else status.HTTP_400_BAD_REQUEST
-        error_message = error.error_message if error.error_message else "Create invitation error."
-        raise HTTPException(status_code=status_code, detail=error_message) from None
+    return await use_case(master_id=master.id, payload=payload)
 
 
 @router.get(
@@ -107,12 +93,7 @@ async def get_invitation_landing(
     token: str,
     use_case: Annotated[InvitationLandingUseCase, Depends(get_invitation_landing_use_case)],
 ) -> InvitationLandingResponse:
-    try:
-        return await use_case(token)
-    except LandingInvitationError as error:
-        status_code = error.status_code if error.status_code else status.HTTP_400_BAD_REQUEST
-        error_message = error.error_message if error.error_message else "Invitation error."
-        raise HTTPException(status_code=status_code, detail=error_message) from None
+    return await use_case(token=token)
 
 
 @router.post(
@@ -161,21 +142,10 @@ async def get_invitation_landing(
         },
     },
 )
-async def post_accept_invitation(
+async def accept_invitation(
     token: str,
     payload: InvitationAccept,
     use_case: Annotated[AcceptInvitationUseCase, Depends(get_accept_invitation_use_case)],
     user: Annotated[User, Depends(require_user)],
 ) -> InvitationAcceptOut:
-    try:
-        client_id, mismatch = await use_case(
-            token=token,
-            display_name=payload.display_name,
-            phone=payload.phone,
-            user=user,
-        )
-        return InvitationAcceptOut(client_id=client_id, email_mismatch_with_master_record=mismatch)
-    except AcceptInvitationError as error:
-        status_code = error.status_code if error.status_code else status.HTTP_400_BAD_REQUEST
-        error_message = error.error_message if error.error_message else "Invitation not accepted."
-        raise HTTPException(status_code=status_code, detail=error_message) from None
+    return await use_case(token=token, user=user, payload=payload)

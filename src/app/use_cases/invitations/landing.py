@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from fastapi import Depends, status
+from fastapi import Depends
 
 from app.core.structured_logging import get_logger, log_context
 from app.models import Invitation
@@ -11,12 +11,13 @@ from app.repositories.invitations import InvitationRepository, get_invitation_re
 from app.repositories.services import ServiceRepository, get_service_repo
 from app.schemas.invitation import InvitationLandingResponse
 from app.schemas.service import ServiceSchema
-from app.use_cases.invitations.exceptions import LandingInvitationError
+from app.use_cases.invitations.exceptions import (
+    InvitationExpiredError,
+    InvitationNotFoundError,
+    InvitationRevokedError,
+)
 
-__all__ = [
-    "InvitationLandingUseCase",
-    "get_invitation_landing_use_case",
-]
+__all__ = ["InvitationLandingUseCase", "get_invitation_landing_use_case"]
 
 logger = get_logger("app.invitation")
 
@@ -34,23 +35,18 @@ class InvitationLandingUseCase:
     def _check_invite(invite: Invitation | None) -> Invitation:
         if not invite:
             logger.error("failed", reason="invitation_not_found")
-            raise LandingInvitationError(
-                status_code=status.HTTP_404_NOT_FOUND, error_message="Invitation not found",
-            )
+            raise InvitationNotFoundError()
         if invite.revoked_at is not None:
             logger.warning("failed", reason="invitation_revoked")
-            raise LandingInvitationError(
-                status_code=status.HTTP_410_GONE, error_message="Invitation revoked",
-            )
+            raise InvitationRevokedError()
         if invite.expires_at < datetime.now(UTC):
             logger.warning("failed", reason="invitation_expired")
-            raise LandingInvitationError(
-                status_code=status.HTTP_410_GONE, error_message="Invitation expired",
-            )
+            raise InvitationExpiredError()
         return invite
 
     async def __call__(
         self,
+        *,
         token: str,
     ) -> InvitationLandingResponse:
         invite = await self._invite_repo.get_by_token(token)

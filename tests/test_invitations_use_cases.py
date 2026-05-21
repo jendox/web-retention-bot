@@ -3,11 +3,15 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
-from fastapi import status
 
 from app.models.client import InvitationStatus
-from app.use_cases.invitations.accept import AcceptInvitationError, AcceptInvitationUseCase
-from app.use_cases.invitations.create import CreateInvitationError, CreateInvitationUseCase
+from app.schemas.invitation import InvitationAccept, InvitationCreate
+from app.use_cases.invitations.accept import AcceptInvitationUseCase
+from app.use_cases.invitations.create import CreateInvitationUseCase
+from app.use_cases.invitations.exceptions import (
+    InvitationActiveAlreadyExistsError,
+    InvitationAlreadyAcceptedError,
+)
 
 
 class FakeInvitationRepo:
@@ -113,14 +117,14 @@ async def test_accept_open_invitation_creates_new_client_and_link():
     dispatcher = FakeDispatcher()
     use_case = AcceptInvitationUseCase(client_repo, invite_repo, dispatcher)
 
-    client_id, mismatch = await use_case(
+    result = await use_case(
         token="invite-token",
-        display_name="  Client Name  ",
-        phone="  +375291112233  ",
         user=user,
+        payload=InvitationAccept(display_name="  Client Name  ", phone="  +375291112233  "),
     )
 
-    assert mismatch is False
+    assert result.email_mismatch_with_master_record is False
+    client_id = result.client_id
     assert client_id == client_repo.created_client.id
     assert client_repo.created_client.display_name == "Client Name"
     assert client_repo.created_client.phone == "+375291112233"
@@ -157,14 +161,14 @@ async def test_accept_open_invitation_links_existing_unlinked_client_with_same_e
     client_repo = FakeClientRepo(unlinked_email_matches=[(link, client)])
     use_case = AcceptInvitationUseCase(client_repo, FakeInvitationRepo(invite=invite), FakeDispatcher())
 
-    client_id, mismatch = await use_case(
+    result = await use_case(
         token="invite-token",
-        display_name="Accepted Name",
-        phone="+375291112233",
         user=user,
+        payload=InvitationAccept(display_name="Accepted Name", phone="+375291112233"),
     )
 
-    assert mismatch is False
+    assert result.email_mismatch_with_master_record is False
+    client_id = result.client_id
     assert client_id == existing_client_id
     assert client_repo.created_client is None
     assert client_repo.created_link is None
@@ -197,15 +201,15 @@ async def test_accept_targeted_invitation_links_existing_client_and_flags_email_
     dispatcher = FakeDispatcher()
     use_case = AcceptInvitationUseCase(client_repo, FakeInvitationRepo(invite=invite), dispatcher)
 
-    client_id, mismatch = await use_case(
+    result = await use_case(
         token="invite-token",
-        display_name="Accepted Name",
-        phone="",
         user=user,
+        payload=InvitationAccept(display_name="Accepted Name", phone=""),
     )
 
+    client_id = result.client_id
     assert client_id == target_client_id
-    assert mismatch is True
+    assert result.email_mismatch_with_master_record is True
     assert client.display_name == "Accepted Name"
     assert client.phone is None
     assert client.email == "profile@example.com"
@@ -231,16 +235,15 @@ async def test_accept_invitation_rejects_already_accepted_invite():
     invite.accepted_at = datetime.now(UTC)
     use_case = AcceptInvitationUseCase(FakeClientRepo(), FakeInvitationRepo(invite=invite), FakeDispatcher())
 
-    with pytest.raises(AcceptInvitationError) as exc_info:
+    with pytest.raises(InvitationAlreadyAcceptedError) as exc_info:
         await use_case(
             token="invite-token",
-            display_name="Client",
-            phone=None,
             user=SimpleNamespace(id=uuid.uuid4(), email="client@example.com"),
+            payload=InvitationAccept(display_name="Client", phone=None),
         )
 
-    assert exc_info.value.status_code == status.HTTP_409_CONFLICT
-    assert exc_info.value.error_message == "Invitation already accepted"
+    assert exc_info.value.code == "invitations.already_accepted"
+    assert exc_info.value.message == "Invitation already accepted"
 
 
 async def test_create_targeted_invitation_rejects_active_pending_invite_without_replace():
@@ -250,16 +253,19 @@ async def test_create_targeted_invitation_rejects_active_pending_invite_without_
     invite_repo = FakeInvitationRepo(active_pending=SimpleNamespace(id=uuid.uuid4()))
     use_case = CreateInvitationUseCase(client_repo, invite_repo)
 
-    with pytest.raises(CreateInvitationError) as exc_info:
+    with pytest.raises(InvitationActiveAlreadyExistsError) as exc_info:
         await use_case(
             master_id=uuid.uuid4(),
-            expires_hours=72,
-            target_email=None,
-            target_client_id=target_client_id,
-            replace=False,
+            payload=InvitationCreate(
+                expires_hours=72,
+                target_email=None,
+                target_client_id=target_client_id,
+                replace=False,
+            ),
         )
 
-    assert str(exc_info.value) == "An active invitation already exists for this client."
+    assert exc_info.value.code == "invitations.active_already_exists"
+    assert exc_info.value.message == "An active invitation already exists for this client."
 
 
 async def test_create_targeted_invitation_replaces_active_pending_invite():
@@ -272,10 +278,12 @@ async def test_create_targeted_invitation_replaces_active_pending_invite():
 
     out = await use_case(
         master_id=master_id,
-        expires_hours=24,
-        target_email="TARGET@EXAMPLE.COM",
-        target_client_id=target_client_id,
-        replace=True,
+        payload=InvitationCreate(
+            expires_hours=24,
+            target_email="TARGET@EXAMPLE.COM",
+            target_client_id=target_client_id,
+            replace=True,
+        ),
     )
 
     assert invite_repo.revoked == [(master_id, target_client_id)]

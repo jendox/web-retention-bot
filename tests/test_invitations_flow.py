@@ -96,6 +96,20 @@ def _register_verified_client(client: TestClient, *, email: str) -> dict:
     return verify.json()
 
 
+def test_invitation_landing_not_found_returns_error_code():
+    try:
+        with TestClient(app) as client:
+            resp = client.get("/api/invitations/not-existing-token")
+            assert resp.status_code == 404, resp.text
+            assert resp.json() == {
+                "code": "invitations.not_found",
+                "detail": "Invitation not found",
+            }
+    except Exception as exc:
+        _skip_if_unreachable(exc)
+        raise
+
+
 def test_open_invitation_accept_creates_client_link():
     suffix = uuid.uuid4().hex[:8]
     master_email = f"master_open_{suffix}@example.com"
