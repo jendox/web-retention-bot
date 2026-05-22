@@ -4,10 +4,14 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
+from app.api.deps import require_user
+from app.models.user import User
 from app.schemas.client import ClientProfileUpdate, ClientSchema
 from app.schemas.errors import ErrorDetail
-from app.use_cases.clients.update_client_profile import (
+from app.use_cases.clients import (
+    GetClientProfileUseCase,
     UpdateClientProfileUseCase,
+    get_get_client_profile_use_case,
     get_update_client_profile_use_case,
 )
 
@@ -28,9 +32,10 @@ router = APIRouter(prefix="/profile", tags=["client-profile"])
     },
 )
 async def get_my_client_profile(
-    use_case: Annotated[UpdateClientProfileUseCase, Depends(get_update_client_profile_use_case)],
+    user: Annotated[User, Depends(require_user)],
+    use_case: Annotated[GetClientProfileUseCase, Depends(get_get_client_profile_use_case)],
 ) -> ClientSchema:
-    return await use_case.get_profile()
+    return await use_case(user.id)
 
 
 @router.patch(
@@ -49,6 +54,7 @@ async def get_my_client_profile(
 )
 async def patch_my_client_profile(
     payload: ClientProfileUpdate,
+    user: Annotated[User, Depends(require_user)],
     use_case: Annotated[UpdateClientProfileUseCase, Depends(get_update_client_profile_use_case)],
 ) -> ClientSchema:
-    return await use_case(payload)
+    return await use_case(user_id=user.id, payload=payload)

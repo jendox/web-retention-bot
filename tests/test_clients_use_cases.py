@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 from starlette.testclient import TestClient
 
-from app.api.deps import require_master_profile
+from app.api.deps import require_master_profile, require_user
 from app.main import app
 from app.schemas.client import ClientProfileUpdate, ClientUpdate
 from app.use_cases.clients.delete_client import DeleteClientUseCase, get_delete_client_use_case
@@ -17,6 +17,7 @@ from app.use_cases.clients.exceptions import (
     ClientProfileNotFoundError,
 )
 from app.use_cases.clients.get_client import get_get_client_use_case
+from app.use_cases.clients.get_client_profile import GetClientProfileUseCase, get_get_client_profile_use_case
 from app.use_cases.clients.list_clients import ListClientsUseCase
 from app.use_cases.clients.update_client import UpdateClientUseCase
 from app.use_cases.clients.update_client_profile import UpdateClientProfileUseCase
@@ -204,6 +205,11 @@ class FakeDeleteClientUseCase:
         raise ClientHasBookingsError()
 
 
+class FakeGetClientProfileUseCase:
+    async def __call__(self, user_id):
+        raise ClientProfileNotFoundError()
+
+
 async def test_list_clients_attaches_no_show_stats():
     repo = FakeListClientRepo()
     use_case = ListClientsUseCase(repo, FakeBookingRepoWithNoShows())
@@ -286,10 +292,41 @@ async def test_update_client_profile_without_profile_raises_domain_error():
         async def list_client_profiles_for_user(self, user_id):
             return []
 
-    use_case = UpdateClientProfileUseCase(SimpleNamespace(id=uuid.uuid4()), Repo())
+    use_case = UpdateClientProfileUseCase(Repo())
 
     with pytest.raises(ClientProfileNotFoundError) as exc_info:
-        await use_case(ClientProfileUpdate(display_name="Client"))
+        await use_case(user_id=uuid.uuid4(), payload=ClientProfileUpdate(display_name="Client"))
 
     assert exc_info.value.code == "clients.profile_not_found"
     assert exc_info.value.message == "Client profile not found"
+
+
+async def test_get_client_profile_without_profile_raises_domain_error():
+    class Repo:
+        async def primary_client_profile_for_user(self, user_id):
+            return None
+
+    use_case = GetClientProfileUseCase(Repo())
+
+    with pytest.raises(ClientProfileNotFoundError) as exc_info:
+        await use_case(uuid.uuid4())
+
+    assert exc_info.value.code == "clients.profile_not_found"
+    assert exc_info.value.message == "Client profile not found"
+
+
+def test_get_client_profile_route_returns_app_error_contract():
+    app.dependency_overrides[require_user] = lambda: SimpleNamespace(id=uuid.uuid4())
+    app.dependency_overrides[get_get_client_profile_use_case] = FakeGetClientProfileUseCase
+    try:
+        with TestClient(app) as client:
+            resp = client.get("/api/client/profile")
+    finally:
+        app.dependency_overrides.pop(require_user, None)
+        app.dependency_overrides.pop(get_get_client_profile_use_case, None)
+
+    assert resp.status_code == 404
+    assert resp.json() == {
+        "code": "clients.profile_not_found",
+        "detail": "Client profile not found",
+    }
