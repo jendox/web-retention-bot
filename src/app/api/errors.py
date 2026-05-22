@@ -32,7 +32,10 @@ def raise_http_error(error: AppError) -> NoReturn:
 
 
 async def app_error_handler(_request: Request, error: AppError) -> Response:
+    content: dict[str, object] = {"code": error.code, "detail": error.message}
+    if error.context:
+        content["context"] = error.context
     return JSONResponse(
         status_code=app_error_status_code(error),
-        content={"code": error.code, "detail": error.message},
+        content=content,
     )

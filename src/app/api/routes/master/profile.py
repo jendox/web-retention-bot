@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 from app.api.deps import require_master_profile
 from app.models.master import MasterProfile
@@ -15,7 +17,6 @@ from app.use_cases.master import UpdateMasterProfileUseCase, get_update_master_p
 from app.use_cases.schedule import (
     GetMasterScheduleUseCase,
     ReplaceMasterScheduleUseCase,
-    ScheduleBookingConflictError,
     get_get_master_schedule_use_case,
     get_replace_master_schedule_use_case,
 )
@@ -130,6 +131,7 @@ async def get_schedule_route(
             "description": "The current user does not have a master profile.",
         },
         status.HTTP_409_CONFLICT: {
+            "model": ErrorDetail,
             "description": "Schedule changes affect existing future bookings.",
         },
     },
@@ -139,22 +141,4 @@ async def put_schedule_route(
     master: Annotated[MasterProfile, Depends(require_master_profile)],
     use_case: Annotated[ReplaceMasterScheduleUseCase, Depends(get_replace_master_schedule_use_case)],
 ) -> MasterScheduleOut:
-    try:
-        return await use_case(master, payload)
-    except ScheduleBookingConflictError as exc:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": "Schedule changes affect existing bookings.",
-                "bookings": [
-                    {
-                        "id": str(booking.id),
-                        "start_at": booking.start_at.isoformat(),
-                        "end_at": booking.end_at.isoformat(),
-                    }
-                    for booking in exc.conflicts
-                ],
-            },
-        ) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await use_case(master, payload)

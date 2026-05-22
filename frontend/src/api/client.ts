@@ -32,7 +32,7 @@ async function fetchCsrfToken(): Promise<string> {
   if (!res.ok) {
     const text = await res.text()
     const error = parseFastApiError(text || `${res.status}`)
-    throw new ApiError(res.status, error.detail, error.code)
+    throw new ApiError(res.status, error.detail, error.code, error.context)
   }
   const data = (await res.json()) as { csrf_token?: string }
   const token = data.csrf_token ?? readCookie(csrfCookieName)
@@ -66,7 +66,7 @@ async function requestWithHeaders(path: string, init: RequestInit, headers: Head
 async function parseResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const error = await responseErrorPayload(res)
-    throw new ApiError(res.status, error.detail, error.code)
+    throw new ApiError(res.status, error.detail, error.code, error.context)
   }
   if (res.status === 204) {
     return undefined as T
@@ -94,7 +94,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   if (res.status === 403 && shouldAttachCsrf) {
     const error = await responseErrorPayload(res)
     if (error.detail !== csrfErrorDetail) {
-      throw new ApiError(res.status, error.detail, error.code)
+      throw new ApiError(res.status, error.detail, error.code, error.context)
     }
     const refreshedHeaders = new Headers(headers)
     refreshedHeaders.set(csrfHeaderName, await ensureCsrfToken(true))

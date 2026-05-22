@@ -18,6 +18,38 @@ describe('api error localization', () => {
     expect(getUserFacingError(new ApiError(400, payload.detail, payload.code))).toBe('Текущий пароль указан неверно.')
   })
 
+  it('preserves structured backend context', () => {
+    const payload = parseFastApiError(
+      JSON.stringify({
+        code: 'schedule.booking_conflict',
+        detail: 'Schedule changes affect existing bookings.',
+        context: {
+          conflicts: [
+            {
+              id: 'booking-1',
+              start_at: '2026-06-01T13:00:00+00:00',
+              end_at: '2026-06-01T14:00:00+00:00',
+            },
+          ],
+        },
+      }),
+    )
+
+    expect(payload.context).toEqual({
+      conflicts: [
+        {
+          id: 'booking-1',
+          start_at: '2026-06-01T13:00:00+00:00',
+          end_at: '2026-06-01T14:00:00+00:00',
+        },
+      ],
+    })
+    expect(new ApiError(409, payload.detail, payload.code, payload.context).context).toEqual(payload.context)
+    expect(getUserFacingError(new ApiError(409, payload.detail, payload.code, payload.context))).toBe(
+      'Нельзя сохранить расписание: есть будущие записи вне новых рабочих часов.',
+    )
+  })
+
   it('falls back to detail localization for old FastAPI errors without code', () => {
     const payload = parseFastApiError(JSON.stringify({ detail: 'Invalid credentials' }))
 

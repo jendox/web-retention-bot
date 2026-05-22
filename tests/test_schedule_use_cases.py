@@ -4,7 +4,10 @@ from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
+from starlette.testclient import TestClient
 
+from app.api.deps import require_master_profile
+from app.main import app
 from app.models.booking import BookingStatus
 from app.models.schedule import (
     ScheduleDateOverride,
@@ -16,7 +19,8 @@ from app.schemas.master import MasterProfileSchema, MasterScheduleUpsert
 from app.services.availability import windows_for_date
 from app.use_cases.booking import available_slots as available_slots_module
 from app.use_cases.schedule import replace_schedule as replace_schedule_module
-from app.use_cases.schedule.replace_schedule import booking_fits_schedule
+from app.use_cases.schedule.exceptions import ScheduleBookingConflictError
+from app.use_cases.schedule.replace_schedule import booking_fits_schedule, get_replace_master_schedule_use_case
 
 
 def test_schedule_payload_rejects_overlapping_weekly_intervals():
@@ -193,7 +197,63 @@ async def test_replace_schedule_rejects_changes_that_cut_existing_future_booking
     with pytest.raises(replace_schedule_module.ScheduleBookingConflictError) as exc_info:
         await use_case(master, payload)
 
-    assert exc_info.value.conflicts == [booking]
+    assert exc_info.value.code == "schedule.booking_conflict"
+    assert exc_info.value.context == {
+        "conflicts": [
+            {
+                "id": str(booking.id),
+                "start_at": "2026-06-01T13:00:00+00:00",
+                "end_at": "2026-06-01T14:00:00+00:00",
+            },
+        ],
+    }
+
+
+def test_replace_schedule_route_returns_conflict_context():
+    conflict_context = {
+        "conflicts": [
+            {
+                "id": str(uuid.uuid4()),
+                "start_at": "2026-06-01T13:00:00+00:00",
+                "end_at": "2026-06-01T14:00:00+00:00",
+            },
+        ],
+    }
+
+    class FakeReplaceScheduleUseCase:
+        async def __call__(self, master, payload):
+            raise ScheduleBookingConflictError(context=conflict_context)
+
+    app.dependency_overrides[require_master_profile] = lambda: SimpleNamespace(id=uuid.uuid4(), timezone="UTC")
+    app.dependency_overrides[get_replace_master_schedule_use_case] = FakeReplaceScheduleUseCase
+    try:
+        with TestClient(app) as client:
+            client.cookies.set("csrf_token", "token")
+            response = client.put(
+                "/api/master/schedule",
+                json={
+                    "weekly_days": [
+                        {
+                            "weekday": 0,
+                            "is_closed": False,
+                            "intervals": [{"start_time": "10:00", "end_time": "18:00"}],
+                            "note": None,
+                        },
+                    ],
+                    "date_overrides": [],
+                },
+                headers={"X-CSRF-Token": "token"},
+            )
+    finally:
+        app.dependency_overrides.pop(require_master_profile, None)
+        app.dependency_overrides.pop(get_replace_master_schedule_use_case, None)
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "code": "schedule.booking_conflict",
+        "detail": "Schedule changes affect existing bookings.",
+        "context": conflict_context,
+    }
 
 
 async def test_replace_schedule_replaces_models_flushes_and_returns_snapshot():

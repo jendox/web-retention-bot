@@ -31,6 +31,12 @@ type DayOverride = {
   note?: string
 }
 
+type ScheduleConflictBooking = {
+  id: string
+  start_at: string
+  end_at: string
+}
+
 type ScheduleTab = 'calendar' | 'template'
 
 const fieldClass =
@@ -171,6 +177,48 @@ function canEditDate(dateValue: string, minEditableDate: string) {
 
 function formatHours(value: number) {
   return value.toFixed(2)
+}
+
+function formatConflictDateTime(startAt: string, endAt: string) {
+  const start = new Date(startAt)
+  const end = new Date(endAt)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return 'Время записи не распознано'
+  }
+  const date = normalizeRussianYearSuffix(
+    new Intl.DateTimeFormat('ru-RU', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).format(start),
+  )
+  const timeFormatter = new Intl.DateTimeFormat('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  return `${date}, ${timeFormatter.format(start)}-${timeFormatter.format(end)}`
+}
+
+function scheduleConflictBookings(error: unknown): ScheduleConflictBooking[] {
+  if (!(error instanceof ApiError)) {
+    return []
+  }
+  const conflicts = error.context?.conflicts
+  if (!Array.isArray(conflicts)) {
+    return []
+  }
+  return conflicts.filter((item): item is ScheduleConflictBooking => {
+    if (!item || typeof item !== 'object') {
+      return false
+    }
+    const conflict = item as Record<string, unknown>
+    return (
+      typeof conflict.id === 'string' &&
+      typeof conflict.start_at === 'string' &&
+      typeof conflict.end_at === 'string'
+    )
+  })
 }
 
 function scheduleToWeekRules(schedule: SchedulePayload | undefined) {
@@ -350,6 +398,7 @@ export function SchedulePage() {
   const [monthAnchor, setMonthAnchor] = useState(() => startOfLocalDay(new Date()))
   const [saveError, setSaveError] = useState<string>()
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false)
+  const [conflictBookings, setConflictBookings] = useState<ScheduleConflictBooking[]>([])
   const minEditableDate = useMemo(() => toDateInputValue(addDays(startOfLocalDay(new Date()), 1)), [])
 
   useEffect(() => {
@@ -366,18 +415,21 @@ export function SchedulePage() {
     onSuccess: async (data) => {
       setSaveError(undefined)
       setConflictDialogOpen(false)
+      setConflictBookings([])
       setDraftWeekRules(null)
       setDraftOverrides(null)
       await queryClient.invalidateQueries({ queryKey: ['schedule'] })
       queryClient.setQueryData(['schedule'], data)
     },
     onError: (error) => {
-      if (error instanceof ApiError && error.status === 409) {
+      if (error instanceof ApiError && (error.code === 'schedule.booking_conflict' || error.status === 409)) {
         setSaveError(undefined)
+        setConflictBookings(scheduleConflictBookings(error))
         setConflictDialogOpen(true)
         return
       }
       setConflictDialogOpen(false)
+      setConflictBookings([])
       setSaveError(getUserFacingError(error))
     },
   })
@@ -812,6 +864,18 @@ export function SchedulePage() {
               Эти изменения затрагивают уже назначенные будущие записи. Сначала договоритесь с клиентами и перенесите
               записи, после этого расписание можно будет сохранить.
             </p>
+            {conflictBookings.length > 0 ? (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/70 dark:bg-amber-950/30">
+                <p className="text-sm font-medium text-amber-950 dark:text-amber-100">Конфликтующие записи</p>
+                <ul className="mt-2 space-y-2">
+                  {conflictBookings.map((booking) => (
+                    <li key={booking.id} className="text-sm text-amber-900 dark:text-amber-200">
+                      {formatConflictDateTime(booking.start_at, booking.end_at)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <div className="mt-4 flex justify-end">
               <button
                 type="button"

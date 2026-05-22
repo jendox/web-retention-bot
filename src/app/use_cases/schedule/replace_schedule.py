@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -20,22 +20,25 @@ from app.repositories.bookings import BookingRepository, get_booking_repo
 from app.repositories.schedules import ScheduleRepository, get_schedule_repo
 from app.schemas.master import MasterScheduleOut, MasterScheduleUpsert
 from app.services.availability import windows_for_date
+from app.use_cases.schedule.exceptions import ScheduleBookingConflictError
 from app.use_cases.schedule.get_schedule import GetMasterScheduleUseCase, get_get_master_schedule_use_case
 
-__all__ = [
-    "ReplaceMasterScheduleUseCase",
-    "ScheduleBookingConflictError",
-    "booking_fits_schedule",
-    "get_replace_master_schedule_use_case",
-]
+__all__ = ["ReplaceMasterScheduleUseCase", "booking_fits_schedule", "get_replace_master_schedule_use_case"]
 
 logger = get_logger("app.schedule")
 
 
-class ScheduleBookingConflictError(Exception):
-    def __init__(self, conflicts: list[Booking]) -> None:
-        self.conflicts = conflicts
-        super().__init__("Schedule changes affect existing bookings.")
+def _format_conflicts_context(conflicts: list[Booking]) -> dict[str, Any]:
+    return {
+        "conflicts": [
+            {
+                "id": str(conflict.id),
+                "start_at": conflict.start_at.isoformat(),
+                "end_at": conflict.end_at.isoformat(),
+            }
+            for conflict in conflicts
+        ],
+    }
 
 
 def _aware_utc(value: datetime) -> datetime:
@@ -54,7 +57,10 @@ def booking_fits_schedule(
     start_local = _aware_utc(booking.start_at).astimezone(tz)
     end_local = _aware_utc(booking.end_at).astimezone(tz)
     windows = windows_for_date(start_local.date(), weekly_days, date_overrides, tz)
-    return any(window_start <= start_local and end_local <= window_end for window_start, window_end in windows)
+    return any(
+        window_start <= start_local and end_local <= window_end
+        for window_start, window_end in windows
+    )
 
 
 class ReplaceMasterScheduleUseCase:
@@ -85,7 +91,7 @@ class ReplaceMasterScheduleUseCase:
         ]
         if conflicts:
             logger.warning("failed", reason="schedule_booking_conflict", booking_count=len(conflicts))
-            raise ScheduleBookingConflictError(conflicts)
+            raise ScheduleBookingConflictError(context=_format_conflicts_context(conflicts))
 
     @staticmethod
     def _weekly_day_models(master_id: UUID, payload: MasterScheduleUpsert) -> list[WeeklyScheduleDay]:

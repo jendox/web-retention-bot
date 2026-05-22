@@ -35,6 +35,7 @@ const CODE_RU: Record<string, string> = {
   'clients.has_invitation': 'Нельзя удалить клиента: есть привязка по приглашению.',
   'clients.master_link_not_found': 'Вы не связаны с этим мастером.',
   'notifications.not_found': 'Уведомление не найдено.',
+  'schedule.booking_conflict': 'Нельзя сохранить расписание: есть будущие записи вне новых рабочих часов.',
   'availability.master_not_found': 'Профиль мастера не найден.',
   'availability.service_not_found': 'Услуга не найдена.',
   'availability.date_in_past': 'Нельзя выбрать прошедшую дату.',
@@ -95,19 +96,31 @@ export class ApiError extends Error {
   readonly detail: string
   /** Стабильный машинный код ошибки, если бэкенд его вернул. */
   readonly code?: string
+  /** Дополнительные структурированные данные ошибки. */
+  readonly context?: Record<string, unknown>
 
-  constructor(status: number, detail: string, code?: string) {
+  constructor(status: number, detail: string, code?: string, context?: Record<string, unknown>) {
     super(detail)
     this.name = 'ApiError'
     this.status = status
     this.detail = detail
     this.code = code
+    this.context = context
   }
 }
 
 export type ApiErrorPayload = {
   detail: string
   code?: string
+  context?: Record<string, unknown>
+}
+
+function apiErrorPayload(detail: string, code?: string, context?: Record<string, unknown>): ApiErrorPayload {
+  return {
+    detail,
+    ...(code ? { code } : {}),
+    ...(context ? { context } : {}),
+  }
 }
 
 export function translateApiCode(code: string | undefined): string | null {
@@ -122,16 +135,17 @@ export function translateApiDetail(detail: string): string {
 /** Разбор тела ответа FastAPI: новый {code, detail}, строка или validation errors. */
 export function parseFastApiError(rawBody: string): ApiErrorPayload {
   try {
-    const j = JSON.parse(rawBody) as { code?: unknown; detail?: unknown }
+    const j = JSON.parse(rawBody) as { code?: unknown; detail?: unknown; context?: unknown }
+    const context =
+      j.context && typeof j.context === 'object' && !Array.isArray(j.context)
+        ? (j.context as Record<string, unknown>)
+        : undefined
     if (typeof j.detail === 'string') {
-      return {
-        detail: j.detail,
-        code: typeof j.code === 'string' ? j.code : undefined,
-      }
+      return apiErrorPayload(j.detail, typeof j.code === 'string' ? j.code : undefined, context)
     }
     if (Array.isArray(j.detail)) {
-      return {
-        detail: j.detail
+      return apiErrorPayload(
+        j.detail
           .map((item: unknown) => {
             if (item && typeof item === 'object' && 'msg' in item) {
               return String((item as { msg: string }).msg).replace(/^Value error,\s*/i, '')
@@ -139,8 +153,9 @@ export function parseFastApiError(rawBody: string): ApiErrorPayload {
             return JSON.stringify(item)
           })
           .join(' '),
-        code: typeof j.code === 'string' ? j.code : undefined,
-      }
+        typeof j.code === 'string' ? j.code : undefined,
+        context,
+      )
     }
   } catch {
     /* не JSON */
