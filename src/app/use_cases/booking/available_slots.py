@@ -4,17 +4,22 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, status
+from fastapi import Depends
 
 from app.core.config import Settings, get_settings
+from app.models import MasterProfile, Service
 from app.repositories.masters import MasterRepository, get_master_repo
 from app.repositories.schedules import ScheduleRepository, get_schedule_repo
 from app.repositories.services import ServiceRepository, get_service_repo
 from app.schemas.availability import SlotOut
 from app.schemas.master import MasterProfileSchema
-from app.schemas.service import ServiceSchema
 from app.services.availability import AvailabilityEngine, get_availability_engine
-from app.use_cases.booking.exceptions import AvailabilitySlotsError
+from app.use_cases.booking.exceptions import (
+    AvailabilityDateInPastError,
+    AvailabilityDateOutsideHorizonError,
+    AvailabilityMasterNotFoundError,
+    AvailabilityServiceNotFoundError,
+)
 
 
 def slots_contain(slots: list[datetime], start_at: datetime) -> bool:
@@ -55,21 +60,17 @@ class AvailableSlotsUseCase:
         self._availability_engine = availability_engine
         self._settings = settings
 
-    async def _get_master_profile(self, master_id: UUID) -> MasterProfileSchema:
+    async def _get_master_profile(self, master_id: UUID) -> MasterProfile:
         master_profile = await self._master_repo.get_by_master_id(master_id)
         if master_profile is None:
-            raise AvailabilitySlotsError(
-                status_code=status.HTTP_404_NOT_FOUND, error_message="Master not found",
-            )
-        return MasterProfileSchema.model_validate(master_profile)
+            raise AvailabilityMasterNotFoundError()
+        return master_profile
 
-    async def _get_service_for_master(self, service_id: UUID, master_id: UUID) -> ServiceSchema:
+    async def _get_service_for_master(self, service_id: UUID, master_id: UUID) -> Service:
         service = await self._service_repo.get_for_master(service_id, master_id)
         if service is None or not service.is_active:
-            raise AvailabilitySlotsError(
-                status_code=status.HTTP_404_NOT_FOUND, error_message="Service not found or not available",
-            )
-        return ServiceSchema.model_validate(service)
+            raise AvailabilityServiceNotFoundError()
+        return service
 
     @staticmethod
     def _check_calendar_day(
@@ -80,9 +81,9 @@ class AvailableSlotsUseCase:
     ) -> None:
         master_today = master_profile.calendar_day_for_master(now)
         if calendar_day < master_today:
-            raise AvailabilitySlotsError(status_code=400, error_message="Date is in the past")
+            raise AvailabilityDateInPastError()
         if calendar_day > _max_booking_day(master_today, max_advance_days):
-            raise AvailabilitySlotsError(status_code=400, error_message="Date is outside booking horizon")
+            raise AvailabilityDateOutsideHorizonError()
 
     async def __call__(
         self,
@@ -91,7 +92,8 @@ class AvailableSlotsUseCase:
         service_id: UUID,
         calendar_day: date,
     ) -> list[SlotOut]:
-        master_profile = await self._get_master_profile(master_id)
+        master_profile_model = await self._get_master_profile(master_id)
+        master_profile = MasterProfileSchema.model_validate(master_profile_model)
 
         now = datetime.now(UTC)
         self._check_calendar_day(calendar_day, master_profile, now, self._settings.booking.max_advance_days)

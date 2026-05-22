@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Annotated, NoReturn
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Body, Depends, Query, Response, status
 
 from app.api.deps import require_master_profile
 from app.core.pagination import Pagination, get_pagination
@@ -20,29 +20,21 @@ from app.schemas.booking import (
 from app.schemas.errors import ErrorDetail
 from app.schemas.pagination import PaginatedResponse
 from app.use_cases.booking import (
-    BookingsError,
-    CancelBookingUseCase,
-    CreateBookingUseCase,
+    CancelMasterBookingUseCase,
+    CreateMasterBookingUseCase,
     GetMasterMonthlyRevenueUseCase,
     ListMasterBookingsUseCase,
-    MarkBookingAttendanceUseCase,
-    RescheduleBookingUseCase,
-    get_cancel_booking_use_case,
-    get_create_booking_use_case,
+    MarkMasterBookingAttendanceUseCase,
+    RescheduleMasterBookingUseCase,
+    get_cancel_master_booking_use_case,
+    get_create_master_booking_use_case,
     get_list_master_bookings_use_case,
-    get_mark_booking_attendance_use_case,
+    get_mark_master_booking_attendance_use_case,
     get_master_monthly_revenue_use_case,
-    get_reschedule_booking_use_case,
+    get_reschedule_master_booking_use_case,
 )
 
 router = APIRouter(prefix="/bookings", tags=["master-bookings"])
-
-
-def _raise_http_error(error: BookingsError) -> NoReturn:
-    raise HTTPException(
-        status_code=getattr(error, "status_code", status.HTTP_400_BAD_REQUEST),
-        detail=getattr(error, "error_message", "Booking operation failed"),
-    ) from None
 
 
 @router.get(
@@ -137,15 +129,12 @@ async def list_bookings(
         },
     },
 )
-async def post_booking(
+async def create_booking(
     payload: BookingCreate,
     master: Annotated[MasterProfile, Depends(require_master_profile)],
-    use_case: Annotated[CreateBookingUseCase, Depends(get_create_booking_use_case)],
+    use_case: Annotated[CreateMasterBookingUseCase, Depends(get_create_master_booking_use_case)],
 ) -> BookingOut:
-    try:
-        return await use_case(payload, master=master)
-    except BookingsError as error:
-        _raise_http_error(error)
+    return await use_case(payload, master=master)
 
 
 @router.post(
@@ -165,20 +154,17 @@ async def post_booking(
         },
     },
 )
-async def post_cancel(
+async def cancel_booking(
     booking_id: UUID,
     master: Annotated[MasterProfile, Depends(require_master_profile)],
-    use_case: Annotated[CancelBookingUseCase, Depends(get_cancel_booking_use_case)],
+    use_case: Annotated[CancelMasterBookingUseCase, Depends(get_cancel_master_booking_use_case)],
     payload: Annotated[BookingCancel | None, Body()] = None,
 ) -> Response:
-    try:
-        await use_case(
-            master=master,
-            booking_id=booking_id,
-            comment=payload.comment if payload else None,
-        )
-    except BookingsError as error:
-        _raise_http_error(error)
+    await use_case(
+        master=master,
+        booking_id=booking_id,
+        comment=payload.comment if payload else None,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -210,21 +196,18 @@ async def post_cancel(
         },
     },
 )
-async def post_reschedule(
+async def reschedule_booking(
     booking_id: UUID,
     payload: BookingReschedule,
     master: Annotated[MasterProfile, Depends(require_master_profile)],
-    use_case: Annotated[RescheduleBookingUseCase, Depends(get_reschedule_booking_use_case)],
+    use_case: Annotated[RescheduleMasterBookingUseCase, Depends(get_reschedule_master_booking_use_case)],
 ) -> BookingOut:
-    try:
-        return await use_case(
-            master=master,
-            booking_id=booking_id,
-            start_at=payload.start_at,
-            comment=payload.comment,
-        )
-    except BookingsError as error:
-        _raise_http_error(error)
+    return await use_case(
+        master=master,
+        booking_id=booking_id,
+        start_at=payload.start_at,
+        comment=payload.comment,
+    )
 
 
 @router.post(
@@ -252,13 +235,13 @@ async def post_reschedule(
         },
     },
 )
-async def post_attendance(
+async def mark_attendance(
     booking_id: UUID,
     payload: BookingAttendanceMark,
     master: Annotated[MasterProfile, Depends(require_master_profile)],
-    use_case: Annotated[MarkBookingAttendanceUseCase, Depends(get_mark_booking_attendance_use_case)],
+    use_case: Annotated[
+        MarkMasterBookingAttendanceUseCase,
+        Depends(get_mark_master_booking_attendance_use_case),
+    ],
 ) -> BookingOut:
-    try:
-        return await use_case(master_id=master.id, booking_id=booking_id, attended=payload.attended)
-    except BookingsError as error:
-        _raise_http_error(error)
+    return await use_case(master_id=master.id, booking_id=booking_id, attended=payload.attended)

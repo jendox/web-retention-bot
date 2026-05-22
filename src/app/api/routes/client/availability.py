@@ -1,21 +1,14 @@
 from datetime import date
-from typing import Annotated, NoReturn
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
 from app.schemas.availability import SlotOut
 from app.schemas.errors import ErrorDetail
-from app.use_cases.booking import AvailabilitySlotsError, AvailableSlotsUseCase, get_available_slots_use_case
+from app.use_cases.booking.available_slots import AvailableSlotsUseCase, get_available_slots_use_case
 
 router = APIRouter(prefix="/availability", tags=["client-availability"])
-
-
-def _raise_http_error(error: AvailabilitySlotsError) -> NoReturn:
-    raise HTTPException(
-        status_code=getattr(error, "status_code", status.HTTP_400_BAD_REQUEST),
-        detail=getattr(error, "error_message", "Availability slots not available"),
-    ) from None
 
 
 @router.get(
@@ -45,11 +38,8 @@ async def availability_slots(
     day: Annotated[date, Query(alias="date", description="Master-local calendar date.")],
     use_case: Annotated[AvailableSlotsUseCase, Depends(get_available_slots_use_case)],
 ) -> list[SlotOut]:
-    try:
-        return await use_case(
-            master_id=master_id,
-            service_id=service_id,
-            calendar_day=day,
-        )
-    except AvailabilitySlotsError as error:
-        _raise_http_error(error)
+    return await use_case(
+        master_id=master_id,
+        service_id=service_id,
+        calendar_day=day,
+    )

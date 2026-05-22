@@ -40,6 +40,16 @@ const CODE_RU: Record<string, string> = {
   'availability.service_not_found': 'Услуга не найдена.',
   'availability.date_in_past': 'Нельзя выбрать прошедшую дату.',
   'availability.date_outside_horizon': 'Дата слишком далеко. Выберите ближайший доступный день.',
+  'booking.service_not_found': 'Услуга не найдена.',
+  'booking.master_not_found': 'Профиль мастера не найден.',
+  'booking.client_link_not_found': 'Связь с клиентом не найдена.',
+  'booking.unknown_client_linkage': 'Клиент не найден в вашей базе.',
+  'booking.not_linked_to_master': 'Вы не связаны с этим мастером.',
+  'booking.requested_slot_unavailable': 'Это время уже недоступно. Выберите другой слот.',
+  'booking.overlapping_exists': 'На это время уже есть запись.',
+  'booking.not_found': 'Запись не найдена.',
+  'booking.active_not_found': 'Активная запись не найдена.',
+  'booking.attendance_not_pending': 'Явка уже отмечена или запись не ждёт подтверждения.',
 }
 
 /** Сообщения бэкенда (англ.) → текст для пользователя (рус.). */

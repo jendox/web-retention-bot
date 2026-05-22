@@ -13,13 +13,13 @@ import pytest
 from app.models.booking import BookingStatus
 from app.schemas.availability import SlotOut
 from app.schemas.booking import ClientBookingCreate
-from app.use_cases.booking.client_booking import (
+from app.use_cases.booking.client import (
     CancelClientBookingUseCase,
-    ClientBookingUseCaseDeps,
     CreateClientBookingUseCase,
     RescheduleClientBookingUseCase,
 )
-from app.use_cases.booking.exceptions import CreateBookingError, UpdateBookingError
+from app.use_cases.booking.client.schemas import ClientBookingUseCaseDeps
+from app.use_cases.booking.exceptions import BookingNotFoundError, BookingNotLinkedToMasterError
 
 
 def _booking(**overrides):
@@ -163,7 +163,7 @@ async def test_create_client_booking_requires_link() -> None:
             slots_uc=AsyncMock(),
         ),
     )
-    with pytest.raises(CreateBookingError, match="Not linked"):
+    with pytest.raises(BookingNotLinkedToMasterError):
         await uc(
             ClientBookingCreate(master_id=uuid.uuid4(), service_id=uuid.uuid4(), start_at=datetime.now(UTC)),
             user=SimpleNamespace(id=uuid.uuid4()),
@@ -260,7 +260,7 @@ async def test_reschedule_client_booking() -> None:
 
 @pytest.mark.asyncio
 async def test_cancel_client_booking_not_found() -> None:
-    with pytest.raises(UpdateBookingError):
+    with pytest.raises(BookingNotFoundError):
         await CancelClientBookingUseCase(
             _booking_deps(
                 master_repo=SimpleNamespace(),

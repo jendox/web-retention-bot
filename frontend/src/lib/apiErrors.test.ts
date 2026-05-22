@@ -50,6 +50,15 @@ describe('api error localization', () => {
     )
   })
 
+  it('localizes booking errors by backend code', () => {
+    expect(getUserFacingError(new ApiError(409, 'Overlapping booking exists', 'booking.overlapping_exists'))).toBe(
+      'На это время уже есть запись.',
+    )
+    expect(getUserFacingError(new ApiError(403, 'Not linked to this master', 'booking.not_linked_to_master'))).toBe(
+      'Вы не связаны с этим мастером.',
+    )
+  })
+
   it('falls back to detail localization for old FastAPI errors without code', () => {
     const payload = parseFastApiError(JSON.stringify({ detail: 'Invalid credentials' }))
 

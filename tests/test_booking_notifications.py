@@ -30,8 +30,7 @@ from app.services.notifications.mail_render import (
     render_booking_moved,
 )
 from app.services.notifications.recipients import resolve_booking_client_recipient, resolve_booking_master_recipient
-from app.use_cases.booking.create import CreateBookingUseCase
-from app.use_cases.booking.update import CancelBookingUseCase, RescheduleBookingUseCase
+from app.use_cases.booking import CancelMasterBookingUseCase, CreateMasterBookingUseCase, RescheduleMasterBookingUseCase
 
 
 @pytest.fixture
@@ -270,7 +269,7 @@ async def test_create_booking_notifies_linked_verified_client() -> None:
 
     dispatcher = SimpleNamespace(dispatch_booking_created=AsyncMock())
 
-    use_case = CreateBookingUseCase(
+    use_case = CreateMasterBookingUseCase(
         user_repo=FakeUserRepository(),
         client_repo=FakeClientRepository(),
         service_repo=FakeServiceRepository(),
@@ -338,7 +337,7 @@ async def test_create_booking_skips_notification_without_linked_user() -> None:
 
     dispatcher = SimpleNamespace(dispatch_booking_created=AsyncMock())
 
-    use_case = CreateBookingUseCase(
+    use_case = CreateMasterBookingUseCase(
         user_repo=FakeUserRepository(),
         client_repo=FakeClientRepository(),
         service_repo=FakeServiceRepository(),
@@ -514,7 +513,7 @@ async def test_cancel_booking_notifies_linked_verified_client() -> None:
             )
 
     dispatcher = SimpleNamespace(dispatch_booking_cancelled=AsyncMock())
-    use_case = CancelBookingUseCase(
+    use_case = CancelMasterBookingUseCase(
         FakeBookingRepo(),
         FakeClientRepo(),
         SimpleNamespace(get_for_master=AsyncMock(return_value=service)),
@@ -577,7 +576,7 @@ async def test_reschedule_booking_notifies_when_start_changes() -> None:
 
     slots_uc = AsyncMock(return_value=[SlotOut(start_at=new_start)])
     dispatcher = SimpleNamespace(dispatch_booking_moved=AsyncMock())
-    use_case = RescheduleBookingUseCase(
+    use_case = RescheduleMasterBookingUseCase(
         FakeBookingRepo(),
         SimpleNamespace(get_for_master=AsyncMock(return_value=service)),
         FakeClientRepo(),

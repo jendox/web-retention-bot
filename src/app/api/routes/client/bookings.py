@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Annotated, NoReturn
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Body, Depends, Query, Response, status
 
 from app.api.deps import require_user
 from app.core.pagination import Pagination, get_pagination
@@ -18,7 +18,6 @@ from app.schemas.booking import (
 from app.schemas.errors import ErrorDetail
 from app.schemas.pagination import PaginatedResponse
 from app.use_cases.booking import (
-    BookingsError,
     CancelClientBookingUseCase,
     CreateClientBookingUseCase,
     ListClientBookingsUseCase,
@@ -30,13 +29,6 @@ from app.use_cases.booking import (
 )
 
 router = APIRouter(prefix="/bookings", tags=["client-bookings"])
-
-
-def _raise_http_error(error: BookingsError) -> NoReturn:
-    raise HTTPException(
-        status_code=getattr(error, "status_code", status.HTTP_400_BAD_REQUEST),
-        detail=getattr(error, "error_message", "Booking operation failed"),
-    ) from None
 
 
 @router.get(
@@ -90,15 +82,12 @@ async def list_my_bookings_as_client(
         status.HTTP_409_CONFLICT: {"model": ErrorDetail},
     },
 )
-async def post_my_booking_as_client(
+async def create_booking_as_client(
     payload: ClientBookingCreate,
     user: Annotated[User, Depends(require_user)],
     use_case: Annotated[CreateClientBookingUseCase, Depends(get_create_client_booking_use_case)],
 ) -> BookingClientListItem:
-    try:
-        return await use_case(payload, user=user)
-    except BookingsError as error:
-        _raise_http_error(error)
+    return await use_case(user=user, payload=payload)
 
 
 @router.post(
@@ -117,14 +106,11 @@ async def post_cancel_my_booking(
     use_case: Annotated[CancelClientBookingUseCase, Depends(get_cancel_client_booking_use_case)],
     payload: Annotated[BookingCancel | None, Body()] = None,
 ) -> Response:
-    try:
-        await use_case(
-            user=user,
-            booking_id=booking_id,
-            comment=payload.comment if payload else None,
-        )
-    except BookingsError as error:
-        _raise_http_error(error)
+    await use_case(
+        user=user,
+        booking_id=booking_id,
+        comment=payload.comment if payload else None,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -147,12 +133,9 @@ async def post_reschedule_my_booking(
     user: Annotated[User, Depends(require_user)],
     use_case: Annotated[RescheduleClientBookingUseCase, Depends(get_reschedule_client_booking_use_case)],
 ) -> BookingClientListItem:
-    try:
-        return await use_case(
-            user=user,
-            booking_id=booking_id,
-            start_at=payload.start_at,
-            comment=payload.comment,
-        )
-    except BookingsError as error:
-        _raise_http_error(error)
+    return await use_case(
+        user=user,
+        booking_id=booking_id,
+        start_at=payload.start_at,
+        comment=payload.comment,
+    )

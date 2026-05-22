@@ -5,21 +5,30 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
+from starlette.testclient import TestClient
 
+from app.api.deps import require_master_profile, require_user
 from app.core.currency import Currency
 from app.core.pagination import Pagination
+from app.main import app
 from app.models.booking import BookingStatus, booking_needs_attendance_confirmation
 from app.schemas.availability import SlotOut
 from app.schemas.booking import BookingClientListItem, BookingCreate, BookingListScope, BookingOut
-from app.use_cases.booking.available_slots import AvailableSlotsUseCase
-from app.use_cases.booking.create import CreateBookingUseCase
-from app.use_cases.booking.exceptions import AvailabilitySlotsError, UpdateBookingError
-from app.use_cases.booking.list import ListClientBookingsUseCase, ListMasterBookingsUseCase
-from app.use_cases.booking.revenue import GetMasterMonthlyRevenueUseCase
-from app.use_cases.booking.update import (
-    CancelBookingUseCase,
-    MarkBookingAttendanceUseCase,
-    RescheduleBookingUseCase,
+from app.use_cases.booking.available_slots import AvailableSlotsUseCase, get_available_slots_use_case
+from app.use_cases.booking.client import ListClientBookingsUseCase, get_create_client_booking_use_case
+from app.use_cases.booking.exceptions import (
+    AvailabilityDateInPastError,
+    BookingNotLinkedToMasterError,
+    BookingRequestedSlotUnavailableError,
+)
+from app.use_cases.booking.master import (
+    CancelMasterBookingUseCase,
+    CreateMasterBookingUseCase,
+    GetMasterMonthlyRevenueUseCase,
+    ListMasterBookingsUseCase,
+    MarkMasterBookingAttendanceUseCase,
+    RescheduleMasterBookingUseCase,
+    get_create_master_booking_use_case,
 )
 
 
@@ -123,6 +132,7 @@ async def test_create_booking_creates_snapshot_when_slot_is_available():
             assert requested_master_id == master_id
             return SimpleNamespace(
                 id=service_id,
+                name="Service",
                 duration_min=45,
                 price=Decimal("75.00"),
                 currency="BYN",
@@ -139,7 +149,7 @@ async def test_create_booking_creates_snapshot_when_slot_is_available():
 
     booking_repo = FakeBookingRepository()
     dispatcher = SimpleNamespace(dispatch_booking_created=AsyncMock())
-    use_case = CreateBookingUseCase(
+    use_case = CreateMasterBookingUseCase(
         user_repo=FakeUserRepository(),
         client_repo=FakeClientRepository(),
         service_repo=FakeServiceRepository(),
@@ -176,7 +186,7 @@ async def test_mark_attendance_attended_confirms_completed():
         end_at=past + timedelta(minutes=60),
     )
     assert booking_needs_attendance_confirmation(booking)
-    use_case = MarkBookingAttendanceUseCase(FakeBookingRepository(booking))
+    use_case = MarkMasterBookingAttendanceUseCase(FakeBookingRepository(booking))
 
     result = await use_case(master_id=master_id, booking_id=booking.id, attended=True)
 
@@ -194,7 +204,7 @@ async def test_mark_attendance_no_show_updates_status():
         start_at=past,
         end_at=past + timedelta(minutes=60),
     )
-    use_case = MarkBookingAttendanceUseCase(FakeBookingRepository(booking))
+    use_case = MarkMasterBookingAttendanceUseCase(FakeBookingRepository(booking))
 
     result = await use_case(master_id=master_id, booking_id=booking.id, attended=False)
 
@@ -208,7 +218,7 @@ async def test_cancel_booking_marks_booking_cancelled_and_flushes():
     booking_repo = FakeBookingRepository(booking)
     master = SimpleNamespace(id=master_id, display_name="Master", public_slug=None, timezone="UTC")
     dispatcher = SimpleNamespace()
-    use_case = CancelBookingUseCase(
+    use_case = CancelMasterBookingUseCase(
         booking_repo,
         SimpleNamespace(get_client=AsyncMock(return_value=None)),
         SimpleNamespace(get_for_master=AsyncMock(return_value=SimpleNamespace(id=uuid.uuid4(), name="Услуга"))),
@@ -237,7 +247,7 @@ async def test_reschedule_booking_rejects_unavailable_slot():
         async def __call__(self, *, master_id, service_id, calendar_day):
             return []
 
-    use_case = RescheduleBookingUseCase(
+    use_case = RescheduleMasterBookingUseCase(
         FakeBookingRepository(booking),
         FakeServiceRepository(),
         SimpleNamespace(get_client=AsyncMock(return_value=None)),
@@ -247,11 +257,11 @@ async def test_reschedule_booking_rejects_unavailable_slot():
     )
     master = SimpleNamespace(id=master_id, display_name="Master", public_slug=None, timezone="UTC")
 
-    with pytest.raises(UpdateBookingError) as exc_info:
+    with pytest.raises(BookingRequestedSlotUnavailableError) as exc_info:
         await use_case(master=master, booking_id=booking.id, start_at=datetime(2026, 5, 21, 10, 0, tzinfo=UTC))
 
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.error_message == "Requested slot unavailable"
+    assert exc_info.value.code == "booking.requested_slot_unavailable"
+    assert exc_info.value.message == "Requested slot unavailable"
 
 
 async def test_list_booking_use_cases_return_response_schemas():
@@ -377,15 +387,15 @@ async def test_available_slots_use_case_rejects_past_day():
         settings=settings,
     )
 
-    with pytest.raises(AvailabilitySlotsError) as exc_info:
+    with pytest.raises(AvailabilityDateInPastError) as exc_info:
         await use_case(
             master_id=uuid.uuid4(),
             service_id=uuid.uuid4(),
             calendar_day=(datetime.now(UTC) - timedelta(days=1)).date(),
         )
 
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.error_message == "Date is in the past"
+    assert exc_info.value.code == "availability.date_in_past"
+    assert exc_info.value.message == "Date is in the past"
 
 
 async def test_monthly_revenue_use_case_aggregates_completed_visits():
@@ -408,3 +418,89 @@ async def test_monthly_revenue_use_case_aggregates_completed_visits():
     assert result.currency == "BYN"
     assert result.completed_count == 3
     assert len(result.month) == 7
+
+
+def test_master_create_booking_route_returns_app_error_contract():
+    class FakeCreateMasterBookingUseCase:
+        async def __call__(self, payload, *, master):
+            raise BookingRequestedSlotUnavailableError()
+
+    app.dependency_overrides[require_master_profile] = lambda: SimpleNamespace(id=uuid.uuid4(), timezone="UTC")
+    app.dependency_overrides[get_create_master_booking_use_case] = FakeCreateMasterBookingUseCase
+    try:
+        with TestClient(app) as client:
+            client.cookies.set("csrf_token", "token")
+            resp = client.post(
+                "/api/master/bookings",
+                json={
+                    "client_id": str(uuid.uuid4()),
+                    "service_id": str(uuid.uuid4()),
+                    "start_at": "2026-05-20T10:00:00Z",
+                },
+                headers={"X-CSRF-Token": "token"},
+            )
+    finally:
+        app.dependency_overrides.pop(require_master_profile, None)
+        app.dependency_overrides.pop(get_create_master_booking_use_case, None)
+
+    assert resp.status_code == 400
+    assert resp.json() == {
+        "code": "booking.requested_slot_unavailable",
+        "detail": "Requested slot unavailable",
+    }
+
+
+def test_client_create_booking_route_returns_app_error_contract():
+    class FakeCreateClientBookingUseCase:
+        async def __call__(self, payload, *, user):
+            raise BookingNotLinkedToMasterError()
+
+    app.dependency_overrides[require_user] = lambda: SimpleNamespace(id=uuid.uuid4())
+    app.dependency_overrides[get_create_client_booking_use_case] = FakeCreateClientBookingUseCase
+    try:
+        with TestClient(app) as client:
+            client.cookies.set("csrf_token", "token")
+            resp = client.post(
+                "/api/client/bookings",
+                json={
+                    "master_id": str(uuid.uuid4()),
+                    "service_id": str(uuid.uuid4()),
+                    "start_at": "2026-05-20T10:00:00Z",
+                },
+                headers={"X-CSRF-Token": "token"},
+            )
+    finally:
+        app.dependency_overrides.pop(require_user, None)
+        app.dependency_overrides.pop(get_create_client_booking_use_case, None)
+
+    assert resp.status_code == 403
+    assert resp.json() == {
+        "code": "booking.not_linked_to_master",
+        "detail": "Not linked to this master",
+    }
+
+
+def test_availability_route_returns_app_error_contract():
+    class FakeAvailableSlotsUseCase:
+        async def __call__(self, *, master_id, service_id, calendar_day):
+            raise AvailabilityDateInPastError()
+
+    app.dependency_overrides[get_available_slots_use_case] = FakeAvailableSlotsUseCase
+    try:
+        with TestClient(app) as client:
+            resp = client.get(
+                "/api/client/availability",
+                params={
+                    "master_id": str(uuid.uuid4()),
+                    "service_id": str(uuid.uuid4()),
+                    "date": "2026-05-20",
+                },
+            )
+    finally:
+        app.dependency_overrides.pop(get_available_slots_use_case, None)
+
+    assert resp.status_code == 400
+    assert resp.json() == {
+        "code": "availability.date_in_past",
+        "detail": "Date is in the past",
+    }
