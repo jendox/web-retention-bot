@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_user
@@ -14,16 +14,10 @@ from app.schemas.client import ClientMasterLinkUpdate, ClientMyMasterItem
 from app.schemas.client_master import client_master_item
 from app.schemas.errors import ErrorDetail
 from app.schemas.service import ServiceSchema
-from app.use_cases.clients.exceptions import (
-    ClientMasterLinkError,
-    ClientNothingToUpdateError,
-)
-from app.use_cases.clients.list_master_services import (
+from app.use_cases.clients import (
     ListMasterServicesForClientUseCase,
-    get_list_master_services_for_client_use_case,
-)
-from app.use_cases.clients.update_client_master_link import (
     UpdateClientMasterLinkUseCase,
+    get_list_master_services_for_client_use_case,
     get_update_client_master_link_use_case,
 )
 
@@ -75,12 +69,7 @@ async def patch_my_master_link(
         Depends(get_update_client_master_link_use_case),
     ],
 ) -> ClientMyMasterItem:
-    try:
-        return await use_case(user, master_id, payload)
-    except ClientNothingToUpdateError:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No fields to update.") from None
-    except ClientMasterLinkError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.error_message) from None
+    return await use_case(user, master_id, payload)
 
 
 @router.get(
@@ -101,7 +90,4 @@ async def list_master_services_for_client(
         Depends(get_list_master_services_for_client_use_case),
     ],
 ) -> list[ServiceSchema]:
-    try:
-        return await use_case(user, master_id)
-    except ClientMasterLinkError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.error_message) from None
+    return await use_case(user=user, master_id=master_id)

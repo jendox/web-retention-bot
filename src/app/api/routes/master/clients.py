@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.api.deps import require_master_profile
 from app.core.pagination import Pagination, get_pagination
@@ -13,24 +13,11 @@ from app.schemas.errors import ErrorDetail
 from app.schemas.pagination import PaginatedResponse
 from app.use_cases.clients.create_client import CreateClientUseCase, get_create_client_use_case
 from app.use_cases.clients.delete_client import DeleteClientUseCase, get_delete_client_use_case
-from app.use_cases.clients.exceptions import (
-    ClientEmailLockedError,
-    ClientHasBlockingRelationsError,
-    ClientNameLockedError,
-    ClientNotFoundError,
-    ClientNothingToUpdateError,
-)
 from app.use_cases.clients.get_client import GetClientUseCase, get_get_client_use_case
 from app.use_cases.clients.list_clients import ListClientsUseCase, get_list_clients_use_case
 from app.use_cases.clients.update_client import UpdateClientUseCase, get_update_client_use_case
 
 router = APIRouter(prefix="/clients", tags=["master-clients"])
-
-
-def _blocking_delete_detail(exc: ClientHasBlockingRelationsError) -> str:
-    if exc.reason == "has_bookings":
-        return "Client has bookings and cannot be deleted."
-    return "Client is linked to an invitation and cannot be deleted."
 
 
 @router.get(
@@ -104,10 +91,7 @@ async def get_client(
     use_case: Annotated[GetClientUseCase, Depends(get_get_client_use_case)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
 ) -> ClientWithLinkResponse:
-    try:
-        return await use_case(master.id, client_id)
-    except ClientNotFoundError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Client not found.") from None
+    return await use_case(master.id, client_id)
 
 
 @router.patch(
@@ -140,22 +124,7 @@ async def patch_client(
     use_case: Annotated[UpdateClientUseCase, Depends(get_update_client_use_case)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
 ) -> ClientWithLinkResponse:
-    try:
-        return await use_case(master.id, client_id, payload)
-    except ClientNotFoundError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Client not found.") from None
-    except ClientNothingToUpdateError:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No fields to update.") from None
-    except ClientEmailLockedError:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail="Client email is linked to the client account and cannot be changed.",
-        ) from None
-    except ClientNameLockedError:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail="Client name is linked to the client account and cannot be changed.",
-        ) from None
+    return await use_case(master_id=master.id, client_id=client_id, payload=payload)
 
 
 @router.delete(
@@ -183,10 +152,5 @@ async def delete_client(
     use_case: Annotated[DeleteClientUseCase, Depends(get_delete_client_use_case)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
 ) -> Response:
-    try:
-        await use_case(master.id, client_id)
-    except ClientNotFoundError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Client not found.") from None
-    except ClientHasBlockingRelationsError as exc:
-        raise HTTPException(status.HTTP_409_CONFLICT, detail=_blocking_delete_detail(exc)) from None
+    await use_case(master_id=master.id, client_id=client_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

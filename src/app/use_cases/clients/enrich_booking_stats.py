@@ -14,6 +14,7 @@ async def enrich_clients_with_booking_stats(
 ) -> None:
     if not items:
         return
+
     client_ids = [item.client.id for item in items]
     no_shows = await booking_repo.no_show_counts_by_client_ids(
         master_id=master_id,

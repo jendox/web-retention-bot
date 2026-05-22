@@ -7,7 +7,7 @@ import pytest
 
 from app.schemas.client import ClientMasterLinkUpdate
 from app.schemas.client_master import client_master_item, master_label_for_client
-from app.use_cases.clients.exceptions import ClientMasterLinkError, ClientNothingToUpdateError
+from app.use_cases.clients.exceptions import ClientMasterLinkNotFoundError, ClientNothingToUpdateError
 from app.use_cases.clients.update_client_master_link import UpdateClientMasterLinkUseCase
 
 
@@ -110,12 +110,15 @@ async def test_update_client_master_link_requires_link():
             return None
 
     use_case = UpdateClientMasterLinkUseCase(FakeClientRepo())
-    with pytest.raises(ClientMasterLinkError):
+    with pytest.raises(ClientMasterLinkNotFoundError) as exc_info:
         await use_case(
             SimpleNamespace(id=uuid.uuid4()),
             uuid.uuid4(),
             ClientMasterLinkUpdate(client_alias="x"),
         )
+
+    assert exc_info.value.code == "clients.master_link_not_found"
+    assert exc_info.value.message == "Not linked to this master"
 
 
 @pytest.mark.asyncio
@@ -125,5 +128,8 @@ async def test_update_client_master_link_rejects_empty_patch():
             return SimpleNamespace(), SimpleNamespace()
 
     use_case = UpdateClientMasterLinkUseCase(FakeClientRepo())
-    with pytest.raises(ClientNothingToUpdateError):
+    with pytest.raises(ClientNothingToUpdateError) as exc_info:
         await use_case(SimpleNamespace(id=uuid.uuid4()), uuid.uuid4(), ClientMasterLinkUpdate())
+
+    assert exc_info.value.code == "clients.empty_patch"
+    assert exc_info.value.message == "No fields to update."

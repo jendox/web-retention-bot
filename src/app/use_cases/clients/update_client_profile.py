@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 
 from app.api.deps import require_user
 from app.core.structured_logging import get_logger
@@ -10,6 +10,7 @@ from app.models.client import Client
 from app.models.user import User
 from app.repositories.clients import ClientRepository, get_client_repo
 from app.schemas.client import ClientProfileUpdate, ClientSchema
+from app.use_cases.clients.exceptions import ClientNothingToUpdateError, ClientProfileNotFoundError
 
 __all__ = ["UpdateClientProfileUseCase", "get_update_client_profile_use_case"]
 
@@ -23,7 +24,8 @@ class UpdateClientProfileUseCase:
         self._user = user
         self._client_repo = client_repo
 
-    def _apply_patch(self, client: Client, patch: dict[str, Any]) -> None:
+    @staticmethod
+    def _apply_patch(client: Client, patch: dict[str, Any]) -> None:
         for key, value in patch.items():
             if key in _NOT_NULLABLE_FIELDS and value is None:
                 continue
@@ -32,21 +34,21 @@ class UpdateClientProfileUseCase:
     async def get_profile(self) -> ClientSchema:
         client = await self._client_repo.primary_client_profile_for_user(self._user.id)
         if client is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Client profile not found")
+            raise ClientProfileNotFoundError()
         return ClientSchema.model_validate(client)
 
     async def __call__(self, payload: ClientProfileUpdate) -> ClientSchema:
         patch = payload.model_dump(exclude_unset=True)
         if not patch:
             logger.warning("failed", reason="empty_patch")
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="No fields to update.")
+            raise ClientNothingToUpdateError()
 
         clients = await self._client_repo.list_client_profiles_for_user(self._user.id)
         if not clients:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Client profile not found")
+            raise ClientProfileNotFoundError()
 
         for client in clients:
-            self._apply_patch(client, patch)
+            client.apply_patch(patch)
         await self._client_repo.flush()
 
         primary = await self._client_repo.primary_client_profile_for_user(self._user.id)

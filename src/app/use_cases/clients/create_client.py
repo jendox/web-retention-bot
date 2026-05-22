@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Annotated
 from uuid import UUID
 
@@ -7,6 +9,8 @@ from app.core.structured_logging import get_logger, log_context
 from app.models.client import InvitationStatus
 from app.repositories.clients import ClientRepository, get_client_repo
 from app.schemas.client import ClientCreate, ClientSchema, ClientWithLinkResponse, MasterClientOut
+
+__all__ = ["CreateClientUseCase", "get_create_client_use_case"]
 
 logger = get_logger("app.client")
 

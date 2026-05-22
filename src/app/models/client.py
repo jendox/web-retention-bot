@@ -8,7 +8,7 @@ from sqlalchemy import Boolean, Enum as SAEnum, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.base import TimeStampedModel
+from app.models.base import PatchableMixin, TimeStampedModel
 
 if TYPE_CHECKING:
     from app.models.booking import Booking
@@ -22,8 +22,16 @@ class InvitationStatus(enum.StrEnum):
     REVOKED = "REVOKED"
 
 
-class Client(TimeStampedModel):
+class Client(TimeStampedModel, PatchableMixin):
     __tablename__ = "clients"
+    __patchable_fields__ = frozenset({
+        "display_name",
+        "phone",
+        "email",
+    })
+    __patch_ignore_none_fields__ = frozenset({
+        "display_name",
+    })
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
@@ -47,8 +55,12 @@ class Client(TimeStampedModel):
     bookings: Mapped[list[Booking]] = relationship("Booking", back_populates="client")
 
 
-class MasterClient(Base):
+class MasterClient(Base, PatchableMixin):
     __tablename__ = "master_clients"
+    __patchable_fields__ = frozenset({
+        "alias",
+        "notes",
+    })
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     master_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("master_profiles.id"))

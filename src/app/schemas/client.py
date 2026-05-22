@@ -48,17 +48,17 @@ class ClientUpdate(BaseModel):
 
     @field_validator('phone', mode='before')
     @classmethod
-    def empty_phone_to_none(cls, v: str | None) -> str | None:
-        if v is None or (isinstance(v, str) and not v.strip()):
+    def empty_phone_to_none(cls, value: str | None) -> str | None:
+        if value is None or (isinstance(value, str) and not value.strip()):
             return None
-        return v
+        return value
 
     @field_validator('email', mode='before')
     @classmethod
-    def empty_email_to_none(cls, v: str | None) -> str | None:
-        if v is None or (isinstance(v, str) and not v.strip()):
+    def empty_email_to_none(cls, value: str | None) -> str | None:
+        if value is None or (isinstance(value, str) and not value.strip()):
             return None
-        return v
+        return value.strip().lower()
 
 
 class MasterClientOut(BaseModel):

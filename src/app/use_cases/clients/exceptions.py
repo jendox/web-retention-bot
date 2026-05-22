@@ -1,32 +1,57 @@
-"""Client use case exceptions."""
+from app.core.exceptions import ConflictError, DomainError, NotFoundError, ValidationError
 
-from fastapi import status
-
-
-class ClientNotFoundError(Exception):
-    """No client for this master or client id does not exist."""
-
-
-class ClientNothingToUpdateError(Exception):
-    """PATCH body contained no fields to apply."""
-
-
-class ClientEmailLockedError(Exception):
-    """Email is controlled by the linked client account and cannot be changed."""
+__all__ = [
+    "ClientError",
+    "ClientNotFoundError",
+    "ClientProfileNotFoundError",
+    "ClientNothingToUpdateError",
+    "ClientEmailLockedError",
+    "ClientNameLockedError",
+    "ClientHasBookingsError",
+    "ClientHasInvitationError",
+    "ClientMasterLinkNotFoundError",
+]
 
 
-class ClientNameLockedError(Exception):
-    """Display name is controlled by the linked client account and cannot be changed."""
+class ClientError(DomainError):
+    """Base clients use case error."""
 
 
-class ClientHasBlockingRelationsError(Exception):
-    """Client cannot be removed (e.g. has bookings or invitations)."""
-
-    def __init__(self, *, reason: str) -> None:
-        super().__init__(reason)
-        self.reason = reason
+class ClientNotFoundError(ClientError, NotFoundError):
+    code = "clients.not_found"
+    message = "Client not found."
 
 
-class ClientMasterLinkError(Exception):
-    status_code = status.HTTP_404_NOT_FOUND
-    error_message = "Not linked to this master"
+class ClientProfileNotFoundError(ClientError, NotFoundError):
+    code = "clients.profile_not_found"
+    message = "Client profile not found"
+
+
+class ClientNothingToUpdateError(ClientError, ValidationError):
+    code = "clients.empty_patch"
+    message = "No fields to update."
+
+
+class ClientEmailLockedError(ClientError, ConflictError):
+    code = "clients.email_locked"
+    message = "Client email is linked to the client account and cannot be changed."
+
+
+class ClientNameLockedError(ClientError, ConflictError):
+    code = "clients.name_locked"
+    message = "Client name is linked to the client account and cannot be changed."
+
+
+class ClientHasBookingsError(ClientError, ConflictError):
+    code = "clients.has_bookings"
+    message = "Client has bookings and cannot be deleted."
+
+
+class ClientHasInvitationError(ClientError, ConflictError):
+    code = "clients.has_invitation"
+    message = "Client is linked to an invitation and cannot be deleted."
+
+
+class ClientMasterLinkNotFoundError(ClientError, NotFoundError):
+    code = "clients.master_link_not_found"
+    message = "Not linked to this master"
