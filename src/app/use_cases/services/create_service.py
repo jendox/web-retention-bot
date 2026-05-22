@@ -8,6 +8,8 @@ from app.models.service import Service
 from app.repositories.services import ServiceRepository, get_service_repo
 from app.schemas.service import ServiceCreate, ServiceSchema
 
+__all__ = ["CreateServiceUseCase", "get_create_service_use_case"]
+
 logger = get_logger("app.service")
 
 
@@ -29,7 +31,12 @@ class CreateServiceUseCase:
                 sort_order=payload.sort_order,
             )
             created = await self._service_repo.create(service)
-            logger.info("created", service_id=str(created.id), duration_min=created.duration_min)
+            logger.info(
+                "created",
+                service_id=str(created.id),
+                service_name=service.name,
+                duration_min=created.duration_min,
+            )
             return ServiceSchema.model_validate(created)
 
 

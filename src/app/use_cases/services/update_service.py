@@ -1,4 +1,4 @@
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends
@@ -8,19 +8,15 @@ from app.models.master import MasterProfile
 from app.models.service import Service
 from app.repositories.services import ServiceRepository, get_service_repo
 from app.schemas.service import ServiceSchema, ServiceUpdate
+from app.use_cases.services.exceptions import (
+    ServiceEmptyPatchError,
+    ServiceNoFieldsToUpdateError,
+    ServiceNotFoundError,
+)
 
-from .exceptions import ServiceNotFoundError
+__all__ = ["UpdateServiceUseCase", "get_update_service_use_case"]
 
 logger = get_logger("app.service")
-
-_NOT_NULLABLE_FIELDS = frozenset({
-    "name",
-    "duration_min",
-    "price",
-    "currency",
-    "is_active",
-    "sort_order",
-})
 
 
 class UpdateServiceUseCase:
@@ -31,17 +27,10 @@ class UpdateServiceUseCase:
         service = await self._service_repo.get_for_master(service_id, master_id)
         if not service:
             logger.warning("failed", reason="service_not_found")
-            raise ServiceNotFoundError from None
+            raise ServiceNotFoundError()
         return service
 
-    @staticmethod
-    def _apply_patch_updates(patch: dict[str, Any], service: Service) -> None:
-        for key, value in patch.items():
-            if key in _NOT_NULLABLE_FIELDS and value is None:
-                continue
-            setattr(service, key, value)
-
-    async def execute(
+    async def __call__(
         self,
         master: MasterProfile,
         service_id: UUID,
@@ -49,9 +38,16 @@ class UpdateServiceUseCase:
     ) -> ServiceSchema:
         with log_context(use_case="update_service", master_id=str(master.id), service_id=str(service_id)):
             patch = payload.model_dump(exclude_unset=True)
+            if not patch:
+                logger.warning("failed", reason="empty_patch")
+                raise ServiceEmptyPatchError()
+
             service = await self._get_service(service_id, master.id)
 
-            self._apply_patch_updates(patch, service)
+            changed = service.apply_patch(patch)
+            if not changed:
+                logger.warning("failed", reason="no_fields_to_update")
+                raise ServiceNoFieldsToUpdateError()
 
             await self._service_repo.flush()
             await self._service_repo.refresh(service)

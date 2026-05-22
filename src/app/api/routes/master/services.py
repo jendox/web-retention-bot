@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.api.deps import require_master_profile
 from app.core.pagination import Pagination, get_pagination
@@ -13,7 +13,6 @@ from app.schemas.pagination import PaginatedResponse
 from app.schemas.service import ServiceCreate, ServiceSchema, ServiceUpdate
 from app.use_cases.services.create_service import CreateServiceUseCase, get_create_service_use_case
 from app.use_cases.services.delete_service import DeleteServiceUseCase, get_delete_service_use_case
-from app.use_cases.services.exceptions import ServiceHasBookingsError, ServiceNotFoundError
 from app.use_cases.services.get_service import GetServiceUseCase, get_get_service_use_case
 from app.use_cases.services.list_services import ListServicesUseCase, get_list_services_use_case
 from app.use_cases.services.update_service import UpdateServiceUseCase, get_update_service_use_case
@@ -67,7 +66,7 @@ async def list_services(
         },
     },
 )
-async def post_service(
+async def create_service(
     payload: ServiceCreate,
     use_case: Annotated[CreateServiceUseCase, Depends(get_create_service_use_case)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
@@ -92,10 +91,7 @@ async def get_service(
     use_case: Annotated[GetServiceUseCase, Depends(get_get_service_use_case)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
 ) -> ServiceSchema:
-    try:
-        return await use_case.execute(master, service_id)
-    except ServiceNotFoundError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Service not found.") from None
+    return await use_case(master, service_id)
 
 
 @router.patch(
@@ -116,10 +112,7 @@ async def patch_service(
     use_case: Annotated[UpdateServiceUseCase, Depends(get_update_service_use_case)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
 ) -> ServiceSchema:
-    try:
-        return await use_case.execute(master, service_id, payload)
-    except ServiceNotFoundError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Service not found.") from None
+    return await use_case(master, service_id, payload)
 
 
 @router.delete(
@@ -139,18 +132,10 @@ async def patch_service(
         },
     },
 )
-async def delete_service_route(
+async def delete_service(
     service_id: UUID,
     use_case: Annotated[DeleteServiceUseCase, Depends(get_delete_service_use_case)],
     master: Annotated[MasterProfile, Depends(require_master_profile)],
 ) -> Response:
-    try:
-        await use_case.execute(master, service_id)
-    except ServiceNotFoundError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Service not found.") from None
-    except ServiceHasBookingsError:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail="Service has bookings and cannot be deleted.",
-        ) from None
+    await use_case.execute(master, service_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

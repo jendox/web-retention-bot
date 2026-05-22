@@ -1,4 +1,4 @@
-"""Bookable offerings defined by the master."""
+from __future__ import annotations
 
 import uuid
 from decimal import Decimal
@@ -8,15 +8,32 @@ from sqlalchemy import Boolean, Enum as SAEnum, ForeignKey, Integer, Numeric, St
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.currency import DEFAULT_MASTER_CURRENCY, Currency
-from app.models.base import TimeStampedModel
+from app.models.base import PatchableMixin, TimeStampedModel
 
 if TYPE_CHECKING:
     from app.models.booking import Booking
     from app.models.master import MasterProfile
 
 
-class Service(TimeStampedModel):
+class Service(TimeStampedModel, PatchableMixin):
     __tablename__ = "services"
+    __patchable_fields__ = frozenset({
+        "name",
+        "description",
+        "duration_min",
+        "price",
+        "currency",
+        "is_active",
+        "sort_order",
+    })
+    __patch_ignore_none_fields__ = frozenset({
+        "name",
+        "duration_min",
+        "price",
+        "currency",
+        "is_active",
+        "sort_order",
+    })
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     master_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("master_profiles.id"))
@@ -36,8 +53,8 @@ class Service(TimeStampedModel):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
-    master: Mapped["MasterProfile"] = relationship("MasterProfile", back_populates="services")
-    bookings: Mapped[list["Booking"]] = relationship(
+    master: Mapped[MasterProfile] = relationship("MasterProfile", back_populates="services")
+    bookings: Mapped[list[Booking]] = relationship(
         "Booking",
         back_populates="service",
     )
