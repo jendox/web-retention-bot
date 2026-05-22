@@ -34,6 +34,7 @@ const CODE_RU: Record<string, string> = {
   'clients.has_bookings': 'Нельзя удалить клиента: есть записи.',
   'clients.has_invitation': 'Нельзя удалить клиента: есть привязка по приглашению.',
   'clients.master_link_not_found': 'Вы не связаны с этим мастером.',
+  'notifications.not_found': 'Уведомление не найдено.',
   'availability.master_not_found': 'Профиль мастера не найден.',
   'availability.service_not_found': 'Услуга не найдена.',
   'availability.date_in_past': 'Нельзя выбрать прошедшую дату.',

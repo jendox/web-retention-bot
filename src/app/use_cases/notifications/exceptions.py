@@ -1,8 +1,15 @@
-from __future__ import annotations
+from app.core.exceptions import DomainError, NotFoundError
 
-from fastapi import status
+__all__ = [
+    "NotificationError",
+    "NotificationNotFoundError",
+]
 
 
-class NotificationNotFoundError(Exception):
-    status_code = status.HTTP_404_NOT_FOUND
-    error_message = "Notification not found"
+class NotificationError(DomainError):
+    """Base notifications use case error."""
+
+
+class NotificationNotFoundError(NotificationError, NotFoundError):
+    code = "notifications.not_found"
+    message = "Notification not found"
