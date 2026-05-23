@@ -8,15 +8,16 @@ import { ListPagination } from '../ui/ListPagination'
 import { getUserFacingError } from '../../lib/apiErrors'
 import { cn } from '../../lib/forms'
 import { surfaceListItemClass } from '../../lib/surface'
-import { parsePage, parsePageSize, type PageSize } from '../../lib/pagination'
+import type { PageSize } from '../../lib/pagination'
 
-function formatRelativeDay(iso: string) {
+function formatRelativeDay(iso: string, timeZone?: string) {
   const dt = new Date(iso)
   return new Intl.DateTimeFormat('ru-RU', {
     day: 'numeric',
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone,
   }).format(dt)
 }
 
@@ -26,6 +27,7 @@ type Props = {
   cabinet: NotificationCabinet
   onPageChange: (page: number) => void
   onPageSizeChange: (pageSize: PageSize) => void
+  timeZone?: string
   enabled?: boolean
 }
 
@@ -35,6 +37,7 @@ export function NotificationsListSection({
   cabinet,
   onPageChange,
   onPageSizeChange,
+  timeZone,
   enabled = true,
 }: Props) {
   const queryClient = useQueryClient()
@@ -102,7 +105,7 @@ export function NotificationsListSection({
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <p className="font-medium text-stone-900 dark:text-stone-50">{n.title}</p>
                 <time className="text-xs text-stone-500 dark:text-stone-400" dateTime={n.created_at}>
-                  {formatRelativeDay(n.created_at)}
+                  {formatRelativeDay(n.created_at, timeZone)}
                 </time>
               </div>
               <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">{n.body}</p>
@@ -127,33 +130,9 @@ export function NotificationsListSection({
           pageSize={pageSize}
           total={total}
           onPageChange={onPageChange}
-          onPageSizeChange={(ps) => {
-            onPageSizeChange(ps)
-            onPageChange(1)
-          }}
+          onPageSizeChange={onPageSizeChange}
         />
       ) : null}
     </div>
   )
-}
-
-/** Unread badge for nav; uses a lightweight first-page fetch. */
-export function useNotificationsUnreadCount(enabled: boolean, cabinet: NotificationCabinet) {
-  const q = useQuery({
-    queryKey: ['notifications', 'me', 'unread-badge', cabinet],
-    queryFn: () => {
-      const api = cabinet === 'client' ? clientNotifications : masterNotifications
-      return api.notificationsMyListApi({ page: 1, page_size: 10 })
-    },
-    enabled,
-    staleTime: 30_000,
-  })
-  return q.data?.unread_count ?? 0
-}
-
-export function parseNotificationsPage(searchParams: URLSearchParams) {
-  return {
-    page: parsePage(searchParams.get('page')),
-    pageSize: parsePageSize(searchParams.get('page_size')),
-  }
 }

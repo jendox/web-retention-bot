@@ -2,7 +2,8 @@ import { useLocation, useOutletContext, useSearchParams } from 'react-router-dom
 
 import type { AppShellOutletContext } from '../app/appShellOutletContext'
 import { cabinetFromPathname } from '../lib/appCabinet'
-import { NotificationsListSection, parseNotificationsPage } from '../components/notifications/NotificationsListSection'
+import { NotificationsListSection } from '../components/notifications/NotificationsListSection'
+import { parseNotificationsPage } from '../components/notifications/notificationsQueries'
 import { cn } from '../lib/forms'
 import type { PageSize } from '../lib/pagination'
 import { surfaceCardClass } from '../lib/surface'
@@ -12,6 +13,7 @@ export function NotificationsPage() {
   const outletContext = useOutletContext<AppShellOutletContext>()
   const cabinet = outletContext.cabinet ?? cabinetFromPathname(pathname)
   const isClientCabinet = cabinet === 'client'
+  const notificationTimeZone = isClientCabinet ? undefined : outletContext.masterTimeZone
   const [searchParams, setSearchParams] = useSearchParams()
   const { page, pageSize } = parseNotificationsPage(searchParams)
 
@@ -49,6 +51,7 @@ export function NotificationsPage() {
           page={page}
           pageSize={pageSize}
           cabinet={cabinet}
+          timeZone={notificationTimeZone}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
         />

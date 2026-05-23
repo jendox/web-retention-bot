@@ -13,7 +13,7 @@ import {
   formatRuGreetingDate,
   formatSlotShort,
 } from '../../components/client/clientCabinetUi'
-import { useNotificationsUnreadCount } from '../../components/notifications/NotificationsListSection'
+import { useNotificationsUnreadCount } from '../../components/notifications/notificationsQueries'
 import { surfaceCardClass } from '../../lib/surface'
 import { cn } from '../../lib/forms'
 

@@ -23,7 +23,7 @@ import {
   IconUsers,
   IconX,
 } from './navIcons'
-import { useNotificationsUnreadCount } from '../notifications/NotificationsListSection'
+import { useNotificationsUnreadCount } from '../notifications/notificationsQueries'
 
 type NavItem = {
   to: string
@@ -403,7 +403,7 @@ export function AppLayout() {
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 md:px-8 lg:px-10 lg:py-10">
             <Outlet
-              context={{ isClientOnly, cabinet } satisfies AppShellOutletContext}
+              context={{ isClientOnly, cabinet, masterTimeZone: master.data?.timezone } satisfies AppShellOutletContext}
             />
           </div>
         </div>
