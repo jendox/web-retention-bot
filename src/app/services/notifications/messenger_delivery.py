@@ -35,6 +35,7 @@ async def deliver_user_notification_telegram(
     if user_note is None:
         delivery.status = DeliveryStatus.FAILED
         delivery.error_message = "missing user_notification"
+        logger.warning("telegram_failed", reason="missing_user_notification")
         return
 
     user_id = user_note.recipient_user_id
