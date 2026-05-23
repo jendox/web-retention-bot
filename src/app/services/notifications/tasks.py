@@ -5,7 +5,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import UUID
 
-from celery import shared_task
+from celery import Task, shared_task
 
 from app.core.config import Settings, get_settings
 from app.core.structured_logging import get_logger, log_context
@@ -23,6 +23,7 @@ from app.services.notifications.booking_mail import (
     deliver_booking_moved_email,
 )
 from app.services.notifications.messenger_delivery import deliver_user_notification_telegram
+from app.services.notifications.password_reset_mail import deliver_password_reset
 from app.services.notifications.registration_mail import deliver_email_verification
 
 logger = get_logger("app.notifications.tasks")
@@ -57,6 +58,38 @@ async def _process_email_verification_notification(
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("failed", reason="email_verification_delivery_error")
+        delivery.status = DeliveryStatus.FAILED
+        delivery.error_message = str(exc)[:2048]
+        return
+
+    delivery.status = DeliveryStatus.SENT
+    delivery.sent_at = datetime.now(UTC)
+    logger.info("sent")
+
+
+async def _process_email_password_reset_notification(
+    settings: Settings,
+    delivery: NotificationDelivery,
+) -> None:
+    user_note = delivery.user_notification
+    payload = user_note.payload if user_note.payload is not None else {}
+    to_email: str | None = payload.get("to_email")
+    if not to_email or not user_note.recipient_user_id:
+        delivery.status = DeliveryStatus.FAILED
+        delivery.error_message = "missing to_email or user_id"
+        logger.warning("failed", reason="missing_to_email_or_user_id")
+        return
+
+    delivery.status = DeliveryStatus.SENDING
+
+    try:
+        await deliver_password_reset(
+            settings=settings,
+            user_id=user_note.recipient_user_id,
+            to_email=to_email,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("failed", reason="email_password_reset_delivery_error")
         delivery.status = DeliveryStatus.FAILED
         delivery.error_message = str(exc)[:2048]
         return
@@ -187,6 +220,7 @@ async def _process_booking_moved_email(
 
 NOTIFICATION_HANDLERS: dict[NotificationEventType, Callable] = {
     NotificationEventType.EMAIL_VERIFICATION: _process_email_verification_notification,
+    NotificationEventType.EMAIL_PASSWORD_RESET: _process_email_password_reset_notification,
     NotificationEventType.BOOKING_CREATED: _process_booking_created_email,
     NotificationEventType.BOOKING_CANCELLED: _process_booking_cancelled_email,
     NotificationEventType.BOOKING_MOVED: _process_booking_moved_email,
@@ -236,7 +270,7 @@ async def _process_notification_delivery_async(delivery_id: UUID) -> None:
 
 
 @shared_task(name="notifications.process_notification_delivery", bind=True, max_retries=5)
-def process_notification_delivery(self, delivery_id: str) -> None:
+def process_notification_delivery(self: Task, delivery_id: str) -> None:
     """Consume a pending NotificationDelivery row (email channel supported)."""
     headers = self.request.headers or {}
     with log_context(

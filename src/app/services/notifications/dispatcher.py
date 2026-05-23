@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated
@@ -31,14 +32,17 @@ from app.services.notifications.booking_mail import (
 from app.services.notifications.channel_policy import delivery_channels_for_user
 from app.services.notifications.mail_render import (
     BOOKING_EMAIL_AUDIENCE_MASTER,
+    email_password_reset_user_notification_copy,
     email_verification_user_notification_copy,
 )
 from app.services.notifications.messenger_delivery import deliver_user_notification_telegram
+from app.services.notifications.password_reset_mail import deliver_password_reset
 from app.services.notifications.recipients import BookingClientRecipient
 from app.services.notifications.registration_mail import deliver_email_verification
 from app.services.notifications.tasks import process_notification_delivery
 
 EMAIL_VERIFY_DEDUP = "email_verify:user:{user_id}"
+EMAIL_PASSWORD_RESET_DEDUP = "email_password_reset:user:{user_id}:{request_id}"
 BOOKING_CREATED_DEDUP = "booking_created:booking:{booking_id}:user:{user_id}"
 BOOKING_CANCELLED_DEDUP = "booking_cancelled:booking:{booking_id}:user:{user_id}"
 BOOKING_MOVED_DEDUP = "booking_moved:booking:{booking_id}:user:{user_id}:{start_at_iso}"
@@ -122,6 +126,16 @@ class NotificationDispatcher:
             if not user_note.recipient_user_id:
                 raise ValueError("missing recipient_user_id for email verification")
             await deliver_email_verification(
+                settings=self._settings,
+                user_id=user_note.recipient_user_id,
+                to_email=to_email,
+            )
+            return
+
+        if user_note.event_type is NotificationEventType.EMAIL_PASSWORD_RESET:
+            if not user_note.recipient_user_id:
+                raise ValueError("missing recipient_user_id for password reset")
+            await deliver_password_reset(
                 settings=self._settings,
                 user_id=user_note.recipient_user_id,
                 to_email=to_email,
@@ -235,6 +249,48 @@ class NotificationDispatcher:
             await self._enqueue_delivery(event=event, delivery=delivery, user_note=user_note)
 
             return EmailVerificationDispatchResult(event=event, user_notification=user_note, delivery=delivery)
+
+    async def dispatch_password_reset(
+        self,
+        *,
+        user_id: UUID,
+        to_email: str,
+    ) -> None:
+        with log_context(notification="dispatch_email_password_reset", user_id=str(user_id), channel="email"):
+            request_id = get_request_id() or uuid.uuid4().hex
+            payload: dict[str, str] = {"to_email": to_email, "request_id": request_id}
+
+            event = await self._notification_event_repo.create(
+                NotificationEventCreate(
+                    type=NotificationEventType.EMAIL_PASSWORD_RESET,
+                    target_user_id=user_id,
+                    payload=payload,
+                ),
+            )
+
+            note_title, note_body = email_password_reset_user_notification_copy(to_email=to_email)
+            user_note = await self._user_notification_repo.create(
+                UserNotificationCreate(
+                    event_id=event.id,
+                    recipient_user_id=user_id,
+                    event_type=NotificationEventType.EMAIL_PASSWORD_RESET,
+                    title=note_title,
+                    body=note_body,
+                    payload=payload,
+                    dedup_key=EMAIL_PASSWORD_RESET_DEDUP.format(user_id=user_id, request_id=request_id),
+                ),
+            )
+
+            delivery = await self._notification_delivery_repo.create(
+                NotificationDeliveryCreate(
+                    user_notification_id=user_note.id,
+                    channel=DeliveryChannel.EMAIL,
+                    status=DeliveryStatus.PENDING,
+                    scheduled_at=datetime.now(UTC),
+                ),
+            )
+
+            await self._enqueue_delivery(event=event, delivery=delivery, user_note=user_note)
 
     async def dispatch_invite_email_mismatch_for_master(
         self,

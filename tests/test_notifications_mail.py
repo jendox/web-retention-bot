@@ -8,11 +8,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.core.config import Settings
-from app.core.security import generate_email_verification_url
+from app.core.security import generate_email_verification_url, generate_password_reset_url
 from app.services.notifications.mail_render import (
+    email_password_reset_user_notification_copy,
     email_verification_user_notification_copy,
     render_email_verification,
 )
+from app.services.notifications.password_reset_mail import deliver_password_reset
 from app.services.notifications.registration_mail import (
     deliver_email_verification,
     notify_email_verification,
@@ -31,6 +33,7 @@ def mail_settings() -> Settings:
                 "secret_key": "unit-test-mail-secret",
                 "frontend_public_origin": "https://frontend.test",
                 "email_verification_ttl_seconds": 7200,
+                "password_reset_ttl_seconds": 7200,
                 "auth_log_verification_link": False,
             },
             "smtp": {"enabled": False},
@@ -62,6 +65,16 @@ def test_email_verification_user_notification_copy_matches_templates() -> None:
     assert "http" not in body.lower()
 
 
+def test_password_reset_user_notification_copy_has_no_secret_link() -> None:
+    to_email = "user@example.com"
+    title, body = email_password_reset_user_notification_copy(to_email=to_email)
+
+    assert title == "Сброс пароля"
+    assert to_email in body
+    assert "http" not in body.lower()
+    assert "{{" not in body
+
+
 async def test_deliver_email_verification_passes_url_from_security_to_notify(mail_settings: Settings) -> None:
     uid = uuid.uuid4()
     to_mail = "user@example.com"
@@ -80,6 +93,27 @@ async def test_deliver_email_verification_passes_url_from_security_to_notify(mai
         settings=mail_settings,
         to_email=to_mail,
         verification_url=expected_url,
+    )
+
+
+async def test_deliver_password_reset_passes_url_from_security_to_notify(mail_settings: Settings) -> None:
+    uid = uuid.uuid4()
+    to_mail = "user@example.com"
+    expected_url = generate_password_reset_url(
+        secret_key=mail_settings.security.secret_key,
+        user_id=uid,
+        email=to_mail,
+        base_url=mail_settings.security.frontend_public_origin,
+        password_reset_ttl_seconds=mail_settings.security.password_reset_ttl_seconds,
+    )
+    mock_notify = AsyncMock()
+    with patch("app.services.notifications.password_reset_mail.notify_password_reset", mock_notify):
+        await deliver_password_reset(settings=mail_settings, user_id=uid, to_email=to_mail)
+
+    mock_notify.assert_awaited_once_with(
+        settings=mail_settings,
+        to_email=to_mail,
+        reset_url=expected_url,
     )
 
 

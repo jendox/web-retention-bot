@@ -6,6 +6,7 @@ import errno
 import time
 import uuid
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from starlette.testclient import TestClient
@@ -16,6 +17,7 @@ from app.core.password_reset_token import (
     mint_password_reset_token,
     parse_password_reset_token,
 )
+from app.core.security import generate_password_reset_url
 from app.core.verification_token import mint_email_verification_token
 from app.main import app
 
@@ -117,6 +119,28 @@ def test_password_reset_token_tampered() -> None:
     tampered = f"{body}.{'0' * len(sig)}"
     with pytest.raises(PasswordResetTokenError):
         parse_password_reset_token(secret="s3cret", token=tampered)
+
+
+def test_generate_password_reset_url_contains_parseable_reset_token() -> None:
+    uid = uuid.uuid4()
+    email = "a@b.com"
+
+    url = generate_password_reset_url(
+        secret_key="s3cret",
+        user_id=uid,
+        email=email,
+        base_url="https://frontend.test/",
+        password_reset_ttl_seconds=3600,
+    )
+
+    parsed = urlparse(url)
+    assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "https://frontend.test/reset-password"
+    assert parsed.query.startswith("token=")
+    assert not parsed.query.startswith("token==")
+    token = parse_qs(parsed.query)["token"][0]
+    parsed_uid, parsed_email = parse_password_reset_token(secret="s3cret", token=token)
+    assert parsed_uid == uid
+    assert parsed_email == email
 
 
 # ── API integration tests ────────────────────────────────────────

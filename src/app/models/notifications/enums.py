@@ -9,6 +9,7 @@ class NotificationEventType(enum.StrEnum):
     REMINDER_BEFORE_VISIT = "reminder_before_visit"
     REENGAGEMENT_IDLE = "reengagement_idle"
     EMAIL_VERIFICATION = "email_verification"
+    EMAIL_PASSWORD_RESET = "email_password_reset"
 
 
 class DeliveryChannel(enum.StrEnum):

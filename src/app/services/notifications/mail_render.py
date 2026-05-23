@@ -35,6 +35,15 @@ def render_email_verification(*, verification_url: str, recipient_email: str) ->
     return subject, text_body, html_body
 
 
+def email_verification_user_notification_copy(*, to_email: str) -> tuple[str, str]:
+    """Title and body stored on `UserNotification` (in-app history); no secrets or links."""
+    env = _jinja_env()
+    ctx = {"recipient_email": to_email}
+    title = env.get_template("email_verification.subject.txt").render(**ctx).strip()
+    body = env.get_template("email_verification.in_app_body.txt").render(**ctx).strip()
+    return title, body
+
+
 def render_password_reset(*, reset_url: str, recipient_email: str) -> tuple[str, str, str]:
     env = _jinja_env()
     ctx = {"reset_url": reset_url, "recipient_email": recipient_email}
@@ -44,12 +53,11 @@ def render_password_reset(*, reset_url: str, recipient_email: str) -> tuple[str,
     return subject, text_body, html_body
 
 
-def email_verification_user_notification_copy(*, to_email: str) -> tuple[str, str]:
-    """Title and body stored on `UserNotification` (in-app history); no secrets or links."""
+def email_password_reset_user_notification_copy(*, to_email: str) -> tuple[str, str]:
     env = _jinja_env()
     ctx = {"recipient_email": to_email}
-    title = env.get_template("email_verification.subject.txt").render(**ctx).strip()
-    body = env.get_template("email_verification.in_app_body.txt").render(**ctx).strip()
+    title = env.get_template("password_reset.subject.txt").render(**ctx).strip()
+    body = env.get_template("password_reset.in_app_body.txt").render(**ctx).strip()
     return title, body
 
 
