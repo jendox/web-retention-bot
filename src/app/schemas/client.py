@@ -4,11 +4,19 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.core.timezones import DEFAULT_TIMEZONE, validate_timezone
+
 
 class ClientCreate(BaseModel):
     display_name: str = Field(min_length=1, max_length=200)
     phone: str | None = Field(default=None, max_length=50)
     email: EmailStr | None = None
+    timezone: str = Field(default=DEFAULT_TIMEZONE, max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def timezone_must_be_valid(cls, value: str) -> str:
+        return validate_timezone(value)
 
 
 class ClientSchema(BaseModel):
@@ -16,6 +24,7 @@ class ClientSchema(BaseModel):
     display_name: str
     phone: str | None
     email: EmailStr | None
+    timezone: str = DEFAULT_TIMEZONE
     user_id: UUID | None = None
 
     model_config = ConfigDict(
@@ -28,6 +37,7 @@ class ClientProfileUpdate(BaseModel):
 
     display_name: str | None = Field(default=None, min_length=1, max_length=200)
     phone: str | None = Field(default=None, max_length=50)
+    timezone: str | None = Field(default=None, max_length=64)
 
     @field_validator("phone", mode="before")
     @classmethod
@@ -35,6 +45,13 @@ class ClientProfileUpdate(BaseModel):
         if v is None or (isinstance(v, str) and not v.strip()):
             return None
         return v.strip() if isinstance(v, str) else v
+
+    @field_validator("timezone")
+    @classmethod
+    def timezone_must_be_valid(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return validate_timezone(value)
 
 
 class ClientUpdate(BaseModel):

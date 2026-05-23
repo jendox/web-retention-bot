@@ -6,6 +6,8 @@ export type AppShellOutletContext = {
   isClientOnly: boolean
   /** Текущий кабинет по URL-префиксу. */
   cabinet: AppCabinet
-  /** IANA timezone текущего мастера; в клиентском кабинете используется локальная timezone браузера. */
+  /** IANA timezone текущего мастера. */
   masterTimeZone?: string
+  /** IANA timezone текущего клиента. */
+  clientTimeZone?: string
 }

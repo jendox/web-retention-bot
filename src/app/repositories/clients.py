@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
+from app.core.timezones import DEFAULT_TIMEZONE
 from app.models.booking import Booking
 from app.models.client import Client, InvitationStatus, MasterClient
 from app.models.invitation import Invitation
@@ -33,11 +34,13 @@ class ClientRepository(BaseRepository):
         display_name: str,
         phone: str | None = None,
         email: str | None = None,
+        timezone: str = DEFAULT_TIMEZONE,
     ) -> Client:
         client = Client(
             display_name=display_name,
             phone=phone,
             email=email,
+            timezone=timezone,
         )
         self.session.add(client)
         await self.session.flush()

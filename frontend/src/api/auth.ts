@@ -6,6 +6,7 @@ export type AuthUser = {
   email_verified: boolean
   client_display_name?: string | null
   client_phone?: string | null
+  client_timezone?: string | null
 }
 
 export type RegisterAccepted = {

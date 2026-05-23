@@ -12,6 +12,7 @@ import { useMasterMe } from '../hooks/useMasterMe'
 import { getUserFacingError } from '../lib/apiErrors'
 import { cn } from '../lib/forms'
 import { surfacePanel } from '../lib/surface'
+import { DEFAULT_TIMEZONE, formatTimeZoneOption, normalizeTimeZone, supportedTimeZones } from '../lib/timezones'
 import { validatePassword } from '../lib/validators'
 
 const fieldClass =
@@ -30,6 +31,7 @@ type FormState = {
   telegram: string
   clientDisplayName: string
   clientPhone: string
+  clientTimezone: string
 }
 
 function profileInitials(displayName: string | null | undefined, email: string) {
@@ -147,19 +149,24 @@ export function SettingsPage() {
   const email = me.data?.email ?? ''
   const clientDisplayName = me.data?.client_display_name?.trim() ?? ''
   const clientPhone = me.data?.client_phone?.trim() ?? ''
+  const timezoneOptions = useMemo(
+    () => supportedTimeZones().map((timezone) => ({ value: timezone, label: formatTimeZoneOption(timezone) })),
+    [],
+  )
   const defaultState = useMemo<FormState>(
     () => ({
       masterDisplayName: master.data?.display_name ?? '',
       publicSlug: master.data?.public_slug ?? '',
-      timezone: master.data?.timezone ?? 'Europe/Minsk',
+      timezone: master.data?.timezone ?? DEFAULT_TIMEZONE,
       currency: master.data?.default_currency ?? 'BYN',
       contactEmail: master.data?.contact_email ?? '',
       contactPhone: master.data?.contact_phone ?? '',
       telegram: master.data?.telegram ?? '',
       clientDisplayName,
       clientPhone,
+      clientTimezone: normalizeTimeZone(me.data?.client_timezone),
     }),
-    [clientDisplayName, clientPhone, email, master.data],
+    [clientDisplayName, clientPhone, me.data?.client_timezone, master.data],
   )
   const [draft, setDraft] = useState<Partial<FormState>>({})
   const form = { ...defaultState, ...draft }
@@ -171,6 +178,7 @@ export function SettingsPage() {
       clientProfilePatchApi({
         display_name: form.clientDisplayName.trim() || undefined,
         phone: form.clientPhone.trim() || null,
+        timezone: form.clientTimezone,
       }),
     onSuccess: async () => {
       setDraft({})
@@ -305,9 +313,11 @@ export function SettingsPage() {
                   onChange={(e) => setDraft((prev) => ({ ...prev, timezone: e.target.value }))}
                   className={cn(fieldClass, 'mt-1')}
                 >
-                  <option value="Europe/Minsk">Europe/Minsk</option>
-                  <option value="Europe/Moscow">Europe/Moscow</option>
-                  <option value="Europe/Warsaw">Europe/Warsaw</option>
+                  {timezoneOptions.map((timezone) => (
+                    <option key={timezone.value} value={timezone.value}>
+                      {timezone.label}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="block">
@@ -388,6 +398,21 @@ export function SettingsPage() {
                   className={cn(fieldClass, !hasClientProfile && readOnlyFieldClass, 'mt-1')}
                   placeholder="Не указан"
                 />
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="text-sm font-medium text-stone-700 dark:text-stone-300">Часовой пояс</span>
+                <select
+                  value={form.clientTimezone}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, clientTimezone: e.target.value }))}
+                  disabled={!hasClientProfile}
+                  className={cn(fieldClass, !hasClientProfile && readOnlyFieldClass, 'mt-1')}
+                >
+                  {timezoneOptions.map((timezone) => (
+                    <option key={timezone.value} value={timezone.value}>
+                      {timezone.label}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
             {saveError && isClientCabinet ? (

@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from app.core.structured_logging import get_logger, log_context
+from app.core.timezones import DEFAULT_TIMEZONE
 from app.models.user import User
 from app.repositories.clients import ClientRepository, get_client_repo
 from app.schemas.user import UserMeOut, UserSchema
@@ -26,6 +27,7 @@ class MeUseCase:
                 **base_user.model_dump(),
                 client_display_name=client.display_name if client else None,
                 client_phone=client.phone if client else None,
+                client_timezone=getattr(client, "timezone", DEFAULT_TIMEZONE) if client else None,
             )
 
 

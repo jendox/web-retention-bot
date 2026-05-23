@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 
 import { BookingCreatedNotice } from '../booking/BookingCreatedNotice'
 import { getUserFacingError } from '../../lib/apiErrors'
-import { useClientCabinet } from './ClientCabinetContext'
+import { useClientCabinet } from './clientCabinetContext'
 
 const BOOKING_NOTICE_MS = 12_000
 
@@ -13,6 +13,7 @@ export function ClientCabinetAlerts() {
     dataError,
     bookingsOverviewError,
     myMastersError,
+    clientTimeZone,
     bookingCreatedNotice,
     clearBookingCreatedNotice,
   } = useClientCabinet()
@@ -36,6 +37,7 @@ export function ClientCabinetAlerts() {
           primaryLine={`${bookingCreatedNotice.master_display_name} · ${bookingCreatedNotice.service_name}`}
           startAt={bookingCreatedNotice.start_at}
           durationMin={bookingCreatedNotice.duration_min}
+          timeZone={clientTimeZone}
           footnote={
             useMocks
               ? 'Демо-запись: после перезагрузки страницы она не сохранится.'

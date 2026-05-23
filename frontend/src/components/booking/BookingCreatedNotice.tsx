@@ -15,6 +15,7 @@ export type BookingCreatedNoticeProps = {
   primaryLine: string
   startAt: string
   durationMin: number
+  timeZone?: string
   footnote?: string
   innerRef?: Ref<HTMLDivElement>
   className?: string
@@ -24,6 +25,7 @@ export function BookingCreatedNotice({
   primaryLine,
   startAt,
   durationMin,
+  timeZone,
   footnote,
   innerRef,
   className,
@@ -43,7 +45,7 @@ export function BookingCreatedNotice({
           <p className="font-semibold text-teal-950 dark:text-teal-50">Запись создана</p>
           <p className="mt-1 text-sm text-teal-900/90 dark:text-teal-100/90">{primaryLine}</p>
           <p className="mt-0.5 text-sm font-medium text-teal-800 dark:text-teal-200">
-            {formatBookingDateTime(startAt)} · {durationMin} мин
+            {formatBookingDateTime(startAt, timeZone)} · {durationMin} мин
           </p>
           {footnote ? <p className="mt-2 text-xs text-teal-800/90 dark:text-teal-200/90">{footnote}</p> : null}
         </div>

@@ -6,12 +6,11 @@ import {
   IconOverview,
   IconUsers,
 } from '../../components/layout/navIcons'
-import { useClientCabinet } from '../../components/client/ClientCabinetContext'
+import { useClientCabinet } from '../../components/client/clientCabinetContext'
+import { formatRuGreetingDate, formatSlotShort } from '../../components/client/clientCabinetFormat'
 import {
   ClientStatCard,
   ClientVisitRow,
-  formatRuGreetingDate,
-  formatSlotShort,
 } from '../../components/client/clientCabinetUi'
 import { useNotificationsUnreadCount } from '../../components/notifications/notificationsQueries'
 import { surfaceCardClass } from '../../lib/surface'
@@ -21,6 +20,7 @@ export function ClientOverviewPage() {
   const {
     useMocks,
     me,
+    clientTimeZone,
     firstName,
     masters,
     stats,
@@ -41,7 +41,9 @@ export function ClientOverviewPage() {
             <h1 className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50 sm:text-3xl">
               Здравствуйте, {firstName}! <span aria-hidden>👋</span>
             </h1>
-            <p className="text-sm text-stone-500 dark:text-stone-400">{formatRuGreetingDate(new Date())}</p>
+            <p className="text-sm text-stone-500 dark:text-stone-400">
+              {formatRuGreetingDate(new Date(), clientTimeZone)}
+            </p>
           </div>
           {useMocks ? (
             <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
@@ -91,7 +93,7 @@ export function ClientOverviewPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-teal-800 dark:text-teal-200">Следующий визит</p>
             <p className="mt-2 text-xl font-semibold text-stone-900 dark:text-stone-50">{stats.nextBooking.master_display_name}</p>
             <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">
-              {stats.nextBooking.service_name} · {formatSlotShort(stats.nextBooking.start_at)}
+              {stats.nextBooking.service_name} · {formatSlotShort(stats.nextBooking.start_at, clientTimeZone)}
             </p>
             {!useMocks && canManageVisit(stats.nextBooking) ? (
               <div className="mt-3 flex flex-wrap gap-2">
@@ -140,7 +142,7 @@ export function ClientOverviewPage() {
             ) : (
               <ul className="space-y-2">
                 {stats.topUpcoming.map((b, i) => (
-                  <ClientVisitRow key={b.id} b={b} i={i} />
+                  <ClientVisitRow key={b.id} b={b} i={i} timeZone={clientTimeZone} />
                 ))}
               </ul>
             )}

@@ -10,68 +10,7 @@ import {
 import { cn } from '../../lib/forms'
 import { surfaceCardClass } from '../../lib/surface'
 import { visitCardAccentClass } from '../../lib/visitListCard'
-
-export function isSameLocalDay(iso: string, ref: Date) {
-  const d = new Date(iso)
-  return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth() && d.getDate() === ref.getDate()
-}
-
-export function startOfMonth(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), 1)
-}
-
-export function endOfMonth(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999)
-}
-
-export function formatRuGreetingDate(d: Date) {
-  const formatted = new Intl.DateTimeFormat('ru-RU', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(d)
-  return formatted.replace(' Г.', ' г.')
-}
-
-export function formatSlotShort(iso: string) {
-  const dt = new Date(iso)
-  return new Intl.DateTimeFormat('ru-RU', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(dt)
-}
-
-export function clientFirstName(clientDisplayName: string | null | undefined, email: string) {
-  const name = clientDisplayName?.trim()
-  if (name) {
-    return name.split(/\s+/)[0] ?? name
-  }
-  return email.split('@')[0] || 'Вы'
-}
-
-export function computeOverviewStats(upcomingItems: BookingClientListItem[], upcomingTotal: number) {
-  const nowInner = new Date()
-  const today = upcomingItems.filter((b) => isSameLocalDay(b.start_at, nowInner))
-  const monthStart = startOfMonth(nowInner)
-  const monthEnd = endOfMonth(nowInner)
-  const inMonth = upcomingItems.filter((b) => {
-    const t = new Date(b.start_at)
-    return t >= monthStart && t <= monthEnd
-  })
-  const next = upcomingItems[0]
-
-  return {
-    upcomingCount: upcomingTotal,
-    nextBooking: next,
-    monthCount: inMonth.length,
-    todayCount: today.length,
-    topUpcoming: upcomingItems.slice(0, 6),
-  }
-}
+import { formatSlotShort, visitActionComment } from './clientCabinetFormat'
 
 type StatProps = {
   icon: ReactNode
@@ -97,34 +36,26 @@ export function ClientStatCard({ icon, value, label, sub, iconBg, iconColor }: S
   )
 }
 
-export function visitActionComment(b: BookingClientListItem): string | null {
-  if (b.status === 'CANCELLED' && b.cancel_comment) {
-    return b.cancel_comment
-  }
-  if (b.status === 'SCHEDULED' && b.reschedule_comment) {
-    return b.reschedule_comment
-  }
-  return null
-}
-
 export function ClientVisitRow({
   b,
   i,
   showActions,
   onReschedule,
   onCancel,
+  timeZone,
 }: {
   b: BookingClientListItem
   i: number
   showActions?: boolean
   onReschedule?: () => void
   onCancel?: () => void
+  timeZone?: string
 }) {
   const actionComment = visitActionComment(b)
 
   return (
     <li className={visitCardAccentClass(i, 'flex flex-col gap-2 py-3 pl-3 pr-3 sm:flex-row sm:items-center sm:gap-3')}>
-      <div className="min-w-[7.5rem] shrink-0 text-xs font-medium text-stone-600 dark:text-stone-400">{formatSlotShort(b.start_at)}</div>
+      <div className="min-w-[7.5rem] shrink-0 text-xs font-medium text-stone-600 dark:text-stone-400">{formatSlotShort(b.start_at, timeZone)}</div>
       <div className="min-w-0 flex-1">
         <p className="font-medium text-stone-900 dark:text-stone-100">{b.master_display_name}</p>
         <p className="text-xs text-stone-500 dark:text-stone-500">
@@ -149,7 +80,7 @@ export function ClientVisitRow({
       </div>
       {showActions && onReschedule && onCancel ? (
         <VisitBookingActions
-          subjectLabel={`${b.master_display_name}, ${formatSlotShort(b.start_at)}`}
+          subjectLabel={`${b.master_display_name}, ${formatSlotShort(b.start_at, timeZone)}`}
           onReschedule={onReschedule}
           onCancel={onCancel}
         />

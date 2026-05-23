@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { clientMasterLabel, clientsMyMasterPatchApi } from '../../api/clients'
-import { useClientCabinet } from '../../components/client/ClientCabinetContext'
+import { useClientCabinet } from '../../components/client/clientCabinetContext'
 import { getUserFacingError } from '../../lib/apiErrors'
 import { cn } from '../../lib/forms'
 import { surfaceCard } from '../../lib/surface'

@@ -8,6 +8,7 @@ from sqlalchemy import Boolean, Enum as SAEnum, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.timezones import DEFAULT_TIMEZONE
 from app.models.base import PatchableMixin, TimeStampedModel
 
 if TYPE_CHECKING:
@@ -28,6 +29,7 @@ class Client(TimeStampedModel, PatchableMixin):
         "display_name",
         "phone",
         "email",
+        "timezone",
     })
     __patch_ignore_none_fields__ = frozenset({
         "display_name",
@@ -38,6 +40,7 @@ class Client(TimeStampedModel, PatchableMixin):
     display_name: Mapped[str] = mapped_column(String(200))
     phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    timezone: Mapped[str] = mapped_column(String(64), default=DEFAULT_TIMEZONE)
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("users.id"),

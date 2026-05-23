@@ -362,6 +362,93 @@ async def test_available_slots_use_case_uses_explicit_booking_settings():
     assert engine.slot_step_minutes == 20
 
 
+async def test_available_slots_use_case_filters_by_viewer_timezone_day():
+    master_id = uuid.uuid4()
+    service_id = uuid.uuid4()
+    viewer_day = (datetime.now(UTC) + timedelta(days=1)).date()
+    previous_viewer_day_slot = datetime.combine(
+        viewer_day - timedelta(days=1),
+        datetime.min.time(),
+        tzinfo=UTC,
+    ).replace(hour=20)
+    requested_viewer_day_early_slot = datetime.combine(
+        viewer_day - timedelta(days=1),
+        datetime.min.time(),
+        tzinfo=UTC,
+    ).replace(hour=22)
+    requested_viewer_day_late_slot = datetime.combine(viewer_day, datetime.min.time(), tzinfo=UTC).replace(hour=20)
+    next_viewer_day_slot = datetime.combine(viewer_day, datetime.min.time(), tzinfo=UTC).replace(hour=21)
+
+    class FakeMasterRepository:
+        async def get_by_master_id(self, requested_master_id):
+            assert requested_master_id == master_id
+            return SimpleNamespace(
+                id=master_id,
+                display_name="Master",
+                public_slug=None,
+                timezone="UTC",
+            )
+
+    class FakeServiceRepository:
+        async def get_for_master(self, requested_service_id, requested_master_id):
+            assert requested_service_id == service_id
+            assert requested_master_id == master_id
+            return SimpleNamespace(
+                id=service_id,
+                master_id=master_id,
+                name="Service",
+                description=None,
+                duration_min=45,
+                price=Decimal("75.00"),
+                currency=Currency.BYN,
+                is_active=True,
+                sort_order=0,
+            )
+
+    class FakeScheduleRepository:
+        async def weekly_days_for_master(self, requested_master_id):
+            assert requested_master_id == master_id
+            return []
+
+        async def date_overrides_for_master(self, requested_master_id):
+            assert requested_master_id == master_id
+            return []
+
+    class FakeAvailabilityEngine:
+        async def slots_between(self, **kwargs):
+            if kwargs["day"] == viewer_day - timedelta(days=1):
+                return [previous_viewer_day_slot, requested_viewer_day_early_slot]
+            if kwargs["day"] == viewer_day:
+                return [requested_viewer_day_late_slot, next_viewer_day_slot]
+            return []
+
+    settings = SimpleNamespace(
+        booking=SimpleNamespace(
+            max_advance_days=30,
+            availability_slot_step_minutes=20,
+        ),
+    )
+    use_case = AvailableSlotsUseCase(
+        FakeMasterRepository(),
+        FakeServiceRepository(),
+        FakeScheduleRepository(),
+        FakeAvailabilityEngine(),
+        settings,
+    )
+
+    result = await use_case(
+        master_id=master_id,
+        service_id=service_id,
+        calendar_day=viewer_day,
+        viewer_timezone="Europe/Minsk",
+    )
+
+    assert result == [
+        SlotOut(start_at=requested_viewer_day_early_slot),
+        SlotOut(start_at=requested_viewer_day_late_slot),
+    ]
+
+
 async def test_available_slots_use_case_rejects_past_day():
     settings = SimpleNamespace(
         booking=SimpleNamespace(
@@ -396,6 +483,72 @@ async def test_available_slots_use_case_rejects_past_day():
 
     assert exc_info.value.code == "availability.date_in_past"
     assert exc_info.value.message == "Date is in the past"
+
+
+async def test_available_slots_use_case_rejects_viewer_timezone_day_when_all_master_days_are_past():
+    master_id = uuid.uuid4()
+    service_id = uuid.uuid4()
+
+    class FakeMasterRepository:
+        async def get_by_master_id(self, requested_master_id):
+            assert requested_master_id == master_id
+            return SimpleNamespace(
+                id=master_id,
+                display_name="Master",
+                public_slug=None,
+                timezone="UTC",
+            )
+
+    class FakeServiceRepository:
+        async def get_for_master(self, requested_service_id, requested_master_id):
+            assert requested_service_id == service_id
+            assert requested_master_id == master_id
+            return SimpleNamespace(
+                id=service_id,
+                master_id=master_id,
+                name="Service",
+                description=None,
+                duration_min=45,
+                price=Decimal("75.00"),
+                currency=Currency.BYN,
+                is_active=True,
+                sort_order=0,
+            )
+
+    class FakeScheduleRepository:
+        async def weekly_days_for_master(self, requested_master_id):
+            assert requested_master_id == master_id
+            return []
+
+        async def date_overrides_for_master(self, requested_master_id):
+            assert requested_master_id == master_id
+            return []
+
+    class FakeAvailabilityEngine:
+        async def slots_between(self, **kwargs):
+            raise AssertionError("Availability should not be calculated for past viewer-local dates.")
+
+    settings = SimpleNamespace(
+        booking=SimpleNamespace(
+            max_advance_days=30,
+            availability_slot_step_minutes=20,
+        ),
+    )
+    use_case = AvailableSlotsUseCase(
+        FakeMasterRepository(),
+        FakeServiceRepository(),
+        FakeScheduleRepository(),
+        FakeAvailabilityEngine(),
+        settings,
+    )
+
+    with pytest.raises(AvailabilityDateInPastError):
+        await use_case(
+            master_id=master_id,
+            service_id=service_id,
+            calendar_day=(datetime.now(UTC) - timedelta(days=1)).date(),
+            viewer_timezone="UTC",
+        )
 
 
 async def test_monthly_revenue_use_case_aggregates_completed_visits():
@@ -482,7 +635,7 @@ def test_client_create_booking_route_returns_app_error_contract():
 
 def test_availability_route_returns_app_error_contract():
     class FakeAvailableSlotsUseCase:
-        async def __call__(self, *, master_id, service_id, calendar_day):
+        async def __call__(self, *, master_id, service_id, calendar_day, viewer_timezone=None):
             raise AvailabilityDateInPastError()
 
     app.dependency_overrides[get_available_slots_use_case] = FakeAvailableSlotsUseCase

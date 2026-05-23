@@ -132,20 +132,23 @@ def test_client_profile_patch_after_invitation_accept() -> None:
             get_prof = client.get("/api/client/profile")
             assert get_prof.status_code == 200, get_prof.text
             assert get_prof.json()["display_name"] == "Before Edit"
+            assert get_prof.json()["timezone"] == "Europe/Minsk"
 
             patch = client.patch(
                 "/api/client/profile",
-                json={"display_name": "After Edit", "phone": "+375290000099"},
+                json={"display_name": "After Edit", "phone": "+375290000099", "timezone": "Europe/Warsaw"},
                 headers=_csrf_headers(client),
             )
             assert patch.status_code == 200, patch.text
             assert patch.json()["display_name"] == "After Edit"
             assert patch.json()["phone"] == "+375290000099"
+            assert patch.json()["timezone"] == "Europe/Warsaw"
 
             me = client.get("/api/auth/me")
             assert me.status_code == 200, me.text
             assert me.json()["client_display_name"] == "After Edit"
             assert me.json()["client_phone"] == "+375290000099"
+            assert me.json()["client_timezone"] == "Europe/Warsaw"
     except Exception as exc:
         _skip_if_unreachable(exc)
         raise

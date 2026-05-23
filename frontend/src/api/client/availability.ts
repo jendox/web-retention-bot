@@ -4,11 +4,15 @@ export async function availabilityApi(params: {
   master_id: string
   service_id: string
   date: string
+  timezone?: string
 }) {
   const qs = new URLSearchParams({
     master_id: params.master_id,
     service_id: params.service_id,
     date: params.date,
   })
+  if (params.timezone) {
+    qs.set('timezone', params.timezone)
+  }
   return apiFetch<{ start_at: string }[]>(`/api/client/availability?${qs}`)
 }

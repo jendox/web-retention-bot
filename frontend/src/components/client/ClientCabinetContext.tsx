@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
@@ -6,57 +6,21 @@ import { meApi } from '../../api/auth'
 import { bookingsMyListApi, type BookingClientListItem } from '../../api/bookings'
 import { clientsMyMastersApi, type ClientMyMasterItem } from '../../api/clients'
 import { blocksCalendar, isBookingUpcoming } from '../../lib/bookingStatus'
+import { normalizeTimeZone } from '../../lib/timezones'
 import {
   buildClientCabinetMocks,
   clientDashboardUsesMocks,
   type ClientMasterView,
   type MockBookableService,
 } from '../../mocks/clientCabinetMocks'
-import { computeOverviewStats } from './clientCabinetUi'
+import { computeOverviewStats } from './clientCabinetFormat'
+import { ClientCabinetContext, type ClientCabinetContextValue, type VisitManageState } from './clientCabinetContext'
 import { ClientBookingModal } from './ClientBookingModal'
 import { ClientDemoBookingModal } from './ClientDemoBookingModal'
 import { ClientVisitManageModal } from './ClientVisitManageModal'
 
 const EMPTY_BOOKINGS: BookingClientListItem[] = []
 const EMPTY_MASTERS: ClientMasterView[] = []
-
-type VisitManageState = {
-  booking: BookingClientListItem
-  mode: 'reschedule' | 'cancel'
-}
-
-type ClientCabinetContextValue = {
-  useMocks: boolean
-  me: ReturnType<typeof useQuery<Awaited<ReturnType<typeof meApi>>>>['data']
-  meLoading: boolean
-  firstName: string
-  masters: ClientMasterView[] | ClientMyMasterItem[]
-  bookableServices: MockBookableService[]
-  mockBookings: BookingClientListItem[]
-  stats: ReturnType<typeof computeOverviewStats>
-  overviewLoading: boolean
-  dataError: boolean
-  bookingsOverviewError: unknown
-  myMastersError: unknown
-  linkedMasterCount: number
-  openBookingModal: (masterId: string | null) => void
-  canManageVisit: (b: BookingClientListItem) => boolean
-  setVisitManage: (state: VisitManageState | null) => void
-  bookingCreatedNotice: BookingClientListItem | null
-  showBookingCreatedNotice: (booking: BookingClientListItem) => void
-  clearBookingCreatedNotice: () => void
-  invalidateCabinetData: () => void
-}
-
-const ClientCabinetContext = createContext<ClientCabinetContextValue | null>(null)
-
-export function useClientCabinet() {
-  const ctx = useContext(ClientCabinetContext)
-  if (!ctx) {
-    throw new Error('useClientCabinet must be used within ClientCabinetProvider')
-  }
-  return ctx
-}
 
 export function ClientCabinetProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
@@ -80,6 +44,7 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
+  const clientTimeZone = normalizeTimeZone(me.data?.client_timezone)
   const bookingsOverview = useQuery({
     queryKey: ['bookings', 'me', 'overview', 'upcoming'],
     queryFn: () => bookingsMyListApi({ scope: 'upcoming', page: 1, page_size: 10 }),
@@ -117,7 +82,10 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
     return myMastersLive.data ?? EMPTY_MASTERS
   }, [mockBundle, myMastersLive.data, useMocks])
 
-  const bookableServices: MockBookableService[] = useMocks ? (mockBundle?.bookableServices ?? []) : []
+  const bookableServices = useMemo<MockBookableService[]>(
+    () => (useMocks ? (mockBundle?.bookableServices ?? []) : []),
+    [mockBundle, useMocks],
+  )
 
   const openBookingModal = useCallback((masterId: string | null) => {
     setBookingModalNonce((n) => n + 1)
@@ -140,11 +108,12 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
       return computeOverviewStats(
         mockBookings.filter((b) => isBookingUpcoming(b, new Date())),
         mockBookings.filter((b) => blocksCalendar(b.status)).length,
+        clientTimeZone,
       )
     }
     const items = (bookingsOverview.data?.items ?? []).slice(0, 6)
-    return computeOverviewStats(items, bookingsOverview.data?.total ?? 0)
-  }, [bookingsOverview.data, mockBookings, useMocks])
+    return computeOverviewStats(items, bookingsOverview.data?.total ?? 0, clientTimeZone)
+  }, [bookingsOverview.data, clientTimeZone, mockBookings, useMocks])
 
   const overviewLoading = !useMocks && (bookingsOverview.isLoading || myMastersLive.isLoading)
   const dataError = !useMocks && (bookingsOverview.isError || myMastersLive.isError)
@@ -154,6 +123,7 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
       useMocks,
       me: me.data,
       meLoading: me.isLoading,
+      clientTimeZone,
       firstName,
       masters,
       bookableServices,
@@ -176,6 +146,7 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
       useMocks,
       me.data,
       me.isLoading,
+      clientTimeZone,
       firstName,
       masters,
       bookableServices,
@@ -222,6 +193,7 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
           key={bookingModalNonce}
           onClose={() => setBookingModalOpen(false)}
           masters={masters as ClientMyMasterItem[]}
+          clientTimeZone={clientTimeZone}
           initialMasterId={bookingModalMasterId}
           onSuccess={(booking) => {
             invalidateCabinetData()
@@ -234,6 +206,7 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
         <ClientVisitManageModal
           booking={visitManage.booking}
           mode={visitManage.mode}
+          clientTimeZone={clientTimeZone}
           onClose={() => setVisitManage(null)}
           onSuccess={() => {
             invalidateCabinetData()

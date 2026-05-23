@@ -13,34 +13,34 @@ import {
   bookingDateBounds,
   bookingDateFieldClass,
   formatSlotTime,
-  toDateInputValue,
 } from '../../lib/bookingSchedule'
 import { bookingSlotButtonClass } from '../../lib/bookingSlots'
 import { cn } from '../../lib/forms'
+import { toDateInputValueInTimeZone } from '../../lib/timezones'
 
-const dateLongFormatter = new Intl.DateTimeFormat('ru-RU', {
-  weekday: 'long',
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-})
-
-function formatDateLong(date: Date) {
-  return dateLongFormatter.format(date)
+function formatDateLong(date: Date, timeZone: string) {
+  return new Intl.DateTimeFormat('ru-RU', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone,
+  }).format(date)
 }
 
-function formatBookingDateTime(value: string) {
+function formatBookingDateTime(value: string, timeZone: string) {
   const date = new Date(value)
-  return `${formatDateLong(date)}, ${formatSlotTime(value)}`
+  return `${formatDateLong(date, timeZone)}, ${formatSlotTime(value, timeZone)}`
 }
 
-function formatSlotFull(value: string) {
+function formatSlotFull(value: string, timeZone: string) {
   return new Intl.DateTimeFormat('ru-RU', {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone,
   }).format(new Date(value))
 }
 
@@ -49,25 +49,27 @@ type Mode = 'reschedule' | 'cancel'
 type Props = {
   booking: BookingClientListItem
   mode: Mode
+  clientTimeZone: string
   onClose: () => void
   onSuccess: () => void
 }
 
-export function ClientVisitManageModal({ booking, mode, onClose, onSuccess }: Props) {
-  const [rescheduleDate, setRescheduleDate] = useState(() => toDateInputValue(new Date(booking.start_at)))
+export function ClientVisitManageModal({ booking, mode, clientTimeZone, onClose, onSuccess }: Props) {
+  const [rescheduleDate, setRescheduleDate] = useState(() => toDateInputValueInTimeZone(new Date(booking.start_at), clientTimeZone))
   const [rescheduleSlot, setRescheduleSlot] = useState<string | null>(null)
   const [cancelComment, setCancelComment] = useState('')
   const [rescheduleComment, setRescheduleComment] = useState('')
 
-  const { min: todayValue, max: maxDateValue } = bookingDateBounds()
+  const { min: todayValue, max: maxDateValue } = bookingDateBounds(clientTimeZone)
 
   const rescheduleSlots = useQuery({
-    queryKey: ['availability', 'reschedule', booking.master_id, booking.service_id, rescheduleDate],
+    queryKey: ['availability', 'reschedule', booking.master_id, booking.service_id, rescheduleDate, clientTimeZone],
     queryFn: () =>
       availabilityApi({
         master_id: booking.master_id,
         service_id: booking.service_id,
         date: rescheduleDate,
+        timezone: clientTimeZone,
       }),
     enabled: mode === 'reschedule' && Boolean(rescheduleDate),
   })
@@ -131,7 +133,7 @@ export function ClientVisitManageModal({ booking, mode, onClose, onSuccess }: Pr
             Отменить запись?
           </h2>
           <p className="mt-3 text-sm text-stone-600 dark:text-stone-400">
-            Запись к «{booking.master_display_name}» на {formatSlotFull(booking.start_at)} ({booking.service_name}) будет
+            Запись к «{booking.master_display_name}» на {formatSlotFull(booking.start_at, clientTimeZone)} ({booking.service_name}) будет
             отменена.
           </p>
           <label className="mt-4 block">
@@ -195,7 +197,7 @@ export function ClientVisitManageModal({ booking, mode, onClose, onSuccess }: Pr
           <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">
             {booking.master_display_name} · {booking.service_name}
           </p>
-          <p className="text-sm text-stone-500 dark:text-stone-400">Сейчас: {formatBookingDateTime(booking.start_at)}</p>
+          <p className="text-sm text-stone-500 dark:text-stone-400">Сейчас: {formatBookingDateTime(booking.start_at, clientTimeZone)}</p>
         </div>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
@@ -235,7 +237,7 @@ export function ClientVisitManageModal({ booking, mode, onClose, onSuccess }: Pr
                     }}
                     className={bookingSlotButtonClass(rescheduleSlot === slot.start_at)}
                   >
-                    {formatSlotTime(slot.start_at)}
+                    {formatSlotTime(slot.start_at, clientTimeZone)}
                   </button>
                 ))}
               </div>

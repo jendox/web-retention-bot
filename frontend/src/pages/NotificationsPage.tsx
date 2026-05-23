@@ -13,7 +13,7 @@ export function NotificationsPage() {
   const outletContext = useOutletContext<AppShellOutletContext>()
   const cabinet = outletContext.cabinet ?? cabinetFromPathname(pathname)
   const isClientCabinet = cabinet === 'client'
-  const notificationTimeZone = isClientCabinet ? undefined : outletContext.masterTimeZone
+  const notificationTimeZone = isClientCabinet ? outletContext.clientTimeZone : outletContext.masterTimeZone
   const [searchParams, setSearchParams] = useSearchParams()
   const { page, pageSize } = parseNotificationsPage(searchParams)
 

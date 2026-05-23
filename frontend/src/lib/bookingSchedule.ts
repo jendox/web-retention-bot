@@ -1,3 +1,5 @@
+import { toDateInputValueInTimeZone } from './timezones'
+
 export const BOOKING_MAX_ADVANCE_DAYS = 90
 
 export const bookingDateFieldClass =
@@ -16,39 +18,43 @@ export function addDays(date: Date, days: number) {
   return next
 }
 
-export function bookingDateBounds() {
+export function bookingDateBounds(timeZone?: string) {
   const today = new Date()
   return {
-    min: toDateInputValue(today),
-    max: toDateInputValue(addDays(today, BOOKING_MAX_ADVANCE_DAYS)),
+    min: timeZone ? toDateInputValueInTimeZone(today, timeZone) : toDateInputValue(today),
+    max: timeZone
+      ? toDateInputValueInTimeZone(addDays(today, BOOKING_MAX_ADVANCE_DAYS), timeZone)
+      : toDateInputValue(addDays(today, BOOKING_MAX_ADVANCE_DAYS)),
   }
 }
 
-export function formatSlotTime(value: string) {
+export function formatSlotTime(value: string, timeZone?: string) {
   return new Intl.DateTimeFormat('ru-RU', {
     hour: '2-digit',
     minute: '2-digit',
+    timeZone,
   }).format(new Date(value))
 }
 
-export function formatSlotDateTime(value: string) {
+export function formatSlotDateTime(value: string, timeZone?: string) {
   return new Intl.DateTimeFormat('ru-RU', {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone,
   }).format(new Date(value))
 }
 
-const dateLongFormatter = new Intl.DateTimeFormat('ru-RU', {
-  weekday: 'long',
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric',
-})
-
-export function formatBookingDateTime(value: string) {
+export function formatBookingDateTime(value: string, timeZone?: string) {
   const date = new Date(value)
-  return `${dateLongFormatter.format(date)}, ${formatSlotTime(value)}`
+  const dateFormatter = new Intl.DateTimeFormat('ru-RU', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone,
+  })
+  return `${dateFormatter.format(date)}, ${formatSlotTime(value, timeZone)}`
 }

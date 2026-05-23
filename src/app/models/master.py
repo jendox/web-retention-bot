@@ -7,6 +7,7 @@ from sqlalchemy import Enum as SAEnum, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.currency import DEFAULT_MASTER_CURRENCY, Currency
+from app.core.timezones import DEFAULT_TIMEZONE
 from app.models.base import PatchableMixin, TimeStampedModel
 
 if TYPE_CHECKING:
@@ -39,7 +40,7 @@ class MasterProfile(TimeStampedModel, PatchableMixin):
     user_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("users.id"), unique=True)
     display_name: Mapped[str] = mapped_column(String(200))
     public_slug: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
-    timezone: Mapped[str] = mapped_column(String(64), default="Europe/Moscow")
+    timezone: Mapped[str] = mapped_column(String(64), default=DEFAULT_TIMEZONE)
     default_currency: Mapped[Currency] = mapped_column(
         SAEnum(
             Currency,

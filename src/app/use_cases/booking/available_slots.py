@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends
 
@@ -45,6 +46,30 @@ def filter_future_slots_for_day(
     return [slot for slot in slots if slot.astimezone(UTC) > now_utc]
 
 
+def _master_days_for_viewer_day(
+    *,
+    viewer_day: date,
+    viewer_timezone: ZoneInfo,
+    master_timezone: ZoneInfo,
+) -> list[date]:
+    viewer_start = datetime.combine(viewer_day, datetime.min.time(), tzinfo=viewer_timezone)
+    viewer_end = viewer_start + timedelta(days=1) - timedelta(microseconds=1)
+    start_master_day = viewer_start.astimezone(master_timezone).date()
+    end_master_day = viewer_end.astimezone(master_timezone).date()
+    if start_master_day == end_master_day:
+        return [start_master_day]
+    return [start_master_day, end_master_day]
+
+
+def _filter_slots_for_viewer_day(
+    slots: list[datetime],
+    *,
+    viewer_day: date,
+    viewer_timezone: ZoneInfo,
+) -> list[datetime]:
+    return [slot for slot in slots if slot.astimezone(viewer_timezone).date() == viewer_day]
+
+
 class AvailableSlotsUseCase:
     def __init__(
         self,
@@ -85,39 +110,97 @@ class AvailableSlotsUseCase:
         if calendar_day > _max_booking_day(master_today, max_advance_days):
             raise AvailabilityDateOutsideHorizonError()
 
+    async def _slots_for_days(
+        self,
+        *,
+        days: list[date],
+        master_profile: MasterProfileSchema,
+        service: Service,
+        schedules: tuple[list, list],
+        now: datetime,
+        viewer_mode: bool,
+    ) -> list[datetime]:
+        weekly_days, date_overrides = schedules
+        slots: list[datetime] = []
+        valid_day_found = False
+        skipped_error: Exception | None = None
+
+        for day in days:
+            try:
+                self._check_calendar_day(day, master_profile, now, self._settings.booking.max_advance_days)
+            except (AvailabilityDateInPastError, AvailabilityDateOutsideHorizonError) as exc:
+                if viewer_mode:
+                    skipped_error = skipped_error or exc
+                    continue
+                raise
+            valid_day_found = True
+
+            day_slots = await self._availability_engine.slots_between(
+                master_profile=master_profile,
+                service_duration_minutes=service.duration_min,
+                day=day,
+                weekly_days=weekly_days,
+                date_overrides=date_overrides,
+                slot_step_minutes=self._settings.booking.availability_slot_step_minutes,
+            )
+            slots.extend(
+                filter_future_slots_for_day(
+                    slots=day_slots,
+                    master_profile=master_profile,
+                    calendar_day=day,
+                    now=now,
+                ),
+            )
+
+        if viewer_mode and not valid_day_found and skipped_error is not None:
+            raise skipped_error
+
+        return slots
+
     async def __call__(
         self,
         *,
         master_id: UUID,
         service_id: UUID,
         calendar_day: date,
+        viewer_timezone: str | None = None,
     ) -> list[SlotOut]:
         master_profile_model = await self._get_master_profile(master_id)
         master_profile = MasterProfileSchema.model_validate(master_profile_model)
 
         now = datetime.now(UTC)
-        self._check_calendar_day(calendar_day, master_profile, now, self._settings.booking.max_advance_days)
+        if viewer_timezone is None:
+            self._check_calendar_day(calendar_day, master_profile, now, self._settings.booking.max_advance_days)
 
         service = await self._get_service_for_master(service_id, master_id)
 
         weekly_days = await self._schedule_repo.weekly_days_for_master(master_id)
         date_overrides = await self._schedule_repo.date_overrides_for_master(master_id)
 
-        slots = await self._availability_engine.slots_between(
-            master_profile=master_profile,
-            service_duration_minutes=service.duration_min,
-            day=calendar_day,
-            weekly_days=weekly_days,
-            date_overrides=date_overrides,
-            slot_step_minutes=self._settings.booking.availability_slot_step_minutes,
-        )
+        days = [calendar_day]
+        viewer_tz: ZoneInfo | None = None
+        if viewer_timezone is not None:
+            viewer_tz = ZoneInfo(viewer_timezone)
+            days = _master_days_for_viewer_day(
+                viewer_day=calendar_day,
+                viewer_timezone=viewer_tz,
+                master_timezone=master_profile.tzinfo,
+            )
 
-        slots = filter_future_slots_for_day(
-            slots=slots,
+        slots = await self._slots_for_days(
+            days=days,
             master_profile=master_profile,
-            calendar_day=calendar_day,
+            service=service,
+            schedules=(weekly_days, date_overrides),
             now=now,
+            viewer_mode=viewer_tz is not None,
         )
+        if viewer_tz is not None:
+            slots = _filter_slots_for_viewer_day(
+                slots=slots,
+                viewer_day=calendar_day,
+                viewer_timezone=viewer_tz,
+            )
 
         return [SlotOut(start_at=slot) for slot in slots]
 

@@ -11,31 +11,32 @@ import {
   bookingDateFieldClass,
   formatSlotDateTime,
   formatSlotTime,
-  toDateInputValue,
 } from '../../lib/bookingSchedule'
 import { bookingSlotButtonClass } from '../../lib/bookingSlots'
 import { cn } from '../../lib/forms'
+import { toDateInputValueInTimeZone } from '../../lib/timezones'
 
 type Step = 'master' | 'service' | 'slot'
 
 type Props = {
   onClose: () => void
   masters: ClientMyMasterItem[]
+  clientTimeZone: string
   initialMasterId?: string | null
   onSuccess: (booking: BookingClientListItem) => void
 }
 
-export function ClientBookingModal({ onClose, masters, initialMasterId, onSuccess }: Props) {
+export function ClientBookingModal({ onClose, masters, clientTimeZone, initialMasterId, onSuccess }: Props) {
   const resolvedInitialMaster =
     initialMasterId && masters.some((m) => m.master_id === initialMasterId) ? initialMasterId : null
 
   const [step, setStep] = useState<Step>(resolvedInitialMaster ? 'service' : 'master')
   const [masterId, setMasterId] = useState<string | null>(resolvedInitialMaster)
   const [serviceId, setServiceId] = useState<string | null>(null)
-  const [dateInput, setDateInput] = useState(() => toDateInputValue(new Date()))
+  const [dateInput, setDateInput] = useState(() => toDateInputValueInTimeZone(new Date(), clientTimeZone))
   const [slotIso, setSlotIso] = useState<string | null>(null)
 
-  const { min: todayInput, max: maxDateInput } = bookingDateBounds()
+  const { min: todayInput, max: maxDateInput } = bookingDateBounds(clientTimeZone)
 
   const selectedMaster = masters.find((m) => m.master_id === masterId) ?? null
 
@@ -49,12 +50,13 @@ export function ClientBookingModal({ onClose, masters, initialMasterId, onSucces
   const selectedService = masterServices.find((s) => s.id === serviceId) ?? null
 
   const slotsQuery = useQuery({
-    queryKey: ['availability', masterId, serviceId, dateInput],
+    queryKey: ['availability', masterId, serviceId, dateInput, clientTimeZone],
     queryFn: () =>
       availabilityApi({
         master_id: masterId!,
         service_id: serviceId!,
         date: dateInput,
+        timezone: clientTimeZone,
       }),
     enabled: Boolean(masterId && serviceId && dateInput),
   })
@@ -225,7 +227,7 @@ export function ClientBookingModal({ onClose, masters, initialMasterId, onSucces
                         }}
                         className={bookingSlotButtonClass(slotIso === slot.start_at)}
                       >
-                        {formatSlotTime(slot.start_at)}
+                        {formatSlotTime(slot.start_at, clientTimeZone)}
                       </button>
                     ))}
                   </div>
@@ -234,7 +236,7 @@ export function ClientBookingModal({ onClose, masters, initialMasterId, onSucces
 
               {slotIso ? (
                 <p className="text-sm text-stone-600 dark:text-stone-400">
-                  Выбрано: {formatSlotDateTime(slotIso)}
+                  Выбрано: {formatSlotDateTime(slotIso, clientTimeZone)}
                 </p>
               ) : null}
 

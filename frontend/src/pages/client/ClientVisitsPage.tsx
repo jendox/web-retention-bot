@@ -1,9 +1,9 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 
 import { bookingsMyListApi, type BookingListScope } from '../../api/bookings'
-import { useClientCabinet } from '../../components/client/ClientCabinetContext'
+import { useClientCabinet } from '../../components/client/clientCabinetContext'
 import { ClientVisitRow } from '../../components/client/clientCabinetUi'
 import { ListPagination } from '../../components/ui/ListPagination'
 import { SegmentTabs } from '../../components/ui/SegmentTabs'
@@ -21,13 +21,13 @@ function visitScopeToApi(scope: VisitScope): BookingListScope {
 }
 
 export function ClientVisitsPage() {
-  const { useMocks, me, mockBookings, canManageVisit, setVisitManage } = useClientCabinet()
+  const { useMocks, me, clientTimeZone, mockBookings, canManageVisit, setVisitManage } = useClientCabinet()
   const [searchParams, setSearchParams] = useSearchParams()
   const visitScope = visitScopeFromParams(searchParams)
   const visitPage = parsePage(searchParams.get('visit_page'))
   const visitPageSize = parsePageSize(searchParams.get('visit_page_size'))
 
-  const setVisitScope = (scope: VisitScope) => {
+  const setVisitScope = useCallback((scope: VisitScope) => {
     setSearchParams((prev) => {
       const n = new URLSearchParams(prev)
       n.set('visit_scope', scope)
@@ -35,9 +35,9 @@ export function ClientVisitsPage() {
       n.set('visit_page_size', String(visitPageSize))
       return n
     })
-  }
+  }, [setSearchParams, visitPageSize])
 
-  const setVisitPage = (p: number) => {
+  const setVisitPage = useCallback((p: number) => {
     setSearchParams((prev) => {
       const n = new URLSearchParams(prev)
       n.set('visit_page', String(p))
@@ -47,9 +47,9 @@ export function ClientVisitsPage() {
       }
       return n
     })
-  }
+  }, [setSearchParams, visitPageSize, visitScope])
 
-  const setVisitPageSize = (ps: PageSize) => {
+  const setVisitPageSize = useCallback((ps: PageSize) => {
     setSearchParams((prev) => {
       const n = new URLSearchParams(prev)
       n.set('visit_scope', visitScope)
@@ -57,7 +57,7 @@ export function ClientVisitsPage() {
       n.set('visit_page_size', String(ps))
       return n
     })
-  }
+  }, [setSearchParams, visitScope])
 
   const visitsLive = useQuery({
     queryKey: ['bookings', 'me', visitScope, visitPage, visitPageSize],
@@ -79,7 +79,7 @@ export function ClientVisitsPage() {
     if (visitPage > totalPages) {
       setVisitPage(totalPages)
     }
-  }, [visitsLive.isSuccess, visitsLive.data, visitPage, visitPageSize])
+  }, [setVisitPage, visitsLive.isSuccess, visitsLive.data, visitPage, visitPageSize])
 
   const mockVisitsForScope = useMocks
     ? mockBookings.filter((b) =>
@@ -121,6 +121,7 @@ export function ClientVisitsPage() {
                 key={b.id}
                 b={b}
                 i={i}
+                timeZone={clientTimeZone}
                 showActions={!useMocks && visitScope === 'upcoming' && canManageVisit(b)}
                 onReschedule={() => setVisitManage({ booking: b, mode: 'reschedule' })}
                 onCancel={() => setVisitManage({ booking: b, mode: 'cancel' })}

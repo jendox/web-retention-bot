@@ -33,3 +33,4 @@ class UserMeOut(UserSchema):
 
     client_display_name: str | None = None
     client_phone: str | None = None
+    client_timezone: str | None = None

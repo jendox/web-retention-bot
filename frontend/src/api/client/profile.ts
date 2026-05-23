@@ -5,12 +5,14 @@ export type ClientProfile = {
   display_name: string
   phone: string | null
   email: string | null
+  timezone: string
   user_id: string | null
 }
 
 export type ClientProfileUpdate = {
   display_name?: string
   phone?: string | null
+  timezone?: string
 }
 
 export async function clientProfileGetApi() {
