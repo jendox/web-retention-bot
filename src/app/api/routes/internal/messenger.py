@@ -10,6 +10,7 @@ from app.repositories.notification_preferences import (
     NotificationPreferenceRepository,
     get_notification_preference_repo,
 )
+from app.schemas.errors import ErrorDetail
 from app.schemas.messenger_internal import MessengerCompleteLinkIn, MessengerCompleteLinkOut
 from app.services.messenger.link_tokens import MessengerLinkTokenStore, get_messenger_link_token_store_dep
 from app.services.messenger.providers import MessengerProvider
@@ -31,7 +32,24 @@ def _provider_from_path(kind: str) -> MessengerProvider:
 @router.post(
     "/{provider}/complete-link",
     response_model=MessengerCompleteLinkOut,
-    summary="Bot sidecar: confirm user linked messenger (chat_id)",
+    status_code=status.HTTP_200_OK,
+    summary="Internal bot callback: complete messenger linking",
+    description=(
+        "Internal endpoint for bot sidecars only. The sidecar calls this after a user opens the bot deep link and "
+        "sends `/start <token>`. The API consumes the one-time token, stores the messenger external id as a verified "
+        "notification channel, and clears the pending link marker."
+    ),
+    response_description="Messenger link confirmation payload for the bot sidecar.",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ErrorDetail,
+            "description": "Unknown provider, expired token, or token already consumed.",
+        },
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDetail,
+            "description": "Missing or invalid `X-Bot-Secret` header.",
+        },
+    },
 )
 async def complete_messenger_link(
     provider: str,

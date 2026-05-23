@@ -21,14 +21,17 @@ router = APIRouter(prefix="/profile", tags=["client-profile"])
 @router.get(
     "",
     response_model=ClientSchema,
+    status_code=status.HTTP_200_OK,
     summary="Current client profile",
     description=(
         "Returns the primary client card linked to the authenticated user. "
         "404 when the user has no client profile yet (e.g. before accepting an invitation)."
     ),
+    response_description="Primary client profile for the current user.",
     responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorDetail},
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail, "description": "Missing or invalid session cookie."},
+        status.HTTP_403_FORBIDDEN: {"model": ErrorDetail, "description": "Email not verified."},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorDetail, "description": "No client card is linked to this user."},
     },
 )
 async def get_my_client_profile(
@@ -41,15 +44,18 @@ async def get_my_client_profile(
 @router.patch(
     "",
     response_model=ClientSchema,
+    status_code=status.HTTP_200_OK,
     summary="Update client profile",
     description=(
         "Updates display name and phone on every client card linked to the current user "
         "(keeps data consistent across masters)."
     ),
+    response_description="Updated primary client profile.",
     responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorDetail},
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorDetail},
+        status.HTTP_400_BAD_REQUEST: {"model": ErrorDetail, "description": "Request body is invalid."},
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail, "description": "Missing or invalid session cookie."},
+        status.HTTP_403_FORBIDDEN: {"model": ErrorDetail, "description": "Email not verified."},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorDetail, "description": "No client card is linked to this user."},
     },
 )
 async def patch_my_client_profile(

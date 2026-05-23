@@ -23,10 +23,15 @@ router = APIRouter(prefix="/notifications", tags=["client-notifications"])
 @router.get(
     path="/me",
     summary="Current user's in-app notifications (client cabinet)",
+    description=(
+        "Returns a paginated in-app notification feed for the current user in the client cabinet, including the "
+        "total unread count used by the header badge."
+    ),
     response_model=UserNotificationsListOut,
     status_code=status.HTTP_200_OK,
+    response_description="Paginated notification feed and unread count.",
     responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail},
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail, "description": "Missing or invalid session cookie."},
         status.HTTP_403_FORBIDDEN: {"model": ErrorDetail, "description": "Email not verified."},
     },
 )
@@ -41,12 +46,14 @@ async def list_my_notifications(
 @router.post(
     path="/{notification_id}/read",
     summary="Mark a notification as read",
+    description="Marks one in-app notification owned by the current user as read and returns the updated row.",
     response_model=UserNotificationOut,
     status_code=status.HTTP_200_OK,
+    response_description="Notification with `read_at` set.",
     responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail},
-        status.HTTP_403_FORBIDDEN: {"model": ErrorDetail},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorDetail},
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail, "description": "Missing or invalid session cookie."},
+        status.HTTP_403_FORBIDDEN: {"model": ErrorDetail, "description": "Email not verified."},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorDetail, "description": "Notification not found for this user."},
     },
 )
 async def mark_notification_read(

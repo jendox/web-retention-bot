@@ -28,7 +28,18 @@ router = APIRouter(prefix="/clients", tags=["master-clients"])
         "and invitation status. Sort order: display name (case-insensitive), then client id."
     ),
     response_model=PaginatedResponse[ClientWithLinkResponse],
+    status_code=status.HTTP_200_OK,
     response_description="Page of linked clients plus total count for the same filter.",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDetail,
+            "description": "Session missing or invalid (handled by dependency).",
+        },
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorDetail,
+            "description": "Current user has no master profile.",
+        },
+    },
 )
 async def list_clients(
     pagination: Annotated[Pagination, Depends(get_pagination)],
@@ -61,6 +72,10 @@ async def list_clients(
             "model": ErrorDetail,
             "description": "Session missing or invalid (handled by dependency).",
         },
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorDetail,
+            "description": "Current user has no master profile.",
+        },
     },
 )
 async def add_client(
@@ -78,8 +93,13 @@ async def add_client(
         "Fetches a single client only if it is linked to the current master. Use for the client detail / edit screen."
     ),
     response_model=ClientWithLinkResponse,
+    status_code=status.HTTP_200_OK,
     response_description="Client profile and master-specific alias, notes, and link status.",
     responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDetail,
+            "description": "Session missing or invalid (handled by dependency).",
+        },
         status.HTTP_404_NOT_FOUND: {
             "model": ErrorDetail,
             "description": "No such client or it is not linked to this master.",
@@ -102,11 +122,16 @@ async def get_client(
         "fields (alias, notes) are applied in one request."
     ),
     response_model=ClientWithLinkResponse,
+    status_code=status.HTTP_200_OK,
     response_description="Updated client and link snapshot.",
     responses={
         status.HTTP_400_BAD_REQUEST: {
             "model": ErrorDetail,
             "description": "Request body omitted all updatable fields.",
+        },
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDetail,
+            "description": "Session missing or invalid (handled by dependency).",
         },
         status.HTTP_404_NOT_FOUND: {
             "model": ErrorDetail,
@@ -137,6 +162,10 @@ async def patch_client(
     status_code=status.HTTP_204_NO_CONTENT,
     response_description="Client removed; no response body.",
     responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "model": ErrorDetail,
+            "description": "Session missing or invalid (handled by dependency).",
+        },
         status.HTTP_404_NOT_FOUND: {
             "model": ErrorDetail,
             "description": "No such client or it is not linked to this master.",

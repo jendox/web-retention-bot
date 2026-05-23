@@ -28,7 +28,12 @@ router = APIRouter(prefix="/services", tags=["master-services"])
         "Sort: `sort_order`, then creation time."
     ),
     response_model=PaginatedResponse[ServiceSchema],
+    status_code=status.HTTP_200_OK,
     response_description="Page of services and total count for the same filter.",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail, "description": "Session missing or invalid."},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorDetail, "description": "Current user has no master profile."},
+    },
 )
 async def list_services(
     pagination: Annotated[Pagination, Depends(get_pagination)],
@@ -64,6 +69,10 @@ async def list_services(
             "model": ErrorDetail,
             "description": "Session missing or invalid.",
         },
+        status.HTTP_404_NOT_FOUND: {
+            "model": ErrorDetail,
+            "description": "Current user has no master profile.",
+        },
     },
 )
 async def create_service(
@@ -79,7 +88,10 @@ async def create_service(
     summary="Get one service",
     description="Returns a service owned by the authenticated master.",
     response_model=ServiceSchema,
+    status_code=status.HTTP_200_OK,
+    response_description="Service owned by the current master.",
     responses={
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail, "description": "Session missing or invalid."},
         status.HTTP_404_NOT_FOUND: {
             "model": ErrorDetail,
             "description": "Not found or not owned by this master.",
@@ -99,7 +111,10 @@ async def get_service(
     summary="Update a service",
     description="Partial update of service fields.",
     response_model=ServiceSchema,
+    status_code=status.HTTP_200_OK,
+    response_description="Updated service.",
     responses={
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail, "description": "Session missing or invalid."},
         status.HTTP_404_NOT_FOUND: {
             "model": ErrorDetail,
             "description": "Not found or not owned by this master.",
@@ -122,6 +137,7 @@ async def patch_service(
     status_code=status.HTTP_204_NO_CONTENT,
     response_description="Service removed.",
     responses={
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail, "description": "Session missing or invalid."},
         status.HTTP_404_NOT_FOUND: {
             "model": ErrorDetail,
             "description": "Not found or not owned by this master.",

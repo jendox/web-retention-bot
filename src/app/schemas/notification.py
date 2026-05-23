@@ -24,3 +24,27 @@ class UserNotificationsListOut(BaseModel):
     page: int
     page_size: int
     unread_count: int
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "items": [
+                        {
+                            "id": "00000000-0000-4000-8000-000000000001",
+                            "event_type": "booking.created",
+                            "title": "Новая запись",
+                            "body": "Клиент записался на услугу.",
+                            "link_url": "/master/bookings",
+                            "read_at": None,
+                            "created_at": "2026-05-23T12:00:00Z",
+                        },
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "page_size": 20,
+                    "unread_count": 1,
+                },
+            ],
+        },
+    )

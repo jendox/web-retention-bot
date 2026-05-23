@@ -71,6 +71,7 @@ async def list_my_bookings_as_client(
     ),
     response_model=BookingClientListItem,
     status_code=status.HTTP_201_CREATED,
+    response_description="Booking created and formatted for the client booking list.",
     responses={
         status.HTTP_400_BAD_REQUEST: {
             "model": ErrorDetail,
@@ -93,11 +94,13 @@ async def create_booking_as_client(
 @router.post(
     path="/{booking_id}/cancel",
     summary="Cancel own booking as client",
+    description="Cancels an upcoming booking that belongs to the authenticated client user.",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_description="Booking cancelled; no response body.",
     responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail},
-        status.HTTP_403_FORBIDDEN: {"model": ErrorDetail},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorDetail},
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail, "description": "Missing or invalid session cookie."},
+        status.HTTP_403_FORBIDDEN: {"model": ErrorDetail, "description": "Email not verified."},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorDetail, "description": "Booking was not found for this client."},
     },
 )
 async def post_cancel_my_booking(
@@ -117,14 +120,19 @@ async def post_cancel_my_booking(
 @router.post(
     path="/{booking_id}/reschedule",
     summary="Reschedule own booking as client",
+    description="Moves an upcoming booking owned by the authenticated client user to another available slot.",
     response_model=BookingClientListItem,
     status_code=status.HTTP_200_OK,
+    response_description="Rescheduled booking formatted for the client booking list.",
     responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorDetail},
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail},
-        status.HTTP_403_FORBIDDEN: {"model": ErrorDetail},
-        status.HTTP_404_NOT_FOUND: {"model": ErrorDetail},
-        status.HTTP_409_CONFLICT: {"model": ErrorDetail},
+        status.HTTP_400_BAD_REQUEST: {"model": ErrorDetail, "description": "Requested slot is unavailable."},
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail, "description": "Missing or invalid session cookie."},
+        status.HTTP_403_FORBIDDEN: {"model": ErrorDetail, "description": "Email not verified."},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorDetail, "description": "Booking was not found for this client."},
+        status.HTTP_409_CONFLICT: {
+            "model": ErrorDetail,
+            "description": "Another scheduled booking overlaps the requested time.",
+        },
     },
 )
 async def post_reschedule_my_booking(

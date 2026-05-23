@@ -46,9 +46,11 @@ router = APIRouter(prefix="/bookings", tags=["master-bookings"])
     ),
     response_model=BookingMonthlyRevenueOut,
     status_code=status.HTTP_200_OK,
+    response_description="Current-month completed revenue summary.",
     responses={
-        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail},
-        status.HTTP_403_FORBIDDEN: {"model": ErrorDetail},
+        status.HTTP_401_UNAUTHORIZED: {"model": ErrorDetail, "description": "Missing or invalid session cookie."},
+        status.HTTP_403_FORBIDDEN: {"model": ErrorDetail, "description": "Email not verified."},
+        status.HTTP_404_NOT_FOUND: {"model": ErrorDetail, "description": "Current user has no master profile."},
     },
 )
 async def get_monthly_revenue(
