@@ -24,3 +24,5 @@ frontend/dist/
 *.egg-info/
 .codex/
 .agents/
+
+/docs/*
