@@ -81,28 +81,33 @@ class CreateMasterBookingUseCase:
         booking_start_at: datetime,
     ) -> None:
         client = await self._client_repo.get_client(client_id)
-        if client is not None and client.user_id is not None:
-            user = await self._user_repo.get_by_id(client.user_id)
-            recipient = resolve_booking_client_recipient(client, user)
-            if recipient is not None:
-                title, body, link_url = booking_created_in_app_copy(
-                    master_display_name=master.display_name,
-                    service_name=service_name,
-                    start_at=booking_start_at,
-                    master_timezone=master.timezone,
-                )
-                await self._dispatcher.dispatch_booking_created(
-                    booking_id=booking_id,
-                    master_profile_id=master.id,
-                    client_id=client.id,
-                    recipient=recipient,
-                    email_ctx=BookingEmailContext(
-                        title=title,
-                        body=body,
-                        link_url=link_url,
-                        payload={"audience": BOOKING_EMAIL_AUDIENCE_CLIENT},
-                    ),
-                )
+        if client is None or client.user_id is None:
+            return
+
+        user = await self._user_repo.get_by_id(client.user_id)
+        recipient = resolve_booking_client_recipient(client, user)
+        if recipient is None:
+            logger.warning("dispatch_booking.failed", reason="unresolved_booking_client_recipient")
+            return
+
+        title, body, link_url = booking_created_in_app_copy(
+            master_display_name=master.display_name,
+            service_name=service_name,
+            start_at=booking_start_at,
+            recipient_timezone=client.timezone,
+        )
+        await self._dispatcher.dispatch_booking_created(
+            booking_id=booking_id,
+            master_profile_id=master.id,
+            client_id=client.id,
+            recipient=recipient,
+            email_ctx=BookingEmailContext(
+                title=title,
+                body=body,
+                link_url=link_url,
+                payload={"audience": BOOKING_EMAIL_AUDIENCE_CLIENT},
+            ),
+        )
 
     async def __call__(self, payload: BookingCreate, *, master: MasterProfile) -> BookingOut:
         with log_context(

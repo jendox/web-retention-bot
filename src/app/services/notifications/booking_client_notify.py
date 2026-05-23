@@ -51,7 +51,7 @@ async def notify_client_booking_cancelled(ctx: BookingClientNotifyContext) -> No
         master_display_name=ctx.master.display_name,
         service_name=ctx.service.name,
         start_at=ctx.booking.start_at,
-        master_timezone=ctx.master.timezone,
+        recipient_timezone=client.timezone,
         master_comment=ctx.booking.cancel_comment,
     )
 
@@ -82,7 +82,7 @@ async def notify_client_booking_moved(ctx: BookingClientNotifyContext, *, previo
         service_name=ctx.service.name,
         previous_start_at=previous_start_at,
         start_at=ctx.booking.start_at,
-        master_timezone=ctx.master.timezone,
+        recipient_timezone=client.timezone,
         master_comment=ctx.booking.reschedule_comment,
     )
 

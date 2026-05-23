@@ -90,9 +90,9 @@ def booking_created_in_app_copy(
     master_display_name: str,
     service_name: str,
     start_at: datetime,
-    master_timezone: str,
+    recipient_timezone: str,
 ) -> tuple[str, str, str | None]:
-    start_at_local = format_booking_start_local(start_at, master_timezone)
+    start_at_local = format_booking_start_local(start_at, recipient_timezone)
     title = "Новая запись"
     body = f"{master_display_name}: {service_name}, {start_at_local}"
     link_url = f"{get_settings().security.frontend_public_origin.rstrip('/')}/client"
@@ -148,10 +148,10 @@ def booking_cancelled_in_app_copy(
     master_display_name: str,
     service_name: str,
     start_at: datetime,
-    master_timezone: str,
+    recipient_timezone: str,
     master_comment: str | None = None,
 ) -> tuple[str, str, str | None]:
-    start_at_local = format_booking_start_local(start_at, master_timezone)
+    start_at_local = format_booking_start_local(start_at, recipient_timezone)
     title = "Запись отменена"
     body = append_master_comment_to_body(
         f"{master_display_name}: {service_name}, {start_at_local} — отменена",
@@ -197,11 +197,11 @@ def booking_moved_in_app_copy(
     service_name: str,
     previous_start_at: datetime,
     start_at: datetime,
-    master_timezone: str,
+    recipient_timezone: str,
     master_comment: str | None = None,
 ) -> tuple[str, str, str | None]:
-    previous_local = format_booking_start_local(previous_start_at, master_timezone)
-    start_at_local = format_booking_start_local(start_at, master_timezone)
+    previous_local = format_booking_start_local(previous_start_at, recipient_timezone)
+    start_at_local = format_booking_start_local(start_at, recipient_timezone)
     title = "Запись перенесена"
     body = append_master_comment_to_body(
         f"{master_display_name}: {service_name}, {previous_local} → {start_at_local}",

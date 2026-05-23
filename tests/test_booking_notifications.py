@@ -103,11 +103,12 @@ def test_booking_created_in_app_copy() -> None:
         master_display_name="Master",
         service_name="Услуга",
         start_at=start_at,
-        master_timezone="UTC",
+        recipient_timezone="Europe/Warsaw",
     )
     assert title == "Новая запись"
     assert "Master" in body
     assert "Услуга" in body
+    assert "12:00" in body
     assert link_url is not None
     assert link_url.endswith("/client")
 
@@ -222,6 +223,51 @@ async def test_deliver_booking_created_email_skips_non_scheduled() -> None:
         )
 
 
+async def test_deliver_booking_created_email_uses_client_timezone(mail_settings: Settings) -> None:
+    booking_id = uuid.uuid4()
+    master_id = uuid.uuid4()
+    service_id = uuid.uuid4()
+    client_id = uuid.uuid4()
+    booking = SimpleNamespace(
+        id=booking_id,
+        master_id=master_id,
+        client_id=client_id,
+        service_id=service_id,
+        status=BookingStatus.SCHEDULED,
+        start_at=datetime(2026, 5, 20, 10, 0, tzinfo=UTC),
+        duration_min=30,
+    )
+    master = SimpleNamespace(id=master_id, display_name="Master", timezone="UTC")
+    service = SimpleNamespace(id=service_id, name="Стрижка")
+    client = SimpleNamespace(id=client_id, timezone="Europe/Warsaw")
+    session = AsyncMock()
+
+    async def get_entity(model, entity_id):
+        if model.__name__ == "Booking":
+            return booking
+        if model.__name__ == "MasterProfile":
+            return master
+        if model.__name__ == "Service":
+            return service
+        if model.__name__ == "Client":
+            return client
+        return None
+
+    session.get = get_entity
+
+    with patch("app.services.notifications.booking_mail.send_multipart_email", AsyncMock()) as send:
+        await deliver_booking_created_email(
+            settings=mail_settings,
+            session=session,
+            booking_id=booking_id,
+            to_email="c@example.com",
+        )
+
+    send.assert_awaited_once()
+    kwargs = send.await_args.kwargs
+    assert "12:00" in kwargs["text_body"]
+
+
 async def test_create_booking_notifies_linked_verified_client() -> None:
     master_id = uuid.uuid4()
     client_id = uuid.uuid4()
@@ -234,7 +280,7 @@ async def test_create_booking_notifies_linked_verified_client() -> None:
             return True
 
         async def get_client(self, requested_client_id):
-            return SimpleNamespace(id=requested_client_id, user_id=user_id)
+            return SimpleNamespace(id=requested_client_id, user_id=user_id, timezone="Europe/Warsaw")
 
     class FakeUserRepository:
         async def get_by_id(self, requested_user_id):
@@ -293,6 +339,7 @@ async def test_create_booking_notifies_linked_verified_client() -> None:
     kwargs = dispatcher.dispatch_booking_created.await_args.kwargs
     assert kwargs["client_id"] == client_id
     assert kwargs["recipient"].email == "client@example.com"
+    assert "12:00" in kwargs["email_ctx"].body
 
 
 async def test_create_booking_skips_notification_without_linked_user() -> None:
@@ -396,11 +443,12 @@ def test_booking_cancelled_in_app_copy() -> None:
         master_display_name="Master",
         service_name="Услуга",
         start_at=start_at,
-        master_timezone="UTC",
+        recipient_timezone="Europe/Warsaw",
         master_comment="Занят другой клиент",
     )
     assert title == "Запись отменена"
     assert "отменена" in body
+    assert "12:00" in body
     assert "Занят другой клиент" in body
     assert link_url is not None
     assert link_url.endswith("/client/visits")
@@ -431,10 +479,12 @@ def test_booking_moved_in_app_copy() -> None:
         service_name="Услуга",
         previous_start_at=previous,
         start_at=start_at,
-        master_timezone="UTC",
+        recipient_timezone="Europe/Warsaw",
     )
     assert title == "Запись перенесена"
     assert "→" in body
+    assert "12:00" in body
+    assert "16:00" in body
     assert link_url is not None
 
 
@@ -502,7 +552,7 @@ async def test_cancel_booking_notifies_linked_verified_client() -> None:
 
     class FakeClientRepo:
         async def get_client(self, cid):
-            return SimpleNamespace(id=client_id, user_id=user_id)
+            return SimpleNamespace(id=client_id, user_id=user_id, timezone="Europe/Warsaw")
 
     class FakeUserRepo:
         async def get_by_id(self, uid):
@@ -564,7 +614,7 @@ async def test_reschedule_booking_notifies_when_start_changes() -> None:
 
     class FakeClientRepo:
         async def get_client(self, cid):
-            return SimpleNamespace(id=client_id, user_id=user_id)
+            return SimpleNamespace(id=client_id, user_id=user_id, timezone="Europe/Warsaw")
 
     class FakeUserRepo:
         async def get_by_id(self, uid):

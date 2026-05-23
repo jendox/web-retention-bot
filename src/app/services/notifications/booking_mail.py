@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.structured_logging import get_logger, log_context
 from app.models.booking import Booking, BookingStatus
+from app.models.client import Client
 from app.models.master import MasterProfile
 from app.models.service import Service
 from app.services.notifications.datetime_format import format_booking_start_local
@@ -76,6 +77,21 @@ async def _load_booking_mail_context(
     )
 
 
+async def _timezone_for_audience(
+    *,
+    session: AsyncSession,
+    ctx: _BookingMailContext,
+    delivery_options: BookingEmailDeliveryOptions,
+) -> str:
+    if delivery_options.audience == BOOKING_EMAIL_AUDIENCE_MASTER:
+        return ctx.master.timezone
+
+    client = await session.get(Client, ctx.booking.client_id)
+    if client is None:
+        raise BookingNotificationSkip("booking_client_missing")
+    return client.timezone
+
+
 async def deliver_booking_created_email(
     *,
     settings: Settings,
@@ -94,7 +110,12 @@ async def deliver_booking_created_email(
         if ctx.booking.status is not BookingStatus.SCHEDULED:
             raise BookingNotificationSkip(f"booking_status_{ctx.booking.status.value}")
 
-        start_at_local = format_booking_start_local(ctx.booking.start_at, ctx.master.timezone)
+        recipient_timezone = await _timezone_for_audience(
+            session=session,
+            ctx=ctx,
+            delivery_options=delivery_options,
+        )
+        start_at_local = format_booking_start_local(ctx.booking.start_at, recipient_timezone)
         if delivery_options.audience == BOOKING_EMAIL_AUDIENCE_MASTER:
             if not delivery_options.client_display_name:
                 raise BookingNotificationSkip("missing_client_display_name")
@@ -148,7 +169,12 @@ async def deliver_booking_cancelled_email(
         if ctx.booking.status is not BookingStatus.CANCELLED:
             raise BookingNotificationSkip(f"booking_status_{ctx.booking.status.value}")
 
-        start_at_local = format_booking_start_local(ctx.booking.start_at, ctx.master.timezone)
+        recipient_timezone = await _timezone_for_audience(
+            session=session,
+            ctx=ctx,
+            delivery_options=delivery_options,
+        )
+        start_at_local = format_booking_start_local(ctx.booking.start_at, recipient_timezone)
         if delivery_options.audience == BOOKING_EMAIL_AUDIENCE_MASTER:
             if not delivery_options.client_display_name:
                 raise BookingNotificationSkip("missing_client_display_name")
@@ -210,9 +236,14 @@ async def deliver_booking_moved_email(
         if not previous_start_at_iso:
             raise BookingNotificationSkip("missing_previous_start_at")
 
-        start_at_local = format_booking_start_local(ctx.booking.start_at, ctx.master.timezone)
+        recipient_timezone = await _timezone_for_audience(
+            session=session,
+            ctx=ctx,
+            delivery_options=delivery_options,
+        )
+        start_at_local = format_booking_start_local(ctx.booking.start_at, recipient_timezone)
         previous_start_at = datetime.fromisoformat(previous_start_at_iso)
-        previous_start_at_local = format_booking_start_local(previous_start_at, ctx.master.timezone)
+        previous_start_at_local = format_booking_start_local(previous_start_at, recipient_timezone)
 
         if delivery_options.audience == BOOKING_EMAIL_AUDIENCE_MASTER:
             if not delivery_options.client_display_name:
