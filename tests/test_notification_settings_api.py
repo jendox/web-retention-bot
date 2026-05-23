@@ -155,6 +155,93 @@ def test_master_notification_settings_telegram_bot_link_request() -> None:
         raise
 
 
+def test_notification_settings_unknown_topic_uses_app_error_contract() -> None:
+    email = f"notify_topic_{uuid.uuid4().hex[:8]}@example.com"
+    try:
+        with TestClient(app) as client:
+            _register_verified_client(client, email=email)
+
+            resp = client.patch(
+                "/api/client/notification-settings/me",
+                json={"topics": [{"id": "unknown_topic", "channels": {"email": False}}]},
+                headers=_csrf_headers(client),
+            )
+
+            assert resp.status_code == 400, resp.text
+            assert resp.json() == {
+                "code": "notification_settings.unknown_topic",
+                "detail": "Unknown notification topic",
+            }
+    except Exception as exc:
+        _skip_if_unreachable(exc)
+        raise
+
+
+def test_notification_settings_unknown_channel_uses_app_error_contract() -> None:
+    email = f"notify_channel_{uuid.uuid4().hex[:8]}@example.com"
+    try:
+        with TestClient(app) as client:
+            _register_verified_master(client, email=email)
+
+            resp = client.post(
+                "/api/master/notification-settings/channels/whatsapp/link",
+                json={},
+                headers=_csrf_headers(client),
+            )
+
+            assert resp.status_code == 400, resp.text
+            assert resp.json() == {
+                "code": "notification_settings.unknown_channel",
+                "detail": "Unknown notification channel",
+            }
+    except Exception as exc:
+        _skip_if_unreachable(exc)
+        raise
+
+
+def test_notification_settings_requires_channel_link_before_enable() -> None:
+    email = f"notify_link_{uuid.uuid4().hex[:8]}@example.com"
+    try:
+        with TestClient(app) as client:
+            _register_verified_master(client, email=email)
+
+            resp = client.patch(
+                "/api/master/notification-settings/me",
+                json={"topics": [{"id": "booking_events", "channels": {"telegram": True}}]},
+                headers=_csrf_headers(client),
+            )
+
+            assert resp.status_code == 400, resp.text
+            assert resp.json() == {
+                "code": "notification_settings.channel_not_linked",
+                "detail": "Notification channel must be linked before enabling notifications",
+            }
+    except Exception as exc:
+        _skip_if_unreachable(exc)
+        raise
+
+
+def test_notification_settings_email_cannot_be_unlinked() -> None:
+    email = f"notify_email_{uuid.uuid4().hex[:8]}@example.com"
+    try:
+        with TestClient(app) as client:
+            _register_verified_client(client, email=email)
+
+            resp = client.delete(
+                "/api/client/notification-settings/channels/email",
+                headers=_csrf_headers(client),
+            )
+
+            assert resp.status_code == 400, resp.text
+            assert resp.json() == {
+                "code": "notification_settings.email_required",
+                "detail": "Email channel cannot be disconnected",
+            }
+    except Exception as exc:
+        _skip_if_unreachable(exc)
+        raise
+
+
 @pytest.mark.asyncio
 async def test_delivery_channels_respects_disabled_email_pref() -> None:
     user_id = uuid.uuid4()

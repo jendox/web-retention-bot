@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from app.models.notifications import DeliveryChannel, NotificationEventType, PreferenceCategory
 
-CabinetKind = str  # "client" | "master"
+type CabinetKind = Literal["client", "master"]
 
 
 @dataclass(frozen=True)
