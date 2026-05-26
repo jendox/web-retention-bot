@@ -4,13 +4,20 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db_session
-from app.models import NotificationDelivery, NotificationEvent, UserNotification
-from app.models.notifications import DeliveryChannel, DeliveryStatus, NotificationEventType
+from app.models import NotificationDelivery, NotificationEvent, ScheduledNotification, UserNotification
+from app.models.notifications import (
+    DeliveryChannel,
+    DeliveryStatus,
+    NotificationEventType,
+    ScheduledNotificationPurpose,
+    ScheduledNotificationStatus,
+)
 from app.repositories.base import BaseRepository
 from app.repositories.notification_cabinet import (
     notification_belongs_to_client_cabinet,
@@ -50,6 +57,15 @@ class NotificationDeliveryCreate:
     status: DeliveryStatus
     scheduled_at: datetime
     notification_channel_id: UUID | None = None
+
+
+@dataclass(frozen=True)
+class ScheduledNotificationCreate:
+    booking_id: UUID
+    purpose: ScheduledNotificationPurpose
+    fire_at: datetime
+    recipient_user_id: UUID | None = None
+    recipient_client_id: UUID | None = None
 
 
 class NotificationEventRepository(BaseRepository):
@@ -177,6 +193,48 @@ class NotificationDeliveryRepository(BaseRepository):
         return result.scalar_one_or_none()
 
 
+class ScheduledNotificationRepository(BaseRepository):
+    async def upsert(self, payload: ScheduledNotificationCreate) -> ScheduledNotification:
+        stmt = insert(ScheduledNotification).values(
+            booking_id=payload.booking_id,
+            purpose=payload.purpose,
+            fire_at=payload.fire_at,
+            status=ScheduledNotificationStatus.PENDING,
+            recipient_user_id=payload.recipient_user_id,
+            recipient_client_id=payload.recipient_client_id,
+        )
+
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[
+                ScheduledNotification.booking_id,
+                ScheduledNotification.purpose,
+            ],
+            set_={
+                "fire_at": stmt.excluded.fire_at,
+                "status": stmt.excluded.status,
+                "user_notification_id": None,
+                "recipient_user_id": stmt.excluded.recipient_user_id,
+                "recipient_client_id": stmt.excluded.recipient_client_id,
+            },
+        ).returning(ScheduledNotification)
+
+        result = await self.session.execute(stmt)
+
+        return result.scalar_one()
+
+    async def cancel_pending_for_booking(self, booking_id: UUID) -> int:
+        stmt = (
+            update(ScheduledNotification)
+            .where(
+                ScheduledNotification.booking_id == booking_id,
+                ScheduledNotification.status == ScheduledNotificationStatus.PENDING,
+            )
+            .values(status=ScheduledNotificationStatus.CANCELLED)
+        )
+        result = await self.session.execute(stmt)
+        return result.rowcount or 0
+
+
 def get_notification_event_repo(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> NotificationEventRepository:
@@ -193,3 +251,9 @@ def get_notification_delivery_repo(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> NotificationDeliveryRepository:
     return NotificationDeliveryRepository(session)
+
+
+def get_scheduled_notification_repo(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ScheduledNotificationRepository:
+    return ScheduledNotificationRepository(session)

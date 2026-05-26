@@ -30,6 +30,7 @@ from app.use_cases.booking.master import (
     RescheduleMasterBookingUseCase,
     get_create_master_booking_use_case,
 )
+from app.use_cases.booking.master.schemas import MasterBookingUseCaseReposDeps
 
 
 def _booking(**overrides):
@@ -111,6 +112,15 @@ class FakeBookingRepository:
         self.flushed = True
 
 
+class FakeScheduledNotificationRepository:
+    def __init__(self):
+        self.scheduled = []
+
+    async def upsert(self, payload):
+        self.scheduled.append(payload)
+        return payload
+
+
 async def test_create_booking_creates_snapshot_when_slot_is_available():
     master_id = uuid.uuid4()
     client_id = uuid.uuid4()
@@ -150,10 +160,13 @@ async def test_create_booking_creates_snapshot_when_slot_is_available():
     booking_repo = FakeBookingRepository()
     dispatcher = SimpleNamespace(dispatch_booking_created=AsyncMock())
     use_case = CreateMasterBookingUseCase(
-        user_repo=FakeUserRepository(),
-        client_repo=FakeClientRepository(),
-        service_repo=FakeServiceRepository(),
-        booking_repo=booking_repo,
+        MasterBookingUseCaseReposDeps(
+            user_repo=FakeUserRepository(),
+            client_repo=FakeClientRepository(),
+            service_repo=FakeServiceRepository(),
+            booking_repo=booking_repo,
+            scheduled_notifications_repo=FakeScheduledNotificationRepository(),
+        ),
         available_slots_use_case=FakeAvailableSlotsUseCase(),
         dispatcher=dispatcher,
     )

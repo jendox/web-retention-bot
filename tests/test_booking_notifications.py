@@ -31,6 +31,7 @@ from app.services.notifications.mail_render import (
 )
 from app.services.notifications.recipients import resolve_booking_client_recipient, resolve_booking_master_recipient
 from app.use_cases.booking import CancelMasterBookingUseCase, CreateMasterBookingUseCase, RescheduleMasterBookingUseCase
+from app.use_cases.booking.master.schemas import MasterBookingUseCaseReposDeps
 
 
 @pytest.fixture
@@ -137,6 +138,15 @@ class _FakeNotificationRepos:
         delivery = SimpleNamespace(id=uuid.uuid4(), sent_at=None, **data.__dict__)
         self.deliveries.append(delivery)
         return delivery
+
+
+class _FakeScheduledNotificationRepository:
+    def __init__(self) -> None:
+        self.scheduled: list = []
+
+    async def upsert(self, payload):
+        self.scheduled.append(payload)
+        return payload
 
 
 async def test_dispatch_booking_created_persists_event_note_and_delivery(mail_settings: Settings) -> None:
@@ -316,10 +326,13 @@ async def test_create_booking_notifies_linked_verified_client() -> None:
     dispatcher = SimpleNamespace(dispatch_booking_created=AsyncMock())
 
     use_case = CreateMasterBookingUseCase(
-        user_repo=FakeUserRepository(),
-        client_repo=FakeClientRepository(),
-        service_repo=FakeServiceRepository(),
-        booking_repo=FakeBookingRepository(),
+        MasterBookingUseCaseReposDeps(
+            user_repo=FakeUserRepository(),
+            client_repo=FakeClientRepository(),
+            service_repo=FakeServiceRepository(),
+            booking_repo=FakeBookingRepository(),
+            scheduled_notifications_repo=_FakeScheduledNotificationRepository(),
+        ),
         available_slots_use_case=FakeAvailableSlotsUseCase(),
         dispatcher=dispatcher,
     )
@@ -385,10 +398,13 @@ async def test_create_booking_skips_notification_without_linked_user() -> None:
     dispatcher = SimpleNamespace(dispatch_booking_created=AsyncMock())
 
     use_case = CreateMasterBookingUseCase(
-        user_repo=FakeUserRepository(),
-        client_repo=FakeClientRepository(),
-        service_repo=FakeServiceRepository(),
-        booking_repo=FakeBookingRepository(),
+        MasterBookingUseCaseReposDeps(
+            user_repo=FakeUserRepository(),
+            client_repo=FakeClientRepository(),
+            service_repo=FakeServiceRepository(),
+            booking_repo=FakeBookingRepository(),
+            scheduled_notifications_repo=_FakeScheduledNotificationRepository(),
+        ),
         available_slots_use_case=FakeAvailableSlotsUseCase(),
         dispatcher=dispatcher,
     )

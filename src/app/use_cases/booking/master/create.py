@@ -1,27 +1,24 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends
 
 from app.core.structured_logging import get_logger, log_context
+from app.models import Client
 from app.models.booking import Booking, BookingStatus
 from app.models.master import MasterProfile
 from app.models.service import Service
-from app.repositories.bookings import BookingRepository, get_booking_repo
-from app.repositories.clients import ClientRepository, get_client_repo
-from app.repositories.services import ServiceRepository, get_service_repo
-from app.repositories.users import UserRepository, get_user_repo
 from app.schemas.booking import BookingCreate, BookingOut
+from app.services.notifications.booking_reminders import BookingReminderRecipient, schedule_booking_reminders
 from app.services.notifications.dispatcher import (
     BookingEmailContext,
     NotificationDispatcher,
     get_notification_dispatcher,
 )
 from app.services.notifications.mail_render import BOOKING_EMAIL_AUDIENCE_CLIENT, booking_created_in_app_copy
-from app.services.notifications.recipients import resolve_booking_client_recipient
+from app.services.notifications.recipients import BookingClientRecipient, resolve_booking_client_recipient
 from app.use_cases.booking.available_slots import (
     AvailableSlotsUseCase,
     get_available_slots_use_case,
@@ -31,6 +28,8 @@ from app.use_cases.booking.exceptions import (
     BookingServiceNotFoundError,
     BookingUnknownClientLinkageError,
 )
+from app.use_cases.booking.master.deps import get_master_booking_use_case_repos_deps
+from app.use_cases.booking.master.schemas import MasterBookingUseCaseReposDeps
 
 __all__ = ["CreateMasterBookingUseCase", "get_create_master_booking_use_case"]
 
@@ -40,17 +39,15 @@ logger = get_logger("app.booking")
 class CreateMasterBookingUseCase:
     def __init__(
         self,
-        user_repo: UserRepository,
-        client_repo: ClientRepository,
-        service_repo: ServiceRepository,
-        booking_repo: BookingRepository,
+        repos_deps: MasterBookingUseCaseReposDeps,
         available_slots_use_case: AvailableSlotsUseCase,
         dispatcher: NotificationDispatcher,
     ) -> None:
-        self._user_repo = user_repo
-        self._client_repo = client_repo
-        self._service_repo = service_repo
-        self._booking_repo = booking_repo
+        self._user_repo = repos_deps.user_repo
+        self._client_repo = repos_deps.client_repo
+        self._service_repo = repos_deps.service_repo
+        self._booking_repo = repos_deps.booking_repo
+        self._scheduled_notifications_repo = repos_deps.scheduled_notifications_repo
         self._available_slots_use_case = available_slots_use_case
         self._dispatcher = dispatcher
 
@@ -71,33 +68,39 @@ class CreateMasterBookingUseCase:
             logger.warning("failed", reason="unknown_client_linkage")
             raise BookingUnknownClientLinkageError()
 
-    async def _notify_recipients(
+    async def _schedule_client_booking_reminders(
         self,
         *,
+        booking: Booking,
         client_id: UUID,
-        master: MasterProfile,
-        service_name: str,
-        booking_id: UUID,
-        booking_start_at: datetime,
+        user_id: UUID,
     ) -> None:
-        client = await self._client_repo.get_client(client_id)
-        if client is None or client.user_id is None:
-            return
+        await schedule_booking_reminders(
+            repo=self._scheduled_notifications_repo,
+            booking=booking,
+            recipient=BookingReminderRecipient(
+                user_id=user_id,
+                client_id=client_id,
+            ),
+        )
 
-        user = await self._user_repo.get_by_id(client.user_id)
-        recipient = resolve_booking_client_recipient(client, user)
-        if recipient is None:
-            logger.warning("dispatch_booking.failed", reason="unresolved_booking_client_recipient")
-            return
-
+    async def _notify_client_booking_created(
+        self,
+        *,
+        booking: Booking,
+        master: MasterProfile,
+        client: Client,
+        service_name: str,
+        recipient: BookingClientRecipient,
+    ) -> None:
         title, body, link_url = booking_created_in_app_copy(
             master_display_name=master.display_name,
             service_name=service_name,
-            start_at=booking_start_at,
+            start_at=booking.start_at,
             recipient_timezone=client.timezone,
         )
         await self._dispatcher.dispatch_booking_created(
-            booking_id=booking_id,
+            booking_id=booking.id,
             master_profile_id=master.id,
             client_id=client.id,
             recipient=recipient,
@@ -107,6 +110,38 @@ class CreateMasterBookingUseCase:
                 link_url=link_url,
                 payload={"audience": BOOKING_EMAIL_AUDIENCE_CLIENT},
             ),
+        )
+
+    async def _process_client_booking_created(
+        self,
+        *,
+        client_id: UUID,
+        master: MasterProfile,
+        service_name: str,
+        booking: Booking,
+    ) -> None:
+        client = await self._client_repo.get_client(client_id)
+        if client is None or client.user_id is None:
+            return
+
+        user = await self._user_repo.get_by_id(client.user_id)
+        await self._schedule_client_booking_reminders(
+            booking=booking,
+            client_id=client.id,
+            user_id=client.user_id,
+        )
+
+        recipient = resolve_booking_client_recipient(client, user)
+        if recipient is None:
+            logger.warning("dispatch_booking.failed", reason="unresolved_booking_client_recipient")
+            return
+
+        await self._notify_client_booking_created(
+            booking=booking,
+            master=master,
+            client=client,
+            service_name=service_name,
+            recipient=recipient,
         )
 
     async def __call__(self, payload: BookingCreate, *, master: MasterProfile) -> BookingOut:
@@ -150,30 +185,23 @@ class CreateMasterBookingUseCase:
                 end_at=booking.end_at.isoformat(),
             )
 
-            await self._notify_recipients(
+            await self._process_client_booking_created(
                 client_id=payload.client_id,
                 master=master,
                 service_name=service.name,
-                booking_id=created.id,
-                booking_start_at=created.start_at,
+                booking=created,
             )
 
             return BookingOut.model_validate(created)
 
 
 def get_create_master_booking_use_case(
-    user_repo: Annotated[UserRepository, Depends(get_user_repo)],
-    client_repo: Annotated[ClientRepository, Depends(get_client_repo)],
-    service_repo: Annotated[ServiceRepository, Depends(get_service_repo)],
-    booking_repo: Annotated[BookingRepository, Depends(get_booking_repo)],
+    repos_deps: Annotated[MasterBookingUseCaseReposDeps, Depends(get_master_booking_use_case_repos_deps)],
     available_slots_use_case: Annotated[AvailableSlotsUseCase, Depends(get_available_slots_use_case)],
     dispatcher: Annotated[NotificationDispatcher, Depends(get_notification_dispatcher)],
 ) -> CreateMasterBookingUseCase:
     return CreateMasterBookingUseCase(
-        user_repo,
-        client_repo,
-        service_repo,
-        booking_repo,
+        repos_deps,
         available_slots_use_case,
         dispatcher,
     )
