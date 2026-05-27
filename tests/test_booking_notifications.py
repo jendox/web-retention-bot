@@ -143,10 +143,15 @@ class _FakeNotificationRepos:
 class _FakeScheduledNotificationRepository:
     def __init__(self) -> None:
         self.scheduled: list = []
+        self.cancelled_booking_ids: list = []
 
     async def upsert(self, payload):
         self.scheduled.append(payload)
         return payload
+
+    async def cancel_pending_for_booking(self, booking_id):
+        self.cancelled_booking_ids.append(booking_id)
+        return 1
 
 
 async def test_dispatch_booking_created_persists_event_note_and_delivery(mail_settings: Settings) -> None:
@@ -580,10 +585,13 @@ async def test_cancel_booking_notifies_linked_verified_client() -> None:
 
     dispatcher = SimpleNamespace(dispatch_booking_cancelled=AsyncMock())
     use_case = CancelMasterBookingUseCase(
-        FakeBookingRepo(),
-        FakeClientRepo(),
-        SimpleNamespace(get_for_master=AsyncMock(return_value=service)),
-        FakeUserRepo(),
+        MasterBookingUseCaseReposDeps(
+            user_repo=FakeUserRepo(),
+            client_repo=FakeClientRepo(),
+            service_repo=SimpleNamespace(get_for_master=AsyncMock(return_value=service)),
+            booking_repo=FakeBookingRepo(),
+            scheduled_notifications_repo=_FakeScheduledNotificationRepository(),
+        ),
         dispatcher,
     )
 
@@ -643,10 +651,13 @@ async def test_reschedule_booking_notifies_when_start_changes() -> None:
     slots_uc = AsyncMock(return_value=[SlotOut(start_at=new_start)])
     dispatcher = SimpleNamespace(dispatch_booking_moved=AsyncMock())
     use_case = RescheduleMasterBookingUseCase(
-        FakeBookingRepo(),
-        SimpleNamespace(get_for_master=AsyncMock(return_value=service)),
-        FakeClientRepo(),
-        FakeUserRepo(),
+        MasterBookingUseCaseReposDeps(
+            user_repo=FakeUserRepo(),
+            client_repo=FakeClientRepo(),
+            service_repo=SimpleNamespace(get_for_master=AsyncMock(return_value=service)),
+            booking_repo=FakeBookingRepo(),
+            scheduled_notifications_repo=_FakeScheduledNotificationRepository(),
+        ),
         slots_uc,
         dispatcher,
     )

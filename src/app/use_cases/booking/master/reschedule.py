@@ -8,16 +8,19 @@ from fastapi import Depends
 
 from app.core.structured_logging import get_logger, log_context
 from app.models import Booking, MasterProfile
-from app.repositories.bookings import BookingRepository, get_booking_repo
-from app.repositories.clients import ClientRepository, get_client_repo
-from app.repositories.services import ServiceRepository, get_service_repo
-from app.repositories.users import UserRepository, get_user_repo
 from app.schemas.booking import BookingOut, normalize_booking_comment
 from app.services.notifications.booking_client_notify import BookingClientNotifyContext, notify_client_booking_moved
+from app.services.notifications.booking_reminders import (
+    BookingReminderRecipient,
+    cancel_booking_reminders,
+    schedule_booking_reminders,
+)
 from app.services.notifications.dispatcher import NotificationDispatcher, get_notification_dispatcher
 from app.use_cases.booking.available_slots import AvailableSlotsUseCase, get_available_slots_use_case
 from app.use_cases.booking.common import ScheduleBookingContext, schedule_booking
+from app.use_cases.booking.master.deps import get_master_booking_use_case_repos_deps
 from app.use_cases.booking.master.mixins import MasterBookingMixin
+from app.use_cases.booking.master.schemas import MasterBookingUseCaseReposDeps
 
 __all__ = ["RescheduleMasterBookingUseCase", "get_reschedule_master_booking_use_case"]
 
@@ -27,17 +30,15 @@ logger = get_logger("app.booking")
 class RescheduleMasterBookingUseCase(MasterBookingMixin):
     def __init__(
         self,
-        booking_repo: BookingRepository,
-        service_repo: ServiceRepository,
-        client_repo: ClientRepository,
-        user_repo: UserRepository,
+        repos_deps: MasterBookingUseCaseReposDeps,
         available_slots_use_case: AvailableSlotsUseCase,
         dispatcher: NotificationDispatcher,
     ) -> None:
-        self._booking_repo = booking_repo
-        self._service_repo = service_repo
-        self._client_repo = client_repo
-        self._user_repo = user_repo
+        self._user_repo = repos_deps.user_repo
+        self._client_repo = repos_deps.client_repo
+        self._service_repo = repos_deps.service_repo
+        self._booking_repo = repos_deps.booking_repo
+        self._scheduled_notifications_repo = repos_deps.scheduled_notifications_repo
         self._available_slots_use_case = available_slots_use_case
         self._dispatcher = dispatcher
 
@@ -53,6 +54,33 @@ class RescheduleMasterBookingUseCase(MasterBookingMixin):
         booking.end_at = end_utc
         booking.reschedule_comment = normalize_booking_comment(comment)
         await self._booking_repo.flush()
+
+    async def _resolve_reminder_recipient(self, booking: Booking) -> BookingReminderRecipient | None:
+        if booking.client_id is None:
+            return None
+        client = await self._client_repo.get_client(booking.client_id)
+        if client is None or booking.client_id != client.id or client.user_id is None:
+            return None
+        return BookingReminderRecipient(user_id=client.user_id, client_id=client.id)
+
+    async def _reschedule_booking_reminders(self, booking: Booking) -> None:
+        await cancel_booking_reminders(
+            repo=self._scheduled_notifications_repo,
+            booking_id=booking.id,
+        )
+
+        recipient = await self._resolve_reminder_recipient(booking)
+        if recipient is None:
+            logger.warning(
+                "failed_reschedule_reminders",
+                reason="cannot_resolve_reminder_recipient",
+            )
+            return
+        await schedule_booking_reminders(
+            repo=self._scheduled_notifications_repo,
+            booking=booking,
+            recipient=recipient,
+        )
 
     async def __call__(
         self,
@@ -95,6 +123,7 @@ class RescheduleMasterBookingUseCase(MasterBookingMixin):
             logger.info("rescheduled", start_at=start_utc.isoformat(), end_at=end_utc.isoformat())
 
             if start_utc != previous_start_at:
+                await self._reschedule_booking_reminders(booking)
                 await notify_client_booking_moved(
                     BookingClientNotifyContext(
                         dispatcher=self._dispatcher,
@@ -111,18 +140,8 @@ class RescheduleMasterBookingUseCase(MasterBookingMixin):
 
 
 def get_reschedule_master_booking_use_case(
-    booking_repo: Annotated[BookingRepository, Depends(get_booking_repo)],
-    service_repo: Annotated[ServiceRepository, Depends(get_service_repo)],
-    client_repo: Annotated[ClientRepository, Depends(get_client_repo)],
-    user_repo: Annotated[UserRepository, Depends(get_user_repo)],
+    repos_deps: Annotated[MasterBookingUseCaseReposDeps, Depends(get_master_booking_use_case_repos_deps)],
     available_slots_use_case: Annotated[AvailableSlotsUseCase, Depends(get_available_slots_use_case)],
     dispatcher: Annotated[NotificationDispatcher, Depends(get_notification_dispatcher)],
 ) -> RescheduleMasterBookingUseCase:
-    return RescheduleMasterBookingUseCase(
-        booking_repo,
-        service_repo,
-        client_repo,
-        user_repo,
-        available_slots_use_case,
-        dispatcher,
-    )
+    return RescheduleMasterBookingUseCase(repos_deps, available_slots_use_case, dispatcher)

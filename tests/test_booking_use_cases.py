@@ -115,10 +115,15 @@ class FakeBookingRepository:
 class FakeScheduledNotificationRepository:
     def __init__(self):
         self.scheduled = []
+        self.cancelled_booking_ids = []
 
     async def upsert(self, payload):
         self.scheduled.append(payload)
         return payload
+
+    async def cancel_pending_for_booking(self, booking_id):
+        self.cancelled_booking_ids.append(booking_id)
+        return 1
 
 
 async def test_create_booking_creates_snapshot_when_slot_is_available():
@@ -231,11 +236,17 @@ async def test_cancel_booking_marks_booking_cancelled_and_flushes():
     booking_repo = FakeBookingRepository(booking)
     master = SimpleNamespace(id=master_id, display_name="Master", public_slug=None, timezone="UTC")
     dispatcher = SimpleNamespace()
+    service_repo = SimpleNamespace(
+        get_for_master=AsyncMock(return_value=SimpleNamespace(id=uuid.uuid4(), name="Услуга")),
+    )
     use_case = CancelMasterBookingUseCase(
-        booking_repo,
-        SimpleNamespace(get_client=AsyncMock(return_value=None)),
-        SimpleNamespace(get_for_master=AsyncMock(return_value=SimpleNamespace(id=uuid.uuid4(), name="Услуга"))),
-        SimpleNamespace(),
+        MasterBookingUseCaseReposDeps(
+            user_repo=SimpleNamespace(),
+            client_repo=SimpleNamespace(get_client=AsyncMock(return_value=None)),
+            service_repo=service_repo,
+            booking_repo=booking_repo,
+            scheduled_notifications_repo=FakeScheduledNotificationRepository(),
+        ),
         dispatcher,
     )
 
@@ -261,10 +272,13 @@ async def test_reschedule_booking_rejects_unavailable_slot():
             return []
 
     use_case = RescheduleMasterBookingUseCase(
-        FakeBookingRepository(booking),
-        FakeServiceRepository(),
-        SimpleNamespace(get_client=AsyncMock(return_value=None)),
-        SimpleNamespace(),
+        MasterBookingUseCaseReposDeps(
+            user_repo=SimpleNamespace(),
+            client_repo=SimpleNamespace(get_client=AsyncMock(return_value=None)),
+            service_repo=FakeServiceRepository(),
+            booking_repo=FakeBookingRepository(booking),
+            scheduled_notifications_repo=FakeScheduledNotificationRepository(),
+        ),
         FakeAvailableSlotsUseCase(),
         SimpleNamespace(),
     )

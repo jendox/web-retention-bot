@@ -45,7 +45,7 @@ EMAIL_VERIFY_DEDUP = "email_verify:user:{user_id}"
 EMAIL_PASSWORD_RESET_DEDUP = "email_password_reset:user:{user_id}:{request_id}"
 BOOKING_CREATED_DEDUP = "booking_created:booking:{booking_id}:user:{user_id}"
 BOOKING_CANCELLED_DEDUP = "booking_cancelled:booking:{booking_id}:user:{user_id}"
-BOOKING_MOVED_DEDUP = "booking_moved:booking:{booking_id}:user:{user_id}:{start_at_iso}"
+BOOKING_MOVED_DEDUP = "booking_moved:booking:{booking_id}:user:{user_id}:{previous_start_at_iso}:{start_at_iso}"
 
 logger = get_logger("app.notifications.dispatcher")
 
@@ -503,6 +503,7 @@ class NotificationDispatcher:
                         booking_id=booking_id,
                         user_id=recipient.user_id,
                         start_at_iso=payload["new_start_at"],
+                        previous_start_at_iso=payload["previous_start_at"],
                     ),
                 ),
             )
