@@ -18,7 +18,7 @@ from app.use_cases.booking.client import (
     CreateClientBookingUseCase,
     RescheduleClientBookingUseCase,
 )
-from app.use_cases.booking.client.schemas import ClientBookingUseCaseDeps
+from app.use_cases.booking.client.schemas import ClientBookingUseCaseReposDeps
 from app.use_cases.booking.exceptions import BookingNotFoundError, BookingNotLinkedToMasterError
 
 
@@ -50,11 +50,16 @@ def _booking_deps(
     master_user_id: uuid.UUID,
     slots_uc=None,
 ):
-    return ClientBookingUseCaseDeps(
-        master_repo=master_repo,
-        client_repo=client_repo,
-        service_repo=service_repo,
-        booking_repo=booking_repo,
+    dispatcher = SimpleNamespace(
+        dispatch_booking_created=AsyncMock(),
+        dispatch_booking_cancelled=AsyncMock(),
+        dispatch_booking_moved=AsyncMock(),
+    )
+    scheduled_notifications_repo = SimpleNamespace(
+        upsert=AsyncMock(side_effect=lambda payload: payload),
+        cancel_pending_for_booking=AsyncMock(return_value=1),
+    )
+    repos_deps = ClientBookingUseCaseReposDeps(
         user_repo=SimpleNamespace(
             get_by_id=AsyncMock(
                 return_value=SimpleNamespace(
@@ -64,12 +69,17 @@ def _booking_deps(
                 ),
             ),
         ),
-        dispatcher=SimpleNamespace(
-            dispatch_booking_created=AsyncMock(),
-            dispatch_booking_cancelled=AsyncMock(),
-            dispatch_booking_moved=AsyncMock(),
-        ),
-        available_slots_use_case=slots_uc,
+        master_repo=master_repo,
+        client_repo=client_repo,
+        service_repo=service_repo,
+        booking_repo=booking_repo,
+        scheduled_notifications_repo=scheduled_notifications_repo,
+    )
+    return SimpleNamespace(
+        repos_deps=repos_deps,
+        dispatcher=dispatcher,
+        slots_uc=slots_uc,
+        scheduled_notifications_repo=scheduled_notifications_repo,
     )
 
 
@@ -131,7 +141,7 @@ async def test_create_client_booking_success() -> None:
         master_user_id=master_user_id,
         slots_uc=slots_uc,
     )
-    uc = CreateClientBookingUseCase(deps)
+    uc = CreateClientBookingUseCase(deps.repos_deps, deps.slots_uc, deps.dispatcher)
     result = await uc(
         ClientBookingCreate(master_id=master_id, service_id=service_id, start_at=start_at),
         user=SimpleNamespace(id=user_id),
@@ -143,26 +153,25 @@ async def test_create_client_booking_success() -> None:
 
 @pytest.mark.asyncio
 async def test_create_client_booking_requires_link() -> None:
-    uc = CreateClientBookingUseCase(
-        _booking_deps(
-            master_repo=SimpleNamespace(
-                get_by_master_id=AsyncMock(
-                    return_value=SimpleNamespace(
-                        id=uuid.uuid4(),
-                        user_id=uuid.uuid4(),
-                        display_name="M",
-                        timezone="UTC",
-                        public_slug=None,
-                    ),
+    deps = _booking_deps(
+        master_repo=SimpleNamespace(
+            get_by_master_id=AsyncMock(
+                return_value=SimpleNamespace(
+                    id=uuid.uuid4(),
+                    user_id=uuid.uuid4(),
+                    display_name="M",
+                    timezone="UTC",
+                    public_slug=None,
                 ),
             ),
-            client_repo=SimpleNamespace(get_linked_client_for_master_user=AsyncMock(return_value=None)),
-            service_repo=SimpleNamespace(),
-            booking_repo=SimpleNamespace(),
-            master_user_id=uuid.uuid4(),
-            slots_uc=AsyncMock(),
         ),
+        client_repo=SimpleNamespace(get_linked_client_for_master_user=AsyncMock(return_value=None)),
+        service_repo=SimpleNamespace(),
+        booking_repo=SimpleNamespace(),
+        master_user_id=uuid.uuid4(),
+        slots_uc=AsyncMock(),
     )
+    uc = CreateClientBookingUseCase(deps.repos_deps, deps.slots_uc, deps.dispatcher)
     with pytest.raises(BookingNotLinkedToMasterError):
         await uc(
             ClientBookingCreate(master_id=uuid.uuid4(), service_id=uuid.uuid4(), start_at=datetime.now(UTC)),
@@ -197,7 +206,7 @@ async def test_cancel_client_booking() -> None:
         booking_repo=FakeBookingRepo(),
         master_user_id=master_user_id,
     )
-    await CancelClientBookingUseCase(deps)(
+    await CancelClientBookingUseCase(deps.repos_deps, deps.dispatcher)(
         user=SimpleNamespace(id=user_id),
         booking_id=booking.id,
         comment="  Не смогу  ",
@@ -239,13 +248,16 @@ async def test_reschedule_client_booking() -> None:
 
     deps = _booking_deps(
         master_repo=SimpleNamespace(get_by_master_id=AsyncMock(return_value=master)),
-        client_repo=SimpleNamespace(get_link_with_client=AsyncMock(return_value=(link, client))),
+        client_repo=SimpleNamespace(
+            get_client=AsyncMock(return_value=SimpleNamespace(id=booking.client_id, user_id=user_id)),
+            get_link_with_client=AsyncMock(return_value=(link, client)),
+        ),
         service_repo=SimpleNamespace(get_for_master=AsyncMock(return_value=service)),
         booking_repo=FakeBookingRepo(),
         master_user_id=master_user_id,
         slots_uc=AsyncMock(return_value=[SlotOut(start_at=new_start)]),
     )
-    uc = RescheduleClientBookingUseCase(deps)
+    uc = RescheduleClientBookingUseCase(deps.repos_deps, deps.slots_uc, deps.dispatcher)
     result = await uc(
         user=SimpleNamespace(id=user_id),
         booking_id=booking.id,
@@ -261,15 +273,14 @@ async def test_reschedule_client_booking() -> None:
 @pytest.mark.asyncio
 async def test_cancel_client_booking_not_found() -> None:
     with pytest.raises(BookingNotFoundError):
-        await CancelClientBookingUseCase(
-            _booking_deps(
-                master_repo=SimpleNamespace(),
-                client_repo=SimpleNamespace(),
-                service_repo=SimpleNamespace(),
-                booking_repo=SimpleNamespace(get_for_user=AsyncMock(return_value=None)),
-                master_user_id=uuid.uuid4(),
-            ),
-        )(
+        deps = _booking_deps(
+            master_repo=SimpleNamespace(),
+            client_repo=SimpleNamespace(),
+            service_repo=SimpleNamespace(),
+            booking_repo=SimpleNamespace(get_for_user=AsyncMock(return_value=None)),
+            master_user_id=uuid.uuid4(),
+        )
+        await CancelClientBookingUseCase(deps.repos_deps, deps.dispatcher)(
             user=SimpleNamespace(id=uuid.uuid4()),
             booking_id=uuid.uuid4(),
         )
