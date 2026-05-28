@@ -22,12 +22,14 @@ from app.services.notifications.mail_render import (
     BookingCreatedMasterEmailRenderContext,
     BookingMovedEmailRenderContext,
     BookingMovedMasterEmailRenderContext,
+    BookingReminderEmailRenderContext,
     render_booking_cancelled,
     render_booking_cancelled_master,
     render_booking_created,
     render_booking_created_master,
     render_booking_moved,
     render_booking_moved_master,
+    render_booking_reminder,
 )
 
 logger = get_logger("app.mail")
@@ -283,4 +285,49 @@ async def deliver_booking_moved_email(
             text_body=text_body,
             html_body=html_body,
             log_sent_event=log_event,
+        )
+
+
+async def deliver_booking_reminder_email(
+    *,
+    settings: Settings,
+    session: AsyncSession,
+    booking_id: UUID,
+    to_email: str,
+    options: BookingEmailDeliveryOptions | None = None,
+) -> None:
+    delivery_options = options or BookingEmailDeliveryOptions()
+    with log_context(
+        use_case="deliver_booking_reminder_email",
+        booking_id=str(booking_id),
+        audience=delivery_options.audience,
+    ):
+        ctx = await _load_booking_mail_context(settings=settings, session=session, booking_id=booking_id)
+        if ctx.booking.status is not BookingStatus.SCHEDULED:
+            raise BookingNotificationSkip(f"booking_status_{ctx.booking.status.value}")
+
+        recipient_timezone = await _timezone_for_audience(
+            session=session,
+            ctx=ctx,
+            delivery_options=delivery_options,
+        )
+        start_at_local = format_booking_start_local(ctx.booking.start_at, recipient_timezone)
+        subject, text_body, html_body = render_booking_reminder(
+            BookingReminderEmailRenderContext(
+                recipient_email=to_email,
+                master_name=ctx.master.display_name,
+                service_name=ctx.service.name,
+                start_at_local=start_at_local,
+                duration_min=ctx.booking.duration_min,
+                cabinet_url=f"{ctx.client_cabinet_url.rstrip('/')}/visits",
+            ),
+        )
+
+        await send_multipart_email(
+            settings=settings,
+            to_email=to_email,
+            subject=subject,
+            text_body=text_body,
+            html_body=html_body,
+            log_sent_event="email.booking_reminder.sent",
         )

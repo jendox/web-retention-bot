@@ -12,22 +12,40 @@ import pytest
 
 from app.core.config import Settings
 from app.models.booking import BookingStatus
-from app.models.notifications.enums import DeliveryChannel, DeliveryStatus, NotificationEventType
+from app.models.notifications.enums import (
+    DeliveryChannel,
+    DeliveryStatus,
+    NotificationEventType,
+    ScheduledNotificationPurpose,
+)
 from app.schemas.availability import SlotOut
 from app.schemas.booking import BookingCreate, BookingOut
-from app.services.notifications.booking_mail import BookingNotificationSkip, deliver_booking_created_email
+from app.services.notifications import tasks as notification_tasks
+from app.services.notifications.booking_mail import (
+    BookingEmailDeliveryOptions,
+    BookingNotificationSkip,
+    deliver_booking_created_email,
+    deliver_booking_reminder_email,
+)
 from app.services.notifications.datetime_format import format_booking_start_local
-from app.services.notifications.dispatcher import BookingEmailContext, NotificationDispatcher
+from app.services.notifications.dispatcher import (
+    BookingEmailContext,
+    BookingNotificationDispatchContext,
+    NotificationDispatcher,
+)
 from app.services.notifications.mail_render import (
     BookingCancelledEmailRenderContext,
     BookingMovedEmailRenderContext,
+    BookingReminderEmailRenderContext,
     append_master_comment_to_body,
     booking_cancelled_in_app_copy,
     booking_created_in_app_copy,
     booking_moved_in_app_copy,
+    booking_reminder_in_app_copy,
     render_booking_cancelled,
     render_booking_created,
     render_booking_moved,
+    render_booking_reminder,
 )
 from app.services.notifications.recipients import resolve_booking_client_recipient, resolve_booking_master_recipient
 from app.use_cases.booking import CancelMasterBookingUseCase, CreateMasterBookingUseCase, RescheduleMasterBookingUseCase
@@ -114,6 +132,41 @@ def test_booking_created_in_app_copy() -> None:
     assert link_url.endswith("/client")
 
 
+def test_render_booking_reminder_templates() -> None:
+    subject, text_body, html_body = render_booking_reminder(
+        BookingReminderEmailRenderContext(
+            recipient_email="c@example.com",
+            master_name="Studio",
+            service_name="Стрижка",
+            start_at_local="среда, 20 мая 2026 г., 10:00",
+            duration_min=45,
+            cabinet_url="https://frontend.test/client/visits",
+        ),
+    )
+
+    assert "Напоминание" in subject
+    assert "Studio" in text_body
+    assert "Стрижка" in html_body
+    assert "https://frontend.test/client/visits" in html_body
+
+
+def test_booking_reminder_in_app_copy() -> None:
+    start_at = datetime(2026, 5, 20, 10, 0, tzinfo=UTC)
+    title, body, link_url = booking_reminder_in_app_copy(
+        master_display_name="Master",
+        service_name="Услуга",
+        start_at=start_at,
+        recipient_timezone="Europe/Warsaw",
+    )
+
+    assert title == "Напоминание о записи"
+    assert "Master" in body
+    assert "Услуга" in body
+    assert "12:00" in body
+    assert link_url is not None
+    assert link_url.endswith("/client/visits")
+
+
 class _FakeNotificationRepos:
     def __init__(self) -> None:
         self.events: list = []
@@ -172,20 +225,25 @@ async def test_dispatch_booking_created_persists_event_note_and_delivery(mail_se
         ),
         patch.object(dispatcher, "_deliver_delivery", new_callable=AsyncMock) as mock_deliver,
     ):
-        await dispatcher.dispatch_booking_created(
-            booking_id=booking_id,
-            master_profile_id=uuid.uuid4(),
-            client_id=uuid.uuid4(),
-            recipient=recipient,
-            email_ctx=BookingEmailContext(
-                title="Новая запись",
-                body="body",
-                link_url="https://frontend.test/client",
-                payload={},
+        result = await dispatcher.dispatch_booking_created(
+            ctx=BookingNotificationDispatchContext(
+                booking_id=booking_id,
+                master_profile_id=uuid.uuid4(),
+                client_id=uuid.uuid4(),
+                recipient=recipient,
+                email_ctx=BookingEmailContext(
+                    title="Новая запись",
+                    body="body",
+                    link_url="https://frontend.test/client",
+                    payload={},
+                ),
             ),
         )
 
     mock_deliver.assert_awaited_once()
+    assert result.event == fake.events[0]
+    assert result.user_notification == fake.notes[0]
+    assert result.deliveries == fake.deliveries
     assert len(fake.events) == 1
     assert fake.events[0].type == NotificationEventType.BOOKING_CREATED
     assert len(fake.notes) == 1
@@ -193,6 +251,60 @@ async def test_dispatch_booking_created_persists_event_note_and_delivery(mail_se
     assert len(fake.deliveries) == 1
     assert fake.deliveries[0].channel == DeliveryChannel.EMAIL
     assert fake.deliveries[0].status == DeliveryStatus.SENT
+
+
+async def test_dispatch_booking_reminder_persists_event_note_and_delivery(mail_settings: Settings) -> None:
+    session = AsyncMock()
+    dispatcher = NotificationDispatcher(mail_settings, session)
+    fake = _FakeNotificationRepos()
+    dispatcher._notification_event_repo = SimpleNamespace(create=fake.create_event)
+    dispatcher._user_notification_repo = SimpleNamespace(create=fake.create_note)
+    dispatcher._notification_delivery_repo = SimpleNamespace(create=fake.create_delivery)
+
+    booking_id = uuid.uuid4()
+    fire_at = datetime(2026, 5, 20, 9, 0, tzinfo=UTC)
+    recipient = SimpleNamespace(user_id=uuid.uuid4(), email="client@example.com")
+
+    with (
+        patch(
+            "app.services.notifications.dispatcher.delivery_channels_for_user",
+            AsyncMock(return_value=[DeliveryChannel.EMAIL, DeliveryChannel.TELEGRAM]),
+        ) as mock_channels,
+        patch.object(dispatcher, "_deliver_delivery", new_callable=AsyncMock) as mock_deliver,
+    ):
+        result = await dispatcher.dispatch_booking_reminder(
+            ctx=BookingNotificationDispatchContext(
+                booking_id=booking_id,
+                master_profile_id=uuid.uuid4(),
+                client_id=uuid.uuid4(),
+                recipient=recipient,
+                email_ctx=BookingEmailContext(
+                    title="Напоминание о записи",
+                    body="body",
+                    link_url="https://frontend.test/client/visits",
+                    payload={"audience": "client"},
+                ),
+            ),
+            purpose=ScheduledNotificationPurpose.REMINDER_1H,
+            fire_at=fire_at,
+        )
+
+    mock_channels.assert_awaited_once_with(
+        dispatcher._preference_repo,
+        user_id=recipient.user_id,
+        event_type=NotificationEventType.REMINDER_BEFORE_VISIT,
+    )
+    assert mock_deliver.await_count == 2
+    assert result.user_notification == fake.notes[0]
+    assert result.deliveries == fake.deliveries
+    assert fake.events[0].type == NotificationEventType.REMINDER_BEFORE_VISIT
+    assert fake.notes[0].event_type == NotificationEventType.REMINDER_BEFORE_VISIT
+    assert fake.notes[0].dedup_key == (
+        f"booking_reminder:booking:{booking_id}:user:{recipient.user_id}:"
+        f"purpose:{ScheduledNotificationPurpose.REMINDER_1H.value}:{fire_at.isoformat()}"
+    )
+    assert fake.notes[0].payload["reminder_purpose"] == ScheduledNotificationPurpose.REMINDER_1H.value
+    assert [delivery.channel for delivery in fake.deliveries] == [DeliveryChannel.EMAIL, DeliveryChannel.TELEGRAM]
 
 
 async def test_deliver_booking_created_email_skips_non_scheduled() -> None:
@@ -236,6 +348,100 @@ async def test_deliver_booking_created_email_skips_non_scheduled() -> None:
             booking_id=booking_id,
             to_email="c@example.com",
         )
+
+
+async def test_deliver_booking_reminder_email_skips_non_scheduled() -> None:
+    booking_id = uuid.uuid4()
+    master_id = uuid.uuid4()
+    service_id = uuid.uuid4()
+    booking = SimpleNamespace(
+        id=booking_id,
+        master_id=master_id,
+        service_id=service_id,
+        client_id=uuid.uuid4(),
+        status=BookingStatus.CANCELLED,
+        start_at=datetime.now(UTC),
+        duration_min=30,
+    )
+    master = SimpleNamespace(id=master_id, display_name="Master", timezone="UTC")
+    service = SimpleNamespace(id=service_id, name="Стрижка")
+    session = AsyncMock()
+
+    async def get_entity(model, entity_id):
+        if model.__name__ == "Booking":
+            return booking
+        if model.__name__ == "MasterProfile":
+            return master
+        if model.__name__ == "Service":
+            return service
+        return None
+
+    session.get = get_entity
+    settings = Settings.model_validate(
+        {
+            "celery": {"broker_url": "redis://x", "result_backend": "redis://x"},
+            "security": {"frontend_public_origin": "https://app.test"},
+            "smtp": {"enabled": False},
+        },
+    )
+
+    with pytest.raises(BookingNotificationSkip, match="booking_status"):
+        await deliver_booking_reminder_email(
+            settings=settings,
+            session=session,
+            booking_id=booking_id,
+            to_email="c@example.com",
+            options=BookingEmailDeliveryOptions(),
+        )
+
+
+async def test_process_booking_reminder_email_marks_delivery_sent(mail_settings: Settings) -> None:
+    booking_id = uuid.uuid4()
+    delivery = SimpleNamespace(
+        status=DeliveryStatus.PENDING,
+        error_message=None,
+        sent_at=None,
+        user_notification=SimpleNamespace(
+            payload={
+                "booking_id": str(booking_id),
+                "to_email": "client@example.com",
+                "audience": "client",
+            },
+        ),
+    )
+    session = object()
+
+    class WorkerSession:
+        async def __aenter__(self):
+            return session
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    with (
+        patch.object(notification_tasks, "worker_db_session", return_value=WorkerSession()),
+        patch.object(notification_tasks, "deliver_booking_reminder_email", new_callable=AsyncMock) as mock_deliver,
+    ):
+        await notification_tasks._process_booking_reminder_email(mail_settings, delivery)
+
+    mock_deliver.assert_awaited_once()
+    assert mock_deliver.await_args.kwargs["session"] is session
+    assert mock_deliver.await_args.kwargs["booking_id"] == booking_id
+    assert delivery.status == DeliveryStatus.SENT
+    assert delivery.sent_at is not None
+
+
+async def test_process_booking_reminder_email_fails_without_email(mail_settings: Settings) -> None:
+    delivery = SimpleNamespace(
+        status=DeliveryStatus.PENDING,
+        error_message=None,
+        user_notification=SimpleNamespace(payload={"booking_id": str(uuid.uuid4())}),
+    )
+
+    await notification_tasks._process_booking_reminder_email(mail_settings, delivery)
+
+    assert delivery.status == DeliveryStatus.FAILED
+    assert delivery.error_message == "missing to_email"
 
 
 async def test_deliver_booking_created_email_uses_client_timezone(mail_settings: Settings) -> None:
@@ -355,9 +561,10 @@ async def test_create_booking_notifies_linked_verified_client() -> None:
     assert isinstance(result, BookingOut)
     dispatcher.dispatch_booking_created.assert_awaited_once()
     kwargs = dispatcher.dispatch_booking_created.await_args.kwargs
-    assert kwargs["client_id"] == client_id
-    assert kwargs["recipient"].email == "client@example.com"
-    assert "12:00" in kwargs["email_ctx"].body
+    dispatch_ctx = kwargs["ctx"]
+    assert dispatch_ctx.client_id == client_id
+    assert dispatch_ctx.recipient.email == "client@example.com"
+    assert "12:00" in dispatch_ctx.email_ctx.body
 
 
 async def test_create_booking_skips_notification_without_linked_user() -> None:
@@ -527,15 +734,17 @@ async def test_dispatch_booking_cancelled_persists_event(mail_settings: Settings
         patch.object(dispatcher, "_deliver_delivery", new_callable=AsyncMock),
     ):
         await dispatcher.dispatch_booking_cancelled(
-            booking_id=uuid.uuid4(),
-            master_profile_id=uuid.uuid4(),
-            client_id=uuid.uuid4(),
-            recipient=recipient,
-            email_ctx=BookingEmailContext(
-                title="Запись отменена",
-                body="body",
-                link_url="https://frontend.test/client/visits",
-                payload={},
+            ctx=BookingNotificationDispatchContext(
+                booking_id=uuid.uuid4(),
+                master_profile_id=uuid.uuid4(),
+                client_id=uuid.uuid4(),
+                recipient=recipient,
+                email_ctx=BookingEmailContext(
+                    title="Запись отменена",
+                    body="body",
+                    link_url="https://frontend.test/client/visits",
+                    payload={},
+                ),
             ),
         )
 

@@ -21,6 +21,7 @@ from app.services.notifications.booking_mail import (
     deliver_booking_cancelled_email,
     deliver_booking_created_email,
     deliver_booking_moved_email,
+    deliver_booking_reminder_email,
 )
 from app.services.notifications.messenger_delivery import deliver_user_notification_telegram
 from app.services.notifications.password_reset_mail import deliver_password_reset
@@ -218,12 +219,52 @@ async def _process_booking_moved_email(
     deliver.sent_at = datetime.now(UTC)
 
 
+async def _process_booking_reminder_email(
+    settings: Settings,
+    deliver: NotificationDelivery,
+) -> None:
+    user_note = deliver.user_notification
+    payload = user_note.payload or {}
+    booking_id = UUID(payload["booking_id"])
+    to_email = payload.get("to_email")
+    if not to_email:
+        deliver.status = DeliveryStatus.FAILED
+        deliver.error_message = "missing to_email"
+        return
+
+    deliver.status = DeliveryStatus.SENDING
+    try:
+        async with worker_db_session() as session:
+            await deliver_booking_reminder_email(
+                settings=settings,
+                session=session,
+                booking_id=booking_id,
+                to_email=to_email,
+                options=BookingEmailDeliveryOptions(
+                    audience=payload.get("audience", "client"),
+                    client_display_name=payload.get("client_display_name"),
+                ),
+            )
+    except BookingNotificationSkip as exc:
+        deliver.status = DeliveryStatus.SKIPPED
+        deliver.error_message = str(exc)
+        return
+    except Exception as exc:
+        deliver.status = DeliveryStatus.FAILED
+        deliver.error_message = str(exc)[:2048]
+        return
+
+    deliver.status = DeliveryStatus.SENT
+    deliver.sent_at = datetime.now(UTC)
+
+
 NOTIFICATION_HANDLERS: dict[NotificationEventType, Callable] = {
     NotificationEventType.EMAIL_VERIFICATION: _process_email_verification_notification,
     NotificationEventType.EMAIL_PASSWORD_RESET: _process_email_password_reset_notification,
     NotificationEventType.BOOKING_CREATED: _process_booking_created_email,
     NotificationEventType.BOOKING_CANCELLED: _process_booking_cancelled_email,
     NotificationEventType.BOOKING_MOVED: _process_booking_moved_email,
+    NotificationEventType.REMINDER_BEFORE_VISIT: _process_booking_reminder_email,
 }
 
 

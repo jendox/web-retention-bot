@@ -13,7 +13,12 @@ from app.core.config import Settings, get_settings
 from app.core.database import get_db_session
 from app.core.structured_logging import get_logger, get_request_id, log_context
 from app.models import NotificationDelivery, NotificationEvent, UserNotification
-from app.models.notifications.enums import DeliveryChannel, DeliveryStatus, NotificationEventType
+from app.models.notifications.enums import (
+    DeliveryChannel,
+    DeliveryStatus,
+    NotificationEventType,
+    ScheduledNotificationPurpose,
+)
 from app.repositories.notification_preferences import NotificationPreferenceRepository
 from app.repositories.notifications import (
     NotificationDeliveryCreate,
@@ -28,6 +33,7 @@ from app.services.notifications.booking_mail import (
     deliver_booking_cancelled_email,
     deliver_booking_created_email,
     deliver_booking_moved_email,
+    deliver_booking_reminder_email,
 )
 from app.services.notifications.channel_policy import delivery_channels_for_user
 from app.services.notifications.mail_render import (
@@ -46,6 +52,7 @@ EMAIL_PASSWORD_RESET_DEDUP = "email_password_reset:user:{user_id}:{request_id}"
 BOOKING_CREATED_DEDUP = "booking_created:booking:{booking_id}:user:{user_id}"
 BOOKING_CANCELLED_DEDUP = "booking_cancelled:booking:{booking_id}:user:{user_id}"
 BOOKING_MOVED_DEDUP = "booking_moved:booking:{booking_id}:user:{user_id}:{previous_start_at_iso}:{start_at_iso}"
+BOOKING_REMINDER_DEDUP = "booking_reminder:booking:{booking_id}:user:{user_id}:purpose:{purpose}:{fire_at_iso}"
 
 logger = get_logger("app.notifications.dispatcher")
 
@@ -63,6 +70,22 @@ class BookingEmailContext:
     body: str
     link_url: str | None
     payload: dict[str, str]
+
+
+@dataclass(frozen=True)
+class BookingNotificationDispatchContext:
+    booking_id: UUID
+    master_profile_id: UUID
+    client_id: UUID
+    recipient: BookingClientRecipient
+    email_ctx: BookingEmailContext
+
+
+@dataclass(frozen=True)
+class BookingNotificationDispatchResult:
+    event: NotificationEvent
+    user_notification: UserNotification
+    deliveries: list[NotificationDelivery]
 
 
 class NotificationDispatcher:
@@ -114,6 +137,15 @@ class NotificationDispatcher:
                 options=email_options,
             )
             return
+        if user_note.event_type is NotificationEventType.REMINDER_BEFORE_VISIT:
+            await deliver_booking_reminder_email(
+                settings=self._settings,
+                session=self._session,
+                booking_id=booking_id,
+                to_email=to_email,
+                options=email_options,
+            )
+            return
         raise ValueError(f"unsupported booking email event: {user_note.event_type.value}")
 
     async def _deliver_email_eager(self, user_note: UserNotification) -> None:
@@ -146,6 +178,7 @@ class NotificationDispatcher:
             NotificationEventType.BOOKING_CREATED,
             NotificationEventType.BOOKING_CANCELLED,
             NotificationEventType.BOOKING_MOVED,
+            NotificationEventType.REMINDER_BEFORE_VISIT,
         }:
             await self._deliver_booking_email(user_note, to_email=to_email)
             return
@@ -347,25 +380,21 @@ class NotificationDispatcher:
     async def dispatch_booking_created(
         self,
         *,
-        booking_id: UUID,
-        master_profile_id: UUID,
-        client_id: UUID,
-        recipient: BookingClientRecipient,
-        email_ctx: BookingEmailContext,
-    ) -> None:
+        ctx: BookingNotificationDispatchContext,
+    ) -> BookingNotificationDispatchResult:
         with log_context(notification="dispatch_booking_created"):
             payload = {
-                **email_ctx.payload,
-                "booking_id": str(booking_id),
-                "to_email": recipient.email,
+                **ctx.email_ctx.payload,
+                "booking_id": str(ctx.booking_id),
+                "to_email": ctx.recipient.email,
             }
             event = await self._notification_event_repo.create(
                 NotificationEventCreate(
                     type=NotificationEventType.BOOKING_CREATED,
-                    target_user_id=recipient.user_id,
-                    master_profile_id=master_profile_id,
-                    client_id=client_id,
-                    booking_id=booking_id,
+                    target_user_id=ctx.recipient.user_id,
+                    master_profile_id=ctx.master_profile_id,
+                    client_id=ctx.client_id,
+                    booking_id=ctx.booking_id,
                     payload=payload,
                 ),
             )
@@ -373,23 +402,24 @@ class NotificationDispatcher:
             user_note = await self._user_notification_repo.create(
                 UserNotificationCreate(
                     event_id=event.id,
-                    recipient_user_id=recipient.user_id,
-                    recipient_client_id=client_id,
+                    recipient_user_id=ctx.recipient.user_id,
+                    recipient_client_id=ctx.client_id,
                     event_type=NotificationEventType.BOOKING_CREATED,
-                    title=email_ctx.title,
-                    body=email_ctx.body,
-                    link_url=email_ctx.link_url,
+                    title=ctx.email_ctx.title,
+                    body=ctx.email_ctx.body,
+                    link_url=ctx.email_ctx.link_url,
                     payload=payload,
                     dedup_key=BOOKING_CREATED_DEDUP.format(
-                        booking_id=booking_id,
-                        user_id=recipient.user_id,
+                        booking_id=ctx.booking_id,
+                        user_id=ctx.recipient.user_id,
                     ),
                 ),
             )
 
+            deliveries: list[NotificationDelivery] = []
             for channel in await delivery_channels_for_user(
                 self._preference_repo,
-                user_id=recipient.user_id,
+                user_id=ctx.recipient.user_id,
                 event_type=NotificationEventType.BOOKING_CREATED,
             ):
                 delivery = await self._notification_delivery_repo.create(
@@ -400,30 +430,33 @@ class NotificationDispatcher:
                         scheduled_at=datetime.now(UTC),
                     ),
                 )
+                deliveries.append(delivery)
                 await self._enqueue_delivery(event=event, delivery=delivery, user_note=user_note)
+
+            return BookingNotificationDispatchResult(
+                event=event,
+                user_notification=user_note,
+                deliveries=deliveries,
+            )
 
     async def dispatch_booking_cancelled(
         self,
         *,
-        booking_id: UUID,
-        master_profile_id: UUID,
-        client_id: UUID,
-        recipient: BookingClientRecipient,
-        email_ctx: BookingEmailContext,
-    ) -> None:
+        ctx: BookingNotificationDispatchContext,
+    ) -> BookingNotificationDispatchResult:
         with log_context(notification="dispatch_booking_cancelled"):
             payload = {
-                **email_ctx.payload,
-                "booking_id": str(booking_id),
-                "to_email": recipient.email,
+                **ctx.email_ctx.payload,
+                "booking_id": str(ctx.booking_id),
+                "to_email": ctx.recipient.email,
             }
             event = await self._notification_event_repo.create(
                 NotificationEventCreate(
                     type=NotificationEventType.BOOKING_CANCELLED,
-                    target_user_id=recipient.user_id,
-                    master_profile_id=master_profile_id,
-                    client_id=client_id,
-                    booking_id=booking_id,
+                    target_user_id=ctx.recipient.user_id,
+                    master_profile_id=ctx.master_profile_id,
+                    client_id=ctx.client_id,
+                    booking_id=ctx.booking_id,
                     payload=payload,
                 ),
             )
@@ -431,23 +464,24 @@ class NotificationDispatcher:
             user_note = await self._user_notification_repo.create(
                 UserNotificationCreate(
                     event_id=event.id,
-                    recipient_user_id=recipient.user_id,
-                    recipient_client_id=client_id,
+                    recipient_user_id=ctx.recipient.user_id,
+                    recipient_client_id=ctx.client_id,
                     event_type=NotificationEventType.BOOKING_CANCELLED,
-                    title=email_ctx.title,
-                    body=email_ctx.body,
-                    link_url=email_ctx.link_url,
+                    title=ctx.email_ctx.title,
+                    body=ctx.email_ctx.body,
+                    link_url=ctx.email_ctx.link_url,
                     payload=payload,
                     dedup_key=BOOKING_CANCELLED_DEDUP.format(
-                        booking_id=booking_id,
-                        user_id=recipient.user_id,
+                        booking_id=ctx.booking_id,
+                        user_id=ctx.recipient.user_id,
                     ),
                 ),
             )
 
+            deliveries: list[NotificationDelivery] = []
             for channel in await delivery_channels_for_user(
                 self._preference_repo,
-                user_id=recipient.user_id,
+                user_id=ctx.recipient.user_id,
                 event_type=NotificationEventType.BOOKING_CANCELLED,
             ):
                 delivery = await self._notification_delivery_repo.create(
@@ -458,33 +492,36 @@ class NotificationDispatcher:
                         scheduled_at=datetime.now(UTC),
                     ),
                 )
+                deliveries.append(delivery)
                 await self._enqueue_delivery(event=event, delivery=delivery, user_note=user_note)
+
+            return BookingNotificationDispatchResult(
+                event=event,
+                user_notification=user_note,
+                deliveries=deliveries,
+            )
 
     async def dispatch_booking_moved(
         self,
         *,
-        booking_id: UUID,
-        master_profile_id: UUID,
-        client_id: UUID,
-        recipient: BookingClientRecipient,
-        email_ctx: BookingEmailContext,
+        ctx: BookingNotificationDispatchContext,
         previous_start_at_iso: str,
-    ) -> None:
+    ) -> BookingNotificationDispatchResult:
         with log_context(notification="dispatch_booking_moved"):
             payload = {
-                **email_ctx.payload,
-                "booking_id": str(booking_id),
-                "to_email": recipient.email,
+                **ctx.email_ctx.payload,
+                "booking_id": str(ctx.booking_id),
+                "to_email": ctx.recipient.email,
                 "previous_start_at": previous_start_at_iso,
-                "new_start_at": email_ctx.payload["new_start_at"],
+                "new_start_at": ctx.email_ctx.payload["new_start_at"],
             }
             event = await self._notification_event_repo.create(
                 NotificationEventCreate(
                     type=NotificationEventType.BOOKING_MOVED,
-                    target_user_id=recipient.user_id,
-                    master_profile_id=master_profile_id,
-                    client_id=client_id,
-                    booking_id=booking_id,
+                    target_user_id=ctx.recipient.user_id,
+                    master_profile_id=ctx.master_profile_id,
+                    client_id=ctx.client_id,
+                    booking_id=ctx.booking_id,
                     payload=payload,
                 ),
             )
@@ -492,25 +529,26 @@ class NotificationDispatcher:
             user_note = await self._user_notification_repo.create(
                 UserNotificationCreate(
                     event_id=event.id,
-                    recipient_user_id=recipient.user_id,
-                    recipient_client_id=client_id,
+                    recipient_user_id=ctx.recipient.user_id,
+                    recipient_client_id=ctx.client_id,
                     event_type=NotificationEventType.BOOKING_MOVED,
-                    title=email_ctx.title,
-                    body=email_ctx.body,
-                    link_url=email_ctx.link_url,
+                    title=ctx.email_ctx.title,
+                    body=ctx.email_ctx.body,
+                    link_url=ctx.email_ctx.link_url,
                     payload=payload,
                     dedup_key=BOOKING_MOVED_DEDUP.format(
-                        booking_id=booking_id,
-                        user_id=recipient.user_id,
+                        booking_id=ctx.booking_id,
+                        user_id=ctx.recipient.user_id,
                         start_at_iso=payload["new_start_at"],
                         previous_start_at_iso=payload["previous_start_at"],
                     ),
                 ),
             )
 
+            deliveries: list[NotificationDelivery] = []
             for channel in await delivery_channels_for_user(
                 self._preference_repo,
-                user_id=recipient.user_id,
+                user_id=ctx.recipient.user_id,
                 event_type=NotificationEventType.BOOKING_MOVED,
             ):
                 delivery = await self._notification_delivery_repo.create(
@@ -521,7 +559,83 @@ class NotificationDispatcher:
                         scheduled_at=datetime.now(UTC),
                     ),
                 )
+                deliveries.append(delivery)
                 await self._enqueue_delivery(event=event, delivery=delivery, user_note=user_note)
+
+            return BookingNotificationDispatchResult(
+                event=event,
+                user_notification=user_note,
+                deliveries=deliveries,
+            )
+
+    async def dispatch_booking_reminder(
+        self,
+        *,
+        ctx: BookingNotificationDispatchContext,
+        purpose: ScheduledNotificationPurpose,
+        fire_at: datetime,
+    ) -> BookingNotificationDispatchResult:
+        with log_context(notification="dispatch_booking_reminder"):
+            fire_at_iso = fire_at.isoformat()
+            payload = {
+                **ctx.email_ctx.payload,
+                "booking_id": str(ctx.booking_id),
+                "to_email": ctx.recipient.email,
+                "reminder_purpose": purpose.value,
+                "fire_at": fire_at_iso,
+            }
+            event = await self._notification_event_repo.create(
+                NotificationEventCreate(
+                    type=NotificationEventType.REMINDER_BEFORE_VISIT,
+                    target_user_id=ctx.recipient.user_id,
+                    master_profile_id=ctx.master_profile_id,
+                    client_id=ctx.client_id,
+                    booking_id=ctx.booking_id,
+                    payload=payload,
+                ),
+            )
+
+            user_note = await self._user_notification_repo.create(
+                UserNotificationCreate(
+                    event_id=event.id,
+                    recipient_user_id=ctx.recipient.user_id,
+                    recipient_client_id=ctx.client_id,
+                    event_type=NotificationEventType.REMINDER_BEFORE_VISIT,
+                    title=ctx.email_ctx.title,
+                    body=ctx.email_ctx.body,
+                    link_url=ctx.email_ctx.link_url,
+                    payload=payload,
+                    dedup_key=BOOKING_REMINDER_DEDUP.format(
+                        booking_id=ctx.booking_id,
+                        user_id=ctx.recipient.user_id,
+                        purpose=purpose.value,
+                        fire_at_iso=fire_at_iso,
+                    ),
+                ),
+            )
+
+            deliveries: list[NotificationDelivery] = []
+            for channel in await delivery_channels_for_user(
+                self._preference_repo,
+                user_id=ctx.recipient.user_id,
+                event_type=NotificationEventType.REMINDER_BEFORE_VISIT,
+            ):
+                delivery = await self._notification_delivery_repo.create(
+                    NotificationDeliveryCreate(
+                        user_notification_id=user_note.id,
+                        channel=channel,
+                        status=DeliveryStatus.PENDING,
+                        scheduled_at=datetime.now(UTC),
+                    ),
+                )
+                deliveries.append(delivery)
+                await self._enqueue_delivery(event=event, delivery=delivery, user_note=user_note)
+
+            return BookingNotificationDispatchResult(
+                event=event,
+                user_notification=user_note,
+                deliveries=deliveries,
+            )
 
 
 def get_notification_dispatcher(

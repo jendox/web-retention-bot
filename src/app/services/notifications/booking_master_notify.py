@@ -8,7 +8,11 @@ from app.models.booking import Booking
 from app.models.master import MasterProfile
 from app.models.service import Service
 from app.repositories.users import UserRepository
-from app.services.notifications.dispatcher import BookingEmailContext, NotificationDispatcher
+from app.services.notifications.dispatcher import (
+    BookingEmailContext,
+    BookingNotificationDispatchContext,
+    NotificationDispatcher,
+)
 from app.services.notifications.mail_render import (
     BOOKING_EMAIL_AUDIENCE_MASTER,
     booking_cancelled_master_in_app_copy,
@@ -52,18 +56,20 @@ async def notify_master_booking_created(ctx: BookingMasterNotifyContext) -> None
 
     with log_context(booking_id=str(ctx.booking.id), recipient_user_id=str(recipient.user_id)):
         await ctx.dispatcher.dispatch_booking_created(
-            booking_id=ctx.booking.id,
-            master_profile_id=ctx.master.id,
-            client_id=ctx.booking.client_id,
-            recipient=recipient,
-            email_ctx=BookingEmailContext(
-                title=title,
-                body=body,
-                link_url=link_url,
-                payload={
-                    "audience": BOOKING_EMAIL_AUDIENCE_MASTER,
-                    "client_display_name": ctx.client_display_name,
-                },
+            ctx=BookingNotificationDispatchContext(
+                booking_id=ctx.booking.id,
+                master_profile_id=ctx.master.id,
+                client_id=ctx.booking.client_id,
+                recipient=recipient,
+                email_ctx=BookingEmailContext(
+                    title=title,
+                    body=body,
+                    link_url=link_url,
+                    payload={
+                        "audience": BOOKING_EMAIL_AUDIENCE_MASTER,
+                        "client_display_name": ctx.client_display_name,
+                    },
+                ),
             ),
         )
         logger.info("notified")
@@ -84,18 +90,20 @@ async def notify_master_booking_cancelled(ctx: BookingMasterNotifyContext) -> No
 
     with log_context(booking_id=str(ctx.booking.id), recipient_user_id=str(recipient.user_id)):
         await ctx.dispatcher.dispatch_booking_cancelled(
-            booking_id=ctx.booking.id,
-            master_profile_id=ctx.master.id,
-            client_id=ctx.booking.client_id,
-            recipient=recipient,
-            email_ctx=BookingEmailContext(
-                title=title,
-                body=body,
-                link_url=link_url,
-                payload={
-                    "audience": BOOKING_EMAIL_AUDIENCE_MASTER,
-                    "client_display_name": ctx.client_display_name,
-                },
+            ctx=BookingNotificationDispatchContext(
+                booking_id=ctx.booking.id,
+                master_profile_id=ctx.master.id,
+                client_id=ctx.booking.client_id,
+                recipient=recipient,
+                email_ctx=BookingEmailContext(
+                    title=title,
+                    body=body,
+                    link_url=link_url,
+                    payload={
+                        "audience": BOOKING_EMAIL_AUDIENCE_MASTER,
+                        "client_display_name": ctx.client_display_name,
+                    },
+                ),
             ),
         )
         logger.info("notified")
@@ -118,20 +126,22 @@ async def notify_master_booking_moved(ctx: BookingMasterNotifyContext, *, previo
 
     with log_context(booking_id=str(ctx.booking.id), recipient_user_id=str(recipient.user_id)):
         await ctx.dispatcher.dispatch_booking_moved(
-            booking_id=ctx.booking.id,
-            master_profile_id=ctx.master.id,
-            client_id=ctx.booking.client_id,
-            recipient=recipient,
-            email_ctx=BookingEmailContext(
-                title=title,
-                body=body,
-                link_url=link_url,
-                payload={
-                    "audience": BOOKING_EMAIL_AUDIENCE_MASTER,
-                    "client_display_name": ctx.client_display_name,
-                    "previous_start_at": previous_iso,
-                    "new_start_at": ctx.booking.start_at.isoformat(),
-                },
+            ctx=BookingNotificationDispatchContext(
+                booking_id=ctx.booking.id,
+                master_profile_id=ctx.master.id,
+                client_id=ctx.booking.client_id,
+                recipient=recipient,
+                email_ctx=BookingEmailContext(
+                    title=title,
+                    body=body,
+                    link_url=link_url,
+                    payload={
+                        "audience": BOOKING_EMAIL_AUDIENCE_MASTER,
+                        "client_display_name": ctx.client_display_name,
+                        "previous_start_at": previous_iso,
+                        "new_start_at": ctx.booking.start_at.isoformat(),
+                    },
+                ),
             ),
             previous_start_at_iso=previous_iso,
         )

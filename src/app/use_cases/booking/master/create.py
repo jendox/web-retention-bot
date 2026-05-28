@@ -14,6 +14,7 @@ from app.schemas.booking import BookingCreate, BookingOut
 from app.services.notifications.booking_reminders import BookingReminderRecipient, schedule_booking_reminders
 from app.services.notifications.dispatcher import (
     BookingEmailContext,
+    BookingNotificationDispatchContext,
     NotificationDispatcher,
     get_notification_dispatcher,
 )
@@ -100,15 +101,17 @@ class CreateMasterBookingUseCase:
             recipient_timezone=client.timezone,
         )
         await self._dispatcher.dispatch_booking_created(
-            booking_id=booking.id,
-            master_profile_id=master.id,
-            client_id=client.id,
-            recipient=recipient,
-            email_ctx=BookingEmailContext(
-                title=title,
-                body=body,
-                link_url=link_url,
-                payload={"audience": BOOKING_EMAIL_AUDIENCE_CLIENT},
+            ctx=BookingNotificationDispatchContext(
+                booking_id=booking.id,
+                master_profile_id=master.id,
+                client_id=client.id,
+                recipient=recipient,
+                email_ctx=BookingEmailContext(
+                    title=title,
+                    body=body,
+                    link_url=link_url,
+                    payload={"audience": BOOKING_EMAIL_AUDIENCE_CLIENT},
+                ),
             ),
         )
 

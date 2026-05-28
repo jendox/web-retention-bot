@@ -342,3 +342,43 @@ def booking_moved_master_in_app_copy(
         client_comment,
     )
     return title, body, _master_bookings_url()
+
+
+@dataclass(frozen=True)
+class BookingReminderEmailRenderContext:
+    recipient_email: str
+    master_name: str
+    service_name: str
+    start_at_local: str
+    duration_min: int
+    cabinet_url: str
+
+
+def render_booking_reminder(render_ctx: BookingReminderEmailRenderContext) -> tuple[str, str, str]:
+    env = _jinja_env()
+    ctx = {
+        "recipient_email": render_ctx.recipient_email,
+        "master_name": render_ctx.master_name,
+        "service_name": render_ctx.service_name,
+        "start_at_local": render_ctx.start_at_local,
+        "duration_min": render_ctx.duration_min,
+        "cabinet_url": render_ctx.cabinet_url,
+    }
+    subject = env.get_template("booking_reminder.subject.txt").render(**ctx).strip()
+    text_body = env.get_template("booking_reminder.txt").render(**ctx)
+    html_body = env.get_template("booking_reminder.html").render(**ctx)
+    return subject, text_body, html_body
+
+
+def booking_reminder_in_app_copy(
+    *,
+    master_display_name: str,
+    service_name: str,
+    start_at: datetime,
+    recipient_timezone: str,
+) -> tuple[str, str, str | None]:
+    start_at_local = format_booking_start_local(start_at, recipient_timezone)
+    title = "Напоминание о записи"
+    body = f"{master_display_name}: {service_name}, {start_at_local}"
+    link_url = f"{get_settings().security.frontend_public_origin.rstrip('/')}/client/visits"
+    return title, body, link_url

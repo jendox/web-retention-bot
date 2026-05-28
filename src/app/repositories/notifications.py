@@ -234,6 +234,64 @@ class ScheduledNotificationRepository(BaseRepository):
         result = await self.session.execute(stmt)
         return result.rowcount or 0
 
+    async def claim_due(self, *, now: datetime, limit: int) -> list[ScheduledNotification]:
+        subquery = (
+            select(ScheduledNotification.id)
+            .where(
+                ScheduledNotification.status == ScheduledNotificationStatus.PENDING,
+                ScheduledNotification.fire_at <= now,
+            )
+            .order_by(ScheduledNotification.fire_at.asc(), ScheduledNotification.id.asc())
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+            .subquery()
+        )
+        stmt = (
+            update(ScheduledNotification)
+            .where(ScheduledNotification.id.in_(select(subquery.c.id)))
+            .values(status=ScheduledNotificationStatus.CLAIMED)
+            .returning(ScheduledNotification)
+        )
+
+        result = await self.session.execute(stmt)
+        return sorted(result.scalars(), key=lambda item: (item.fire_at, item.id))
+
+    async def mark_done(
+        self,
+        scheduled_notification_id: UUID,
+        *,
+        user_notification_id: UUID | None = None,
+    ) -> ScheduledNotification | None:
+        stmt = (
+            update(ScheduledNotification)
+            .where(
+                ScheduledNotification.id == scheduled_notification_id,
+                ScheduledNotification.status == ScheduledNotificationStatus.CLAIMED,
+            )
+            .values(
+                status=ScheduledNotificationStatus.DONE,
+                user_notification_id=user_notification_id,
+            )
+            .returning(ScheduledNotification)
+        )
+
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def release_claimed(self, scheduled_notification_id: UUID) -> ScheduledNotification | None:
+        stmt = (
+            update(ScheduledNotification)
+            .where(
+                ScheduledNotification.id == scheduled_notification_id,
+                ScheduledNotification.status == ScheduledNotificationStatus.CLAIMED,
+            )
+            .values(status=ScheduledNotificationStatus.PENDING)
+            .returning(ScheduledNotification)
+        )
+
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
 
 def get_notification_event_repo(
     session: Annotated[AsyncSession, Depends(get_db_session)],
