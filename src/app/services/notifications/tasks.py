@@ -13,8 +13,13 @@ from app.core.worker_db import worker_db_session
 from app.models.notifications import NotificationEventType
 from app.models.notifications.enums import DeliveryChannel, DeliveryStatus
 from app.models.notifications.models import NotificationDelivery
+from app.repositories.bookings import BookingRepository
+from app.repositories.clients import ClientRepository
+from app.repositories.masters import MasterRepository
 from app.repositories.notification_preferences import NotificationPreferenceRepository
-from app.repositories.notifications import NotificationDeliveryRepository
+from app.repositories.notifications import NotificationDeliveryRepository, ScheduledNotificationRepository
+from app.repositories.services import ServiceRepository
+from app.repositories.users import UserRepository
 from app.services.notifications.booking_mail import (
     BookingEmailDeliveryOptions,
     BookingNotificationSkip,
@@ -23,6 +28,7 @@ from app.services.notifications.booking_mail import (
     deliver_booking_moved_email,
     deliver_booking_reminder_email,
 )
+from app.services.notifications.booking_reminder_processor import BookingReminderProcessorDeps, process_booking_reminder
 from app.services.notifications.messenger_delivery import deliver_user_notification_telegram
 from app.services.notifications.password_reset_mail import deliver_password_reset
 from app.services.notifications.registration_mail import deliver_email_verification
@@ -325,3 +331,53 @@ def process_notification_delivery(self: Task, delivery_id: str) -> None:
         except Exception as exc:  # noqa: BLE001
             logger.exception("worker_error", delivery_id=delivery_id)
             raise self.retry(exc=exc, countdown=2) from exc
+
+
+async def _process_due_booking_reminders_async() -> int:
+    settings = get_settings()
+    processed = 0
+
+    async with worker_db_session() as session:
+        from app.services.notifications.dispatcher import NotificationDispatcher  # noqa: PLC0415
+
+        scheduled_repo = ScheduledNotificationRepository(session)
+        reminders = await scheduled_repo.claim_due(
+            now=datetime.now(UTC),
+            limit=settings.notifications.reminder_batch_size,
+        )
+
+        deps = BookingReminderProcessorDeps(
+            scheduled_notification_repo=scheduled_repo,
+            booking_repo=BookingRepository(session),
+            client_repo=ClientRepository(session),
+            user_repo=UserRepository(session),
+            master_repo=MasterRepository(session),
+            service_repo=ServiceRepository(session),
+            dispatcher=NotificationDispatcher(settings, session),
+        )
+
+        for reminder in reminders:
+            try:
+                result = await process_booking_reminder(reminder, deps)
+            except Exception as exc:
+                await scheduled_repo.release_claimed(reminder.id)
+                logger.exception(
+                    "booking_reminder_processing_failed",
+                    scheduled_notification_id=str(reminder.id),
+                    error=str(exc)[:2048],
+                )
+                continue
+
+            await scheduled_repo.mark_done(
+                reminder.id,
+                user_notification_id=result.user_notification_id,
+            )
+            processed += 1
+
+        return processed
+
+
+@shared_task(name="notifications.process_due_booking_reminders")
+def process_due_booking_reminders() -> int:
+    with log_context(task="process_due_booking_reminders"):
+        return asyncio.run(_process_due_booking_reminders_async())

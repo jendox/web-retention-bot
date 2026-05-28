@@ -35,6 +35,9 @@ class BookingRepository(BaseRepository):
         await self.session.flush()
         return booking
 
+    async def get(self, booking_id: UUID) -> Booking | None:
+        return await self.session.get(Booking, booking_id)
+
     async def has_conflict(
         self,
         master_id: UUID,

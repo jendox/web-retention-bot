@@ -40,6 +40,8 @@ class CelerySettings(BaseModel):
 class NotificationSettings(BaseModel):
     #: When True, mark email deliveries sent in-process (no Celery); useful for tests and local dev.
     eager_deliveries: bool = Field(default=False)
+    reminder_scan_interval_seconds: int = Field(default=60, ge=10, le=3600)
+    reminder_batch_size: int = Field(default=100, ge=1, le=1000)
 
 
 class MessengerBotsSettings(BaseModel):

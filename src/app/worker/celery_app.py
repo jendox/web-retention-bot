@@ -61,6 +61,10 @@ def create_celery_app() -> Celery:
                 "task": "bookings.complete_past_scheduled",
                 "schedule": timedelta(minutes=interval_minutes),
             },
+            "notifications-process-due-booking-reminders": {
+                "task": "notifications.process_due_booking_reminders",
+                "schedule": timedelta(seconds=settings.notifications.reminder_scan_interval_seconds),
+            },
         },
     )
     app.autodiscover_tasks(
