@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useParams } from 'react-router-dom'
 import { AppLayout } from '../components/layout/AppLayout'
 import { AnalyticsPage } from '../pages/AnalyticsPage'
 import { HomeRedirect } from '../components/routing/HomeRedirect'
+import { RequireGuestOutlet } from '../components/routing/RequireGuestOutlet'
 import { RequireMasterOutlet } from '../components/routing/RequireMasterOutlet'
 import { BookingsPage } from '../pages/BookingsPage'
 import { ClientCabinetLayout } from '../pages/client/ClientCabinetLayout'
@@ -34,12 +35,14 @@ export function AppRouter() {
   return (
     <Routes>
       <Route path="/" element={<HomeRedirect />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/pending-verification" element={<PendingVerificationPage />} />
+      <Route element={<RequireGuestOutlet />}>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/pending-verification" element={<PendingVerificationPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+      </Route>
       <Route path="/verify-email" element={<VerifyEmailPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/invite/:token" element={<InvitationRoute />} />
 
       <Route element={<AppLayout />}>

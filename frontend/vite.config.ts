@@ -5,10 +5,6 @@ import { defineConfig } from 'vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  test: {
-    environment: 'node',
-    include: ['src/**/*.test.ts'],
-  },
   server: {
     port: 5173,
     // Dev-only ngrok tunnel access. Remove this before production deployment.
