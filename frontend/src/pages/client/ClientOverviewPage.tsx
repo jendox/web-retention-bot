@@ -63,6 +63,8 @@ export function ClientOverviewPage() {
             label="Предстоящих визитов"
             iconBg="bg-teal-100 dark:bg-teal-950/50"
             iconColor="text-teal-700 dark:text-teal-300"
+            iconLinkTo="/client/visits"
+            iconLinkLabel="Открыть раздел «Визиты»"
             icon={<IconCalendar className="h-5 w-5 shrink-0 overflow-visible" />}
           />
           <ClientStatCard
@@ -70,6 +72,8 @@ export function ClientOverviewPage() {
             label="Мастеров в кабинете"
             iconBg="bg-emerald-100/90 dark:bg-emerald-950/40"
             iconColor="text-emerald-700 dark:text-emerald-300"
+            iconLinkTo="/client/masters"
+            iconLinkLabel="Открыть раздел «Мои мастера»"
             icon={<IconUsers className="h-5 w-5 shrink-0 overflow-visible" />}
           />
           <ClientStatCard
@@ -77,6 +81,8 @@ export function ClientOverviewPage() {
             label="Записей сегодня"
             iconBg="bg-amber-100/90 dark:bg-amber-950/35"
             iconColor="text-amber-800 dark:text-amber-200"
+            iconLinkTo="/client/visits"
+            iconLinkLabel="Открыть раздел «Визиты»"
             icon={<IconOverview className="h-5 w-5 shrink-0 overflow-visible" />}
           />
           <ClientStatCard
@@ -84,6 +90,8 @@ export function ClientOverviewPage() {
             label="В этом месяце"
             iconBg="bg-violet-100/90 dark:bg-violet-950/40"
             iconColor="text-violet-700 dark:text-violet-300"
+            iconLinkTo="/client/visits"
+            iconLinkLabel="Открыть раздел «Визиты»"
             icon={<IconClipboard className="h-5 w-5 shrink-0 overflow-visible" />}
           />
         </section>

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 
 import type { BookingClientListItem } from '../../api/bookings'
 import { VisitBookingActions } from '../booking/VisitBookingActions'
@@ -19,13 +20,36 @@ type StatProps = {
   sub?: string
   iconBg: string
   iconColor: string
+  iconLinkTo?: string
+  iconLinkLabel?: string
 }
 
-export function ClientStatCard({ icon, value, label, sub, iconBg, iconColor }: StatProps) {
+export function ClientStatCard({ icon, value, label, sub, iconBg, iconColor, iconLinkTo, iconLinkLabel }: StatProps) {
+  const iconShellClass = cn(
+    'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
+    iconBg,
+    iconColor,
+  )
+  const iconShell =
+    iconLinkTo != null && iconLinkTo.length > 0 ? (
+      <Link
+        to={iconLinkTo}
+        className={cn(
+          iconShellClass,
+          'transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 dark:hover:brightness-110',
+        )}
+        aria-label={iconLinkLabel ?? `Перейти: ${label}`}
+      >
+        {icon}
+      </Link>
+    ) : (
+      <div className={iconShellClass}>{icon}</div>
+    )
+
   return (
     <div className={cn(surfaceCardClass, 'p-4')}>
       <div className="flex items-start gap-3">
-        <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', iconBg, iconColor)}>{icon}</div>
+        {iconShell}
         <div className="min-w-0">
           <p className="text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">{value}</p>
           <p className="text-sm text-stone-600 dark:text-stone-400">{label}</p>
