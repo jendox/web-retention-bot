@@ -60,21 +60,27 @@ function aliasDraftValue(master: ClientMasterView) {
 }
 
 function MasterContacts({ master }: { master: ClientMasterView }) {
-  const rows: { label: string; value: string; href?: string }[] = []
-  if (master.contact_email) {
-    rows.push({ label: 'Email', value: master.contact_email, href: `mailto:${master.contact_email}` })
-  }
-  if (master.contact_phone) {
-    rows.push({ label: 'Телефон', value: master.contact_phone, href: `tel:${master.contact_phone}` })
-  }
-  if (master.telegram) {
-    const handle = master.telegram.replace(/^@/, '')
-    rows.push({ label: 'Telegram', value: master.telegram, href: `https://t.me/${handle}` })
-  }
-
-  if (rows.length === 0) {
-    return <p className="mt-3 text-sm text-stone-500 dark:text-stone-400">Контакты мастера не указаны.</p>
-  }
+  const contactEmail = master.contact_email?.trim() || null
+  const contactPhone = master.contact_phone?.trim() || null
+  const telegram = master.telegram?.trim() || null
+  const telegramHandle = telegram?.replace(/^@/, '')
+  const rows: { label: string; value: string | null; href?: string }[] = [
+    {
+      label: 'Email',
+      value: contactEmail,
+      href: contactEmail ? `mailto:${contactEmail}` : undefined,
+    },
+    {
+      label: 'Телефон',
+      value: contactPhone,
+      href: contactPhone ? `tel:${contactPhone}` : undefined,
+    },
+    {
+      label: 'Telegram',
+      value: telegram,
+      href: telegramHandle ? `https://t.me/${telegramHandle}` : undefined,
+    },
+  ]
 
   return (
     <ul className="mt-3 space-y-1.5 text-sm text-stone-600 dark:text-stone-400">
@@ -91,7 +97,9 @@ function MasterContacts({ master }: { master: ClientMasterView }) {
               {row.value}
             </a>
           ) : (
-            <span className="font-medium text-stone-800 dark:text-stone-200">{row.value}</span>
+            <span className={cn('font-medium', row.value ? 'text-stone-800 dark:text-stone-200' : 'text-stone-400 dark:text-stone-500')}>
+              {row.value ?? '—'}
+            </span>
           )}
         </li>
       ))}
@@ -109,7 +117,6 @@ function MasterCard({
   onAliasSaved: () => void
 }) {
   const label = clientMasterLabel(master)
-  const hasCustomAlias = Boolean(master.client_alias?.trim())
   const [editingAlias, setEditingAlias] = useState(false)
   const [aliasDraft, setAliasDraft] = useState(() => aliasDraftValue(master))
   const [aliasError, setAliasError] = useState<string | null>(null)
@@ -173,7 +180,7 @@ function MasterCard({
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               {editingAlias ? (
-                <div className="space-y-1">
+                <div className="min-h-10 space-y-1">
                   <div className="flex items-center gap-1">
                     <input
                       ref={inputRef}
@@ -228,15 +235,15 @@ function MasterCard({
                   {aliasError ? <p className="text-xs text-red-600 dark:text-red-400">{aliasError}</p> : null}
                 </div>
               ) : (
-                <div className="flex items-center gap-1.5">
-                  <p className="font-semibold text-stone-900 dark:text-stone-50">{label}</p>
+                <div className="flex min-h-10 items-start gap-1.5">
+                  <p className="min-w-0 flex-1 break-words font-semibold leading-5 text-stone-900 dark:text-stone-50">{label}</p>
                   <button
                     type="button"
                     onClick={() => {
                       setAliasDraft(aliasDraftValue(master))
                       setEditingAlias(true)
                     }}
-                    className="rounded-md p-1 text-stone-400 transition hover:bg-stone-100 hover:text-teal-700 dark:hover:bg-stone-800 dark:hover:text-teal-300"
+                    className="shrink-0 rounded-md p-1 text-stone-400 transition hover:bg-stone-100 hover:text-teal-700 dark:hover:bg-stone-800 dark:hover:text-teal-300"
                     aria-label="Изменить название мастера"
                     title="Изменить название"
                   >
@@ -244,25 +251,22 @@ function MasterCard({
                   </button>
                 </div>
               )}
-              {hasCustomAlias && !editingAlias ? (
-                <p className="text-xs text-stone-500 dark:text-stone-400">Мастер: {master.display_name}</p>
-              ) : master.public_slug && !hasCustomAlias && !editingAlias ? (
-                <p className="text-xs text-stone-500 dark:text-stone-400">@{master.public_slug}</p>
+              {!editingAlias ? (
+                <p className="truncate text-xs text-stone-500 dark:text-stone-400">
+                  Мастер: {master.display_name}
+                </p>
               ) : null}
             </div>
             <span className="shrink-0 rounded-full bg-teal-50 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-800 dark:bg-teal-950/50 dark:text-teal-300">
               активна
             </span>
           </div>
-          {master.alias ? (
-            <p className="mt-2 text-sm text-stone-600 dark:text-stone-400">У мастера вы: {master.alias}</p>
-          ) : null}
         </div>
       </div>
 
       <MasterContacts master={master} />
 
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+      <div className="mt-auto flex flex-col gap-2 pt-4 sm:flex-row">
         <button
           type="button"
           onClick={onBook}
@@ -369,7 +373,7 @@ export function ClientMastersPage() {
         <ul
           className={cn(
             'grid gap-4',
-            filteredMasters.length === 1 ? 'max-w-lg' : 'sm:grid-cols-2 xl:grid-cols-3',
+            filteredMasters.length === 1 ? 'max-w-2xl' : 'lg:grid-cols-2',
           )}
         >
           {filteredMasters.map((m) => (
