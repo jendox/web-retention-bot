@@ -411,18 +411,8 @@ async def test_process_booking_reminder_email_marks_delivery_sent(mail_settings:
     )
     session = object()
 
-    class WorkerSession:
-        async def __aenter__(self):
-            return session
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-    with (
-        patch.object(notification_tasks, "worker_db_session", return_value=WorkerSession()),
-        patch.object(notification_tasks, "deliver_booking_reminder_email", new_callable=AsyncMock) as mock_deliver,
-    ):
-        await notification_tasks._process_booking_reminder_email(mail_settings, delivery)
+    with patch.object(notification_tasks, "deliver_booking_reminder_email", new_callable=AsyncMock) as mock_deliver:
+        await notification_tasks._process_booking_reminder_email(mail_settings, session, delivery)
 
     mock_deliver.assert_awaited_once()
     assert mock_deliver.await_args.kwargs["session"] is session
@@ -438,7 +428,7 @@ async def test_process_booking_reminder_email_fails_without_email(mail_settings:
         user_notification=SimpleNamespace(payload={"booking_id": str(uuid.uuid4())}),
     )
 
-    await notification_tasks._process_booking_reminder_email(mail_settings, delivery)
+    await notification_tasks._process_booking_reminder_email(mail_settings, object(), delivery)
 
     assert delivery.status == DeliveryStatus.FAILED
     assert delivery.error_message == "missing to_email"

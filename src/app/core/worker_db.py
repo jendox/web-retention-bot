@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.database import Database
 
-__all__ = ['worker_db_session']
+__all__ = ["worker_db_session"]
 
 
 async def _ensure_database() -> None:

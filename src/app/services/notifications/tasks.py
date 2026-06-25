@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from uuid import UUID
 
 from celery import Task, shared_task
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.structured_logging import get_logger, log_context
@@ -35,6 +36,8 @@ from app.services.notifications.registration_mail import deliver_email_verificat
 
 logger = get_logger("app.notifications.tasks")
 
+Handler = Callable[[Settings, AsyncSession, NotificationDelivery], Awaitable[None]]
+
 
 @shared_task(name="notifications.ping")
 def ping() -> str:
@@ -44,6 +47,7 @@ def ping() -> str:
 
 async def _process_email_verification_notification(
     settings: Settings,
+    _session: AsyncSession,
     delivery: NotificationDelivery,
 ) -> None:
     user_note = delivery.user_notification
@@ -76,6 +80,7 @@ async def _process_email_verification_notification(
 
 async def _process_email_password_reset_notification(
     settings: Settings,
+    _session: AsyncSession,
     delivery: NotificationDelivery,
 ) -> None:
     user_note = delivery.user_notification
@@ -108,45 +113,46 @@ async def _process_email_password_reset_notification(
 
 async def _process_booking_created_email(
     settings: Settings,
-    deliver: NotificationDelivery,
+    session: AsyncSession,
+    delivery: NotificationDelivery,
 ) -> None:
-    user_note = deliver.user_notification
+    user_note = delivery.user_notification
     payload = user_note.payload or {}
     booking_id = UUID(payload["booking_id"])
     to_email = payload.get("to_email")
     if not to_email:
-        deliver.status = DeliveryStatus.FAILED
-        deliver.error_message = "missing to_email"
+        delivery.status = DeliveryStatus.FAILED
+        delivery.error_message = "missing to_email"
         return
 
-    deliver.status = DeliveryStatus.SENDING
+    delivery.status = DeliveryStatus.SENDING
     try:
-        async with worker_db_session() as session:
-            await deliver_booking_created_email(
-                settings=settings,
-                session=session,
-                booking_id=booking_id,
-                to_email=to_email,
-                options=BookingEmailDeliveryOptions(
-                    audience=payload.get("audience", "client"),
-                    client_display_name=payload.get("client_display_name"),
-                ),
-            )
+        await deliver_booking_created_email(
+            settings=settings,
+            session=session,
+            booking_id=booking_id,
+            to_email=to_email,
+            options=BookingEmailDeliveryOptions(
+                audience=payload.get("audience", "client"),
+                client_display_name=payload.get("client_display_name"),
+            ),
+        )
     except BookingNotificationSkip as exc:
-        deliver.status = DeliveryStatus.SKIPPED
-        deliver.error_message = str(exc)
+        delivery.status = DeliveryStatus.SKIPPED
+        delivery.error_message = str(exc)
         return
     except Exception as exc:
-        deliver.status = DeliveryStatus.FAILED
-        deliver.error_message = str(exc)[:2048]
+        delivery.status = DeliveryStatus.FAILED
+        delivery.error_message = str(exc)[:2048]
         return
 
-    deliver.status = DeliveryStatus.SENT
-    deliver.sent_at = datetime.now(UTC)
+    delivery.status = DeliveryStatus.SENT
+    delivery.sent_at = datetime.now(UTC)
 
 
 async def _process_booking_cancelled_email(
     settings: Settings,
+    session: AsyncSession,
     deliver: NotificationDelivery,
 ) -> None:
     user_note = deliver.user_notification
@@ -160,17 +166,16 @@ async def _process_booking_cancelled_email(
 
     deliver.status = DeliveryStatus.SENDING
     try:
-        async with worker_db_session() as session:
-            await deliver_booking_cancelled_email(
-                settings=settings,
-                session=session,
-                booking_id=booking_id,
-                to_email=to_email,
-                options=BookingEmailDeliveryOptions(
-                    audience=payload.get("audience", "client"),
-                    client_display_name=payload.get("client_display_name"),
-                ),
-            )
+        await deliver_booking_cancelled_email(
+            settings=settings,
+            session=session,
+            booking_id=booking_id,
+            to_email=to_email,
+            options=BookingEmailDeliveryOptions(
+                audience=payload.get("audience", "client"),
+                client_display_name=payload.get("client_display_name"),
+            ),
+        )
     except BookingNotificationSkip as exc:
         deliver.status = DeliveryStatus.SKIPPED
         deliver.error_message = str(exc)
@@ -186,6 +191,7 @@ async def _process_booking_cancelled_email(
 
 async def _process_booking_moved_email(
     settings: Settings,
+    session: AsyncSession,
     deliver: NotificationDelivery,
 ) -> None:
     user_note = deliver.user_notification
@@ -200,18 +206,17 @@ async def _process_booking_moved_email(
 
     deliver.status = DeliveryStatus.SENDING
     try:
-        async with worker_db_session() as session:
-            await deliver_booking_moved_email(
-                settings=settings,
-                session=session,
-                booking_id=booking_id,
-                to_email=to_email,
-                previous_start_at_iso=previous_start_at,
-                options=BookingEmailDeliveryOptions(
-                    audience=payload.get("audience", "client"),
-                    client_display_name=payload.get("client_display_name"),
-                ),
-            )
+        await deliver_booking_moved_email(
+            settings=settings,
+            session=session,
+            booking_id=booking_id,
+            to_email=to_email,
+            previous_start_at_iso=previous_start_at,
+            options=BookingEmailDeliveryOptions(
+                audience=payload.get("audience", "client"),
+                client_display_name=payload.get("client_display_name"),
+            ),
+        )
     except BookingNotificationSkip as exc:
         deliver.status = DeliveryStatus.SKIPPED
         deliver.error_message = str(exc)
@@ -227,6 +232,7 @@ async def _process_booking_moved_email(
 
 async def _process_booking_reminder_email(
     settings: Settings,
+    session: AsyncSession,
     deliver: NotificationDelivery,
 ) -> None:
     user_note = deliver.user_notification
@@ -240,17 +246,16 @@ async def _process_booking_reminder_email(
 
     deliver.status = DeliveryStatus.SENDING
     try:
-        async with worker_db_session() as session:
-            await deliver_booking_reminder_email(
-                settings=settings,
-                session=session,
-                booking_id=booking_id,
-                to_email=to_email,
-                options=BookingEmailDeliveryOptions(
-                    audience=payload.get("audience", "client"),
-                    client_display_name=payload.get("client_display_name"),
-                ),
-            )
+        await deliver_booking_reminder_email(
+            settings=settings,
+            session=session,
+            booking_id=booking_id,
+            to_email=to_email,
+            options=BookingEmailDeliveryOptions(
+                audience=payload.get("audience", "client"),
+                client_display_name=payload.get("client_display_name"),
+            ),
+        )
     except BookingNotificationSkip as exc:
         deliver.status = DeliveryStatus.SKIPPED
         deliver.error_message = str(exc)
@@ -264,7 +269,7 @@ async def _process_booking_reminder_email(
     deliver.sent_at = datetime.now(UTC)
 
 
-NOTIFICATION_HANDLERS: dict[NotificationEventType, Callable] = {
+NOTIFICATION_HANDLERS: dict[NotificationEventType, Handler] = {
     NotificationEventType.EMAIL_VERIFICATION: _process_email_verification_notification,
     NotificationEventType.EMAIL_PASSWORD_RESET: _process_email_password_reset_notification,
     NotificationEventType.BOOKING_CREATED: _process_booking_created_email,
@@ -313,7 +318,7 @@ async def _process_notification_delivery_async(delivery_id: UUID) -> None:
             raise RuntimeError(f"Unsupported notification event type: {event_type.value}")
 
         logger.info("processing", event_type=event_type.value, channel=delivery.channel.value)
-        await handler(settings, delivery)
+        await handler(settings, session, delivery)
 
 
 @shared_task(name="notifications.process_notification_delivery", bind=True, max_retries=5)
