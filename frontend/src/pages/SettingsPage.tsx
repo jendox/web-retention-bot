@@ -180,11 +180,20 @@ export function SettingsPage() {
         phone: form.clientPhone.trim() || null,
         timezone: form.clientTimezone,
       }),
-    onSuccess: async () => {
+    onSuccess: (profile) => {
+      queryClient.setQueryData<typeof me.data>(['me'], (current) =>
+        current
+          ? {
+              ...current,
+              client_display_name: profile.display_name,
+              client_phone: profile.phone,
+              client_timezone: profile.timezone,
+            }
+          : current,
+      )
       setDraft({})
       setSaveError(null)
       setSaved(true)
-      await queryClient.invalidateQueries({ queryKey: ['me'] })
     },
     onError: (err) => setSaveError(getUserFacingError(err)),
   })
@@ -200,11 +209,11 @@ export function SettingsPage() {
         contact_phone: form.contactPhone.trim() || null,
         telegram: form.telegram.trim() || null,
       }),
-    onSuccess: async () => {
+    onSuccess: (profile) => {
+      queryClient.setQueryData(['master'], profile)
       setDraft({})
       setSaveError(null)
       setSaved(true)
-      await queryClient.invalidateQueries({ queryKey: ['master'] })
     },
     onError: (err) => setSaveError(getUserFacingError(err)),
   })
