@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -193,7 +193,7 @@ export function BookingsPage() {
     })
   }
 
-  const setPage = (p: number) => {
+  const setPage = useCallback((p: number) => {
     setSearchParams((prev) => {
       const n = new URLSearchParams(prev)
       n.set('page', String(p))
@@ -203,7 +203,7 @@ export function BookingsPage() {
       }
       return n
     })
-  }
+  }, [listScope, pageSize, setSearchParams])
 
   const setPageSize = (ps: PageSize) => {
     setSearchParams((prev) => {
@@ -277,6 +277,15 @@ export function BookingsPage() {
   const [pendingCancel, setPendingCancel] = useState<Booking | null>(null)
   const [cancelComment, setCancelComment] = useState('')
   const [rescheduleComment, setRescheduleComment] = useState('')
+
+  const handleListScopeChange = (scope: BookingListScope) => {
+    if (scope !== listScope) {
+      setRescheduleBooking(null)
+      setRescheduleSlot(null)
+      setBookingActionError(null)
+    }
+    setListScope(scope)
+  }
 
   const me = useQuery({ queryKey: ['me'], queryFn: meApi, retry: false })
   const master = useMasterMe(me.isSuccess)
@@ -480,12 +489,6 @@ export function BookingsPage() {
   }, [me.isError, navigate])
 
   useEffect(() => {
-    setRescheduleBooking(null)
-    setRescheduleSlot(null)
-    setBookingActionError(null)
-  }, [listScope])
-
-  useEffect(() => {
     if (!bookingSuccess) {
       return
     }
@@ -524,7 +527,7 @@ export function BookingsPage() {
     if (page > tp) {
       setPage(tp)
     }
-  }, [bookings.isSuccess, bookings.data, page, pageSize])
+  }, [bookings.isSuccess, bookings.data, page, pageSize, setPage])
 
   const previewClientName =
     clientSource === 'new' ? draftName.trim() || 'Новый клиент' : prefilled ? clientDisplayName(prefilled) : 'Клиент'
@@ -912,7 +915,7 @@ export function BookingsPage() {
           <SegmentTabs
             tabs={listScopeTabs}
             value={listScope}
-            onChange={setListScope}
+            onChange={handleListScopeChange}
             fullWidth
             className="sm:w-auto"
           />
