@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from uuid import UUID
@@ -10,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.structured_logging import get_logger, log_context
+from app.core.worker_async import run_worker_async
 from app.core.worker_db import worker_db_session
 from app.models.notifications import NotificationEventType
 from app.models.notifications.enums import DeliveryChannel, DeliveryStatus
@@ -332,7 +332,7 @@ def process_notification_delivery(self: Task, delivery_id: str) -> None:
         delivery_id=str(delivery_id),
     ):
         try:
-            asyncio.run(_process_notification_delivery_async(UUID(delivery_id)))
+            run_worker_async(_process_notification_delivery_async(UUID(delivery_id)))
         except Exception as exc:  # noqa: BLE001
             logger.exception("worker_error", delivery_id=delivery_id)
             raise self.retry(exc=exc, countdown=2) from exc
@@ -385,4 +385,4 @@ async def _process_due_booking_reminders_async() -> int:
 @shared_task(name="notifications.process_due_booking_reminders")
 def process_due_booking_reminders() -> int:
     with log_context(task="process_due_booking_reminders"):
-        return asyncio.run(_process_due_booking_reminders_async())
+        return run_worker_async(_process_due_booking_reminders_async())

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import asyncio
-
 from celery import shared_task
 
 from app.core.structured_logging import get_logger, log_context
+from app.core.worker_async import run_worker_async
 from app.core.worker_db import worker_db_session
 from app.repositories.bookings import BookingRepository
 
@@ -22,7 +21,7 @@ def complete_past_scheduled() -> int:
     """Mark past SCHEDULED bookings as COMPLETED (runs on Celery Beat)."""
     with log_context(task="complete_past_scheduled"):
         try:
-            updated = asyncio.run(_complete_past_scheduled_async())
+            updated = run_worker_async(_complete_past_scheduled_async())
         except Exception:
             logger.exception("failed")
             raise

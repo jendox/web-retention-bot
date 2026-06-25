@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import timedelta
 
 from celery import Celery
-from celery.signals import beat_init, worker_process_init
+from celery.signals import beat_init, worker_process_init, worker_process_shutdown, worker_shutdown
 
 from app.core.config import get_settings
 from app.core.structured_logging import configure_structlog, get_logger
+from app.core.worker_async import reset_worker_async, shutdown_worker_async
 
 __all__ = ["celery_app", "create_celery_app"]
 
@@ -23,8 +24,21 @@ def _configure_celery_logging() -> None:
 
 @worker_process_init.connect
 def _on_worker_process_init(**_kwargs: object) -> None:
+    reset_worker_async()
     _configure_celery_logging()
     logger.info("celery worker process ready")
+
+
+@worker_process_shutdown.connect
+def _on_worker_process_shutdown(**_kwargs: object) -> None:
+    shutdown_worker_async()
+    logger.info("celery worker process shutdown")
+
+
+@worker_shutdown.connect
+def _on_worker_shutdown(**_kwargs: object) -> None:
+    shutdown_worker_async()
+    logger.info("celery worker shutdown")
 
 
 @beat_init.connect
