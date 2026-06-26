@@ -40,6 +40,14 @@ class AnalyticsSummaryOut(BaseModel):
     repeat_clients: int
 
 
+class AnalyticsOccupancyOut(BaseModel):
+    percent: int
+    available_minutes: int
+    booked_minutes: int
+    available_hours: Decimal
+    booked_hours: Decimal
+
+
 class AnalyticsDailyMoneyOut(BaseModel):
     currency: str
     revenue: Decimal
@@ -87,6 +95,7 @@ class MasterAnalyticsOut(BaseModel):
     period: AnalyticsPeriodOut
     display_currency: str
     summary: AnalyticsSummaryOut
+    occupancy: AnalyticsOccupancyOut
     money: list[AnalyticsMoneyOut]
     revenue_by_day: list[AnalyticsRevenuePointOut]
     services: list[AnalyticsServiceOut]

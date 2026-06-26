@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -10,8 +10,10 @@ from app.api.deps import require_master_profile
 from app.core.currency import Currency
 from app.main import app
 from app.models.booking import BookingStatus
+from app.models.schedule import ScheduleDateOverride, ScheduleDateOverrideInterval
 from app.repositories.bookings import AnalyticsBookingRow
 from app.schemas.analytics import (
+    AnalyticsOccupancyOut,
     AnalyticsPeriodOut,
     AnalyticsPeriodPreset,
     AnalyticsSummaryOut,
@@ -26,6 +28,7 @@ def _analytics_row(
     client_id,
     service_id,
     start_at,
+    end_at=None,
     status=BookingStatus.COMPLETED,
     price=Decimal("50.00"),
     currency="BYN",
@@ -39,7 +42,7 @@ def _analytics_row(
         client_id=client_id,
         service_id=service_id,
         start_at=start_at,
-        end_at=start_at,
+        end_at=end_at or start_at + timedelta(minutes=60),
         duration_min=60,
         price_snapshot=price,
         currency_snapshot=currency,
@@ -51,6 +54,30 @@ def _analytics_row(
         client_alias=client_alias,
         service_name=service_name,
     )
+
+
+def _date_override(master_id, schedule_date, start_time, end_time):
+    override = ScheduleDateOverride(
+        master_id=master_id,
+        schedule_date=schedule_date,
+        is_closed=False,
+    )
+    override.intervals = [
+        ScheduleDateOverrideInterval(
+            start_time=start_time,
+            end_time=end_time,
+            sort_order=0,
+        ),
+    ]
+    return override
+
+
+class EmptyScheduleRepo:
+    async def weekly_days_for_master(self, master_id):
+        return []
+
+    async def date_overrides_for_master(self, master_id):
+        return []
 
 
 @pytest.mark.asyncio
@@ -201,13 +228,17 @@ async def test_master_analytics_aggregates_real_booking_metrics():
             assert range_end == now
             return completed_until_now
 
+        async def occupancy_bookings_between(self, *, master_id: uuid.UUID, range_start, range_end):
+            assert master_id == expected_master_id
+            return []
+
         async def future_scheduled_client_ids(self, *, master_id: uuid.UUID, client_ids, now):
             assert master_id == expected_master_id
             assert client_with_future_booking in client_ids
             assert now == datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
             return {client_with_future_booking}
 
-    result = await GetMasterAnalyticsUseCase(FakeBookingRepo())(
+    result = await GetMasterAnalyticsUseCase(FakeBookingRepo(), EmptyScheduleRepo())(
         SimpleNamespace(
             id=expected_master_id,
             timezone="UTC",
@@ -289,12 +320,16 @@ async def test_clients_to_return_are_calculated_as_of_now_not_selected_period():
             assert range_end == now
             return completed_until_now
 
+        async def occupancy_bookings_between(self, *, master_id: uuid.UUID, range_start, range_end):
+            assert master_id == expected_master_id
+            return []
+
         async def future_scheduled_client_ids(self, *, master_id: uuid.UUID, client_ids, now):
             assert master_id == expected_master_id
             assert client_returned_now not in client_ids
             return set()
 
-    result = await GetMasterAnalyticsUseCase(FakeBookingRepo())(
+    result = await GetMasterAnalyticsUseCase(FakeBookingRepo(), EmptyScheduleRepo())(
         SimpleNamespace(
             id=expected_master_id,
             timezone="UTC",
@@ -305,6 +340,72 @@ async def test_clients_to_return_are_calculated_as_of_now_not_selected_period():
     )
 
     assert result.clients_to_return == []
+
+
+@pytest.mark.asyncio
+async def test_master_analytics_calculates_occupancy_from_elapsed_working_time():
+    expected_master_id = uuid.uuid4()
+    service_id = uuid.uuid4()
+    client_id = uuid.uuid4()
+    now = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
+    booking = _analytics_row(
+        master_id=expected_master_id,
+        client_id=client_id,
+        service_id=service_id,
+        start_at=datetime(2026, 5, 1, 10, 0, tzinfo=UTC),
+        end_at=datetime(2026, 5, 1, 12, 0, tzinfo=UTC),
+        price=Decimal("100.00"),
+    ).booking
+
+    class FakeBookingRepo:
+        async def analytics_rows_between(self, *, master_id: uuid.UUID, range_start, range_end):
+            assert master_id == expected_master_id
+            return []
+
+        async def completed_analytics_rows_until(self, *, master_id: uuid.UUID, range_end):
+            assert master_id == expected_master_id
+            return []
+
+        async def occupancy_bookings_between(self, *, master_id: uuid.UUID, range_start, range_end):
+            assert master_id == expected_master_id
+            assert range_start == datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+            assert range_end == datetime(2026, 6, 1, 0, 0, tzinfo=UTC)
+            return [booking]
+
+        async def future_scheduled_client_ids(self, *, master_id: uuid.UUID, client_ids, now):
+            return set()
+
+    class FakeScheduleRepo:
+        async def weekly_days_for_master(self, master_id):
+            assert master_id == expected_master_id
+            return []
+
+        async def date_overrides_for_master(self, master_id):
+            assert master_id == expected_master_id
+            return [
+                _date_override(
+                    expected_master_id,
+                    date(2026, 5, 1),
+                    time(9, 0),
+                    time(17, 0),
+                ),
+            ]
+
+    result = await GetMasterAnalyticsUseCase(FakeBookingRepo(), FakeScheduleRepo())(
+        SimpleNamespace(
+            id=expected_master_id,
+            timezone="UTC",
+            default_currency=Currency.BYN,
+        ),
+        preset=AnalyticsPeriodPreset.PREVIOUS_MONTH,
+        now=now,
+    )
+
+    assert result.occupancy.percent == 25
+    assert result.occupancy.available_minutes == 480
+    assert result.occupancy.booked_minutes == 120
+    assert result.occupancy.available_hours == Decimal("8.00")
+    assert result.occupancy.booked_hours == Decimal("2.00")
 
 
 def test_master_analytics_route_is_registered():
@@ -334,6 +435,13 @@ def test_master_analytics_route_is_registered():
                     unique_clients=0,
                     new_clients=0,
                     repeat_clients=0,
+                ),
+                occupancy=AnalyticsOccupancyOut(
+                    percent=0,
+                    available_minutes=0,
+                    booked_minutes=0,
+                    available_hours=Decimal("0.00"),
+                    booked_hours=Decimal("0.00"),
                 ),
                 money=[],
                 revenue_by_day=[],

@@ -339,6 +339,32 @@ class BookingRepository(BaseRepository):
         rows = await self.session.execute(stmt)
         return set(rows.scalars())
 
+    async def occupancy_bookings_between(
+        self,
+        *,
+        master_id: UUID,
+        range_start: datetime,
+        range_end: datetime,
+    ) -> list[Booking]:
+        stmt = (
+            select(Booking)
+            .where(
+                Booking.master_id == master_id,
+                Booking.start_at < range_end,
+                Booking.end_at > range_start,
+                Booking.status.in_(
+                    [
+                        BookingStatus.COMPLETED,
+                        BookingStatus.NO_SHOW,
+                        BookingStatus.SCHEDULED,
+                    ],
+                ),
+            )
+            .order_by(Booking.start_at.asc(), Booking.id.asc())
+        )
+        rows = await self.session.execute(stmt)
+        return list(rows.scalars())
+
     def _client_bookings_base(self, user_id: UUID):
         master_display_name = func.coalesce(MasterClient.client_alias, MasterProfile.display_name)
         return (

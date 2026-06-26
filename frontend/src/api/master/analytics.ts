@@ -54,6 +54,14 @@ export type AnalyticsReturnClient = {
   money: AnalyticsReturnClientMoney[]
 }
 
+export type AnalyticsOccupancy = {
+  percent: number
+  available_minutes: number
+  booked_minutes: number
+  available_hours: string
+  booked_hours: string
+}
+
 export type MasterAnalytics = {
   period: {
     preset: AnalyticsPeriodPreset | null
@@ -73,6 +81,7 @@ export type MasterAnalytics = {
     new_clients: number
     repeat_clients: number
   }
+  occupancy: AnalyticsOccupancy
   money: AnalyticsMoney[]
   revenue_by_day: AnalyticsRevenuePoint[]
   services: AnalyticsService[]

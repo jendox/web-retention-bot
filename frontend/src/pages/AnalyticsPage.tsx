@@ -43,6 +43,9 @@ type AnalyticsSnapshot = {
     repeatClients: number
     cancelled: number
     noShow: number
+    occupancy: number
+    bookedHours: number
+    availableHours: number
     lostRevenue: number
   }
   revenueByDay: TrendPoint[]
@@ -89,6 +92,9 @@ function toSnapshot(data: Awaited<ReturnType<typeof masterAnalyticsApi>>): Analy
       repeatClients: data.summary.repeat_clients,
       cancelled: data.summary.cancelled_count,
       noShow: data.summary.no_show_count,
+      occupancy: data.occupancy.percent,
+      bookedHours: parseAmount(data.occupancy.booked_hours),
+      availableHours: parseAmount(data.occupancy.available_hours),
       lostRevenue: parseAmount(summaryMoney?.lost_revenue),
     },
     revenueByDay: data.revenue_by_day.map((point) => ({
@@ -322,9 +328,9 @@ export function AnalyticsPage() {
           tone="violet"
         />
         <KpiCard
-          label="Потенциально потеряно"
-          value={formatMoney(data.summary.lostRevenue, data.currency)}
-          detail="отмены и неявки"
+          label="Заполненность"
+          value={`${data.summary.occupancy}%`}
+          detail={`${data.summary.bookedHours.toLocaleString('ru-RU')} из ${data.summary.availableHours.toLocaleString('ru-RU')} ч`}
           tone="amber"
         />
       </section>

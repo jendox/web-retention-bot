@@ -12,12 +12,15 @@ from fastapi import Depends
 
 from app.core.currency import DEFAULT_MASTER_CURRENCY
 from app.core.structured_logging import get_logger, log_context
-from app.models.booking import BookingStatus
+from app.models.booking import Booking, BookingStatus
 from app.models.master import MasterProfile
+from app.models.schedule import ScheduleDateOverride, WeeklyScheduleDay
 from app.repositories.bookings import AnalyticsBookingRow, BookingRepository, get_booking_repo
+from app.repositories.schedules import ScheduleRepository, get_schedule_repo
 from app.schemas.analytics import (
     AnalyticsDailyMoneyOut,
     AnalyticsMoneyOut,
+    AnalyticsOccupancyOut,
     AnalyticsPeriodOut,
     AnalyticsPeriodPreset,
     AnalyticsReturnClientMoneyOut,
@@ -28,6 +31,7 @@ from app.schemas.analytics import (
     AnalyticsSummaryOut,
     MasterAnalyticsOut,
 )
+from app.services.availability import windows_for_date
 
 __all__ = ["GetMasterAnalyticsUseCase", "get_master_analytics_use_case"]
 
@@ -55,6 +59,25 @@ class AnalyticsRows:
     period_rows: list[AnalyticsBookingRow]
     completed_until_period_end: list[AnalyticsBookingRow]
     completed_until_now: list[AnalyticsBookingRow]
+    occupancy_bookings: list[Booking]
+
+
+@dataclass(frozen=True)
+class ScheduleRows:
+    weekly_days: list[WeeklyScheduleDay]
+    date_overrides: list[ScheduleDateOverride]
+
+
+@dataclass(frozen=True)
+class OccupancyRange:
+    start_at: datetime
+    end_at: datetime
+
+
+@dataclass(frozen=True)
+class OccupancyMinutes:
+    available: int
+    booked: int
 
 
 @dataclass
@@ -185,9 +208,31 @@ def _sorted_money(values: dict[str, Decimal]) -> list[tuple[str, Decimal]]:
     return sorted(values.items(), key=lambda item: item[0])
 
 
+def _clip_interval(
+    start_at: datetime,
+    end_at: datetime,
+    range_start: datetime,
+    range_end: datetime,
+) -> tuple[datetime, datetime] | None:
+    clipped_start = max(_as_utc(start_at), _as_utc(range_start))
+    clipped_end = min(_as_utc(end_at), _as_utc(range_end))
+    if clipped_end <= clipped_start:
+        return None
+    return clipped_start, clipped_end
+
+
+def _minutes_between(start_at: datetime, end_at: datetime) -> int:
+    return int((end_at - start_at).total_seconds() // 60)
+
+
+def _minutes_to_hours(minutes: int) -> Decimal:
+    return (Decimal(minutes) / Decimal(60)).quantize(Decimal("0.01"))
+
+
 class GetMasterAnalyticsUseCase:
-    def __init__(self, booking_repo: BookingRepository) -> None:
+    def __init__(self, booking_repo: BookingRepository, schedule_repo: ScheduleRepository) -> None:
         self._booking_repo = booking_repo
+        self._schedule_repo = schedule_repo
 
     async def __call__(
         self,
@@ -222,6 +267,14 @@ class GetMasterAnalyticsUseCase:
                 master_id=master.id,
                 range_end=ref.astimezone(UTC),
             )
+            occupancy_range = self._occupancy_range(period, ref)
+            occupancy_bookings = await self._booking_repo.occupancy_bookings_between(
+                master_id=master.id,
+                range_start=occupancy_range.start_at,
+                range_end=occupancy_range.end_at,
+            )
+            weekly_days = await self._schedule_repo.weekly_days_for_master(master.id)
+            date_overrides = await self._schedule_repo.date_overrides_for_master(master.id)
 
             display_currency = (
                 master.default_currency.value
@@ -235,17 +288,22 @@ class GetMasterAnalyticsUseCase:
                     period_rows=rows,
                     completed_until_period_end=completed_rows_until_period_end,
                     completed_until_now=completed_rows_until_now,
+                    occupancy_bookings=occupancy_bookings,
                 ),
+                schedules=ScheduleRows(weekly_days=weekly_days, date_overrides=date_overrides),
+                occupancy_range=occupancy_range,
                 display_currency=display_currency,
                 now=ref,
             )
 
-    async def _build_response(  # noqa: PLR0914
+    async def _build_response(  # noqa: PLR0913, PLR0914
         self,
         *,
         master: MasterProfile,
         period: AnalyticsPeriod,
         rows: AnalyticsRows,
+        schedules: ScheduleRows,
+        occupancy_range: OccupancyRange,
         display_currency: str,
         now: datetime | None,
     ) -> MasterAnalyticsOut:
@@ -309,6 +367,7 @@ class GetMasterAnalyticsUseCase:
                 new_clients=new_clients,
                 repeat_clients=repeat_clients,
             ),
+            occupancy=self._occupancy(master, schedules, occupancy_range, rows.occupancy_bookings),
             money=[
                 AnalyticsMoneyOut(
                     currency=currency,
@@ -330,6 +389,79 @@ class GetMasterAnalyticsUseCase:
                 now=now,
             ),
         )
+
+    @staticmethod
+    def _occupancy_range(period: AnalyticsPeriod, now: datetime) -> OccupancyRange:
+        ref = _as_utc(now)
+        range_end = min(period.range_end, ref)
+        range_end = max(period.range_start, range_end)
+        return OccupancyRange(start_at=period.range_start, end_at=range_end)
+
+    def _occupancy(
+        self,
+        master: MasterProfile,
+        schedules: ScheduleRows,
+        occupancy_range: OccupancyRange,
+        bookings: list[Booking],
+    ) -> AnalyticsOccupancyOut:
+        minutes = self._occupancy_minutes(master, schedules, occupancy_range, bookings)
+        percent = 0
+        if minutes.available > 0:
+            percent = round(minutes.booked / minutes.available * 100)
+        return AnalyticsOccupancyOut(
+            percent=percent,
+            available_minutes=minutes.available,
+            booked_minutes=minutes.booked,
+            available_hours=_minutes_to_hours(minutes.available),
+            booked_hours=_minutes_to_hours(minutes.booked),
+        )
+
+    @staticmethod
+    def _occupancy_minutes(
+        master: MasterProfile,
+        schedules: ScheduleRows,
+        occupancy_range: OccupancyRange,
+        bookings: list[Booking],
+    ) -> OccupancyMinutes:
+        tz = ZoneInfo(master.timezone)
+        range_start_local = occupancy_range.start_at.astimezone(tz)
+        range_end_local = occupancy_range.end_at.astimezone(tz)
+        if range_end_local <= range_start_local:
+            return OccupancyMinutes(available=0, booked=0)
+
+        available = 0
+        booked = 0
+        current_day = range_start_local.date()
+        while current_day <= range_end_local.date():
+            windows = windows_for_date(
+                current_day,
+                schedules.weekly_days,
+                schedules.date_overrides,
+                tz,
+            )
+            for window_start, window_end in windows:
+                clipped_window = _clip_interval(
+                    window_start.astimezone(UTC),
+                    window_end.astimezone(UTC),
+                    occupancy_range.start_at,
+                    occupancy_range.end_at,
+                )
+                if clipped_window is None:
+                    continue
+                window_start_utc, window_end_utc = clipped_window
+                available += _minutes_between(window_start_utc, window_end_utc)
+                for booking in bookings:
+                    clipped_booking = _clip_interval(
+                        _as_utc(booking.start_at),
+                        _as_utc(booking.end_at),
+                        window_start_utc,
+                        window_end_utc,
+                    )
+                    if clipped_booking is None:
+                        continue
+                    booked += _minutes_between(*clipped_booking)
+            current_day += timedelta(days=1)
+        return OccupancyMinutes(available=available, booked=min(booked, available))
 
     def _revenue_by_day(
         self,
@@ -511,5 +643,6 @@ class GetMasterAnalyticsUseCase:
 
 def get_master_analytics_use_case(
     booking_repo: Annotated[BookingRepository, Depends(get_booking_repo)],
+    schedule_repo: Annotated[ScheduleRepository, Depends(get_schedule_repo)],
 ) -> GetMasterAnalyticsUseCase:
-    return GetMasterAnalyticsUseCase(booking_repo)
+    return GetMasterAnalyticsUseCase(booking_repo, schedule_repo)
