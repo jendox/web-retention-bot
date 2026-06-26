@@ -1,10 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 
+import { masterAnalyticsApi, type AnalyticsPeriod } from '../api/master/analytics'
 import { SegmentTabs } from '../components/ui/SegmentTabs'
 import { cn } from '../lib/forms'
 import { surfaceCard, surfacePanel } from '../lib/surface'
-
-type Period = 'month' | 'last30' | 'previous'
 
 type TrendPoint = {
   label: string
@@ -13,6 +14,7 @@ type TrendPoint = {
 }
 
 type ServiceMetric = {
+  id: string
   name: string
   revenue: number
   visits: number
@@ -22,6 +24,7 @@ type ServiceMetric = {
 }
 
 type ReturnClient = {
+  id: string
   name: string
   lastVisit: string
   visits: number
@@ -31,6 +34,7 @@ type ReturnClient = {
 
 type AnalyticsSnapshot = {
   label: string
+  currency: string
   summary: {
     revenue: number
     completed: number
@@ -39,7 +43,6 @@ type AnalyticsSnapshot = {
     repeatClients: number
     cancelled: number
     noShow: number
-    occupancy: number
     lostRevenue: number
   }
   revenueByDay: TrendPoint[]
@@ -47,143 +50,70 @@ type AnalyticsSnapshot = {
   clientsToReturn: ReturnClient[]
 }
 
-const periodTabs: { value: Period; label: string }[] = [
+const periodTabs: { value: AnalyticsPeriod; label: string }[] = [
   { value: 'month', label: 'Текущий месяц' },
   { value: 'last30', label: '30 дней' },
   { value: 'previous', label: 'Прошлый месяц' },
 ]
 
-const snapshots: Record<Period, AnalyticsSnapshot> = {
-  month: {
-    label: '1-21 мая',
-    summary: {
-      revenue: 2840,
-      completed: 37,
-      averageCheck: 77,
-      newClients: 9,
-      repeatClients: 21,
-      cancelled: 5,
-      noShow: 2,
-      occupancy: 68,
-      lostRevenue: 180,
-    },
-    revenueByDay: [
-      { label: '1', revenue: 120, visits: 2 },
-      { label: '2', revenue: 0, visits: 0 },
-      { label: '3', revenue: 260, visits: 4 },
-      { label: '4', revenue: 180, visits: 2 },
-      { label: '5', revenue: 320, visits: 5 },
-      { label: '6', revenue: 90, visits: 1 },
-      { label: '7', revenue: 210, visits: 3 },
-      { label: '8', revenue: 280, visits: 4 },
-      { label: '9', revenue: 160, visits: 2 },
-      { label: '10', revenue: 340, visits: 5 },
-      { label: '11', revenue: 110, visits: 2 },
-      { label: '12', revenue: 230, visits: 3 },
-      { label: '13', revenue: 0, visits: 0 },
-      { label: '14', revenue: 290, visits: 4 },
-      { label: '15', revenue: 250, visits: 3 },
-    ],
-    services: [
-      { name: 'Окрашивание и уход', revenue: 920, visits: 8, averageCheck: 115, share: 32, missed: 1 },
-      { name: 'Стрижка женская', revenue: 690, visits: 10, averageCheck: 69, share: 24, missed: 0 },
-      { name: 'Маникюр с покрытием', revenue: 580, visits: 11, averageCheck: 53, share: 20, missed: 2 },
-      { name: 'Коррекция бровей', revenue: 310, visits: 6, averageCheck: 52, share: 11, missed: 0 },
-    ],
-    clientsToReturn: [
-      { name: 'Анна Кравцова', lastVisit: '46 дней назад', visits: 5, revenue: 420, note: 'часто выбирала окрашивание' },
-      { name: 'Мария Соколова', lastVisit: '58 дней назад', visits: 3, revenue: 210, note: 'последний визит без новой записи' },
-      { name: 'Екатерина Ли', lastVisit: '72 дня назад', visits: 4, revenue: 300, note: 'высокий средний чек' },
-    ],
-  },
-  last30: {
-    label: 'последние 30 дней',
-    summary: {
-      revenue: 4120,
-      completed: 54,
-      averageCheck: 76,
-      newClients: 13,
-      repeatClients: 31,
-      cancelled: 8,
-      noShow: 3,
-      occupancy: 72,
-      lostRevenue: 265,
-    },
-    revenueByDay: [
-      { label: '1', revenue: 160, visits: 2 },
-      { label: '3', revenue: 220, visits: 3 },
-      { label: '5', revenue: 310, visits: 4 },
-      { label: '7', revenue: 150, visits: 2 },
-      { label: '9', revenue: 430, visits: 6 },
-      { label: '11', revenue: 260, visits: 3 },
-      { label: '13', revenue: 380, visits: 5 },
-      { label: '15', revenue: 190, visits: 2 },
-      { label: '17', revenue: 360, visits: 5 },
-      { label: '19', revenue: 250, visits: 4 },
-      { label: '21', revenue: 510, visits: 7 },
-      { label: '23', revenue: 290, visits: 4 },
-      { label: '25', revenue: 340, visits: 4 },
-      { label: '27', revenue: 180, visits: 2 },
-      { label: '29', revenue: 680, visits: 9 },
-    ],
-    services: [
-      { name: 'Окрашивание и уход', revenue: 1420, visits: 12, averageCheck: 118, share: 34, missed: 1 },
-      { name: 'Стрижка женская', revenue: 1020, visits: 15, averageCheck: 68, share: 25, missed: 1 },
-      { name: 'Маникюр с покрытием', revenue: 830, visits: 16, averageCheck: 52, share: 20, missed: 2 },
-      { name: 'Коррекция бровей', revenue: 390, visits: 8, averageCheck: 49, share: 9, missed: 0 },
-    ],
-    clientsToReturn: [
-      { name: 'Анна Кравцова', lastVisit: '46 дней назад', visits: 5, revenue: 420, note: 'часто выбирала окрашивание' },
-      { name: 'Ольга Нестерова', lastVisit: '51 день назад', visits: 6, revenue: 360, note: 'регулярные записи по пятницам' },
-      { name: 'Екатерина Ли', lastVisit: '72 дня назад', visits: 4, revenue: 300, note: 'высокий средний чек' },
-    ],
-  },
-  previous: {
-    label: 'апрель',
-    summary: {
-      revenue: 3680,
-      completed: 48,
-      averageCheck: 77,
-      newClients: 11,
-      repeatClients: 28,
-      cancelled: 6,
-      noShow: 4,
-      occupancy: 64,
-      lostRevenue: 340,
-    },
-    revenueByDay: [
-      { label: '1', revenue: 210, visits: 3 },
-      { label: '3', revenue: 170, visits: 2 },
-      { label: '5', revenue: 300, visits: 4 },
-      { label: '7', revenue: 120, visits: 2 },
-      { label: '9', revenue: 260, visits: 3 },
-      { label: '11', revenue: 410, visits: 5 },
-      { label: '13', revenue: 280, visits: 4 },
-      { label: '15', revenue: 190, visits: 2 },
-      { label: '17', revenue: 340, visits: 4 },
-      { label: '19', revenue: 220, visits: 3 },
-      { label: '21', revenue: 390, visits: 5 },
-      { label: '23', revenue: 180, visits: 2 },
-      { label: '25', revenue: 260, visits: 3 },
-      { label: '27', revenue: 450, visits: 6 },
-      { label: '29', revenue: 300, visits: 4 },
-    ],
-    services: [
-      { name: 'Окрашивание и уход', revenue: 1280, visits: 11, averageCheck: 116, share: 35, missed: 2 },
-      { name: 'Стрижка женская', revenue: 890, visits: 13, averageCheck: 68, share: 24, missed: 1 },
-      { name: 'Маникюр с покрытием', revenue: 760, visits: 15, averageCheck: 51, share: 21, missed: 1 },
-      { name: 'Коррекция бровей', revenue: 360, visits: 7, averageCheck: 51, share: 10, missed: 0 },
-    ],
-    clientsToReturn: [
-      { name: 'Мария Соколова', lastVisit: '58 дней назад', visits: 3, revenue: 210, note: 'последний визит без новой записи' },
-      { name: 'Ирина Павлова', lastVisit: '63 дня назад', visits: 4, revenue: 245, note: 'две отмены подряд' },
-      { name: 'Екатерина Ли', lastVisit: '72 дня назад', visits: 4, revenue: 300, note: 'высокий средний чек' },
-    ],
-  },
+function parseAmount(value: string | undefined) {
+  const parsed = Number.parseFloat(value ?? '')
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
-function formatMoney(value: number) {
-  return `${value.toLocaleString('ru-RU')} BYN`
+function formatMoney(value: number, currency: string) {
+  return `${value.toLocaleString('ru-RU')} ${currency}`
+}
+
+function pickCurrencyValue<T extends { currency: string }>(
+  values: T[],
+  currency: string,
+  selector: (value: T) => string,
+) {
+  const selected = values.find((value) => value.currency === currency) ?? values[0]
+  return selected ? parseAmount(selector(selected)) : 0
+}
+
+function toSnapshot(data: Awaited<ReturnType<typeof masterAnalyticsApi>>): AnalyticsSnapshot {
+  const currency = data.display_currency
+  const summaryMoney = data.money.find((money) => money.currency === currency) ?? data.money[0]
+
+  return {
+    label: data.period.label,
+    currency,
+    summary: {
+      revenue: parseAmount(summaryMoney?.revenue),
+      completed: data.summary.completed_count,
+      averageCheck: parseAmount(summaryMoney?.average_check),
+      newClients: data.summary.new_clients,
+      repeatClients: data.summary.repeat_clients,
+      cancelled: data.summary.cancelled_count,
+      noShow: data.summary.no_show_count,
+      lostRevenue: parseAmount(summaryMoney?.lost_revenue),
+    },
+    revenueByDay: data.revenue_by_day.map((point) => ({
+      label: point.label,
+      revenue: pickCurrencyValue(point.money, currency, (money) => money.revenue),
+      visits: point.completed_count,
+    })),
+    services: data.services.map((service) => ({
+      id: service.service_id,
+      name: service.name,
+      revenue: pickCurrencyValue(service.money, currency, (money) => money.revenue),
+      visits: service.completed_count,
+      averageCheck: pickCurrencyValue(service.money, currency, (money) => money.average_check),
+      share: service.revenue_share_percent,
+      missed: service.cancelled_count + service.no_show_count,
+    })),
+    clientsToReturn: data.clients_to_return.map((client) => ({
+      id: client.client_id,
+      name: client.display_name,
+      lastVisit: `${client.days_since_last_visit} дн. назад`,
+      visits: client.completed_count,
+      revenue: pickCurrencyValue(client.money, currency, (money) => money.revenue),
+      note: client.note,
+    })),
+  }
 }
 
 function KpiCard({
@@ -227,7 +157,7 @@ function PanelHeader({ title, aside }: { title: string; aside?: ReactNode }) {
   )
 }
 
-function RevenueChart({ points }: { points: TrendPoint[] }) {
+function RevenueChart({ points, currency }: { points: TrendPoint[]; currency: string }) {
   const max = Math.max(...points.map((p) => p.revenue), 1)
 
   return (
@@ -241,7 +171,7 @@ function RevenueChart({ points }: { points: TrendPoint[] }) {
                 <div
                   className="w-full rounded-t-md bg-teal-500/85 transition hover:bg-teal-600 dark:bg-teal-400/75 dark:hover:bg-teal-300"
                   style={{ height: `${height}%` }}
-                  title={`${point.label}: ${formatMoney(point.revenue)}, визитов: ${point.visits}`}
+                  title={`${point.label}: ${formatMoney(point.revenue, currency)}, визитов: ${point.visits}`}
                 />
               </div>
               <span className="text-[11px] text-stone-500 dark:text-stone-400">{point.label}</span>
@@ -250,14 +180,22 @@ function RevenueChart({ points }: { points: TrendPoint[] }) {
         })}
       </div>
       <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-stone-500 dark:text-stone-400">
-        <span>Пик: {formatMoney(max)}</span>
+        <span>Пик: {formatMoney(max, currency)}</span>
         <span>Дней с визитами: {points.filter((p) => p.visits > 0).length}</span>
       </div>
     </div>
   )
 }
 
-function ServicesTable({ services }: { services: ServiceMetric[] }) {
+function ServicesTable({ services, currency }: { services: ServiceMetric[]; currency: string }) {
+  if (services.length === 0) {
+    return (
+      <p className="mt-5 rounded-lg border border-dashed border-stone-300 px-4 py-6 text-sm text-stone-500 dark:border-stone-700 dark:text-stone-400">
+        За выбранный период нет завершенных, отмененных или пропущенных записей по услугам.
+      </p>
+    )
+  }
+
   return (
     <div className="mt-5 overflow-hidden rounded-lg border border-stone-200 dark:border-stone-700">
       <div className="grid grid-cols-[minmax(0,1.4fr)_0.8fr_0.7fr] gap-3 bg-stone-50 px-4 py-2 text-xs font-semibold uppercase text-stone-500 dark:bg-stone-950/50 dark:text-stone-400 sm:grid-cols-[minmax(0,1.4fr)_0.7fr_0.7fr_0.7fr]">
@@ -268,7 +206,7 @@ function ServicesTable({ services }: { services: ServiceMetric[] }) {
       </div>
       {services.map((service) => (
         <div
-          key={service.name}
+          key={service.id}
           className="grid grid-cols-[minmax(0,1.4fr)_0.8fr_0.7fr] gap-3 border-t border-stone-200 px-4 py-3 text-sm dark:border-stone-700 sm:grid-cols-[minmax(0,1.4fr)_0.7fr_0.7fr_0.7fr]"
         >
           <div className="min-w-0">
@@ -278,20 +216,32 @@ function ServicesTable({ services }: { services: ServiceMetric[] }) {
             </div>
             <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">{service.share}% выручки</p>
           </div>
-          <span className="font-medium text-stone-900 dark:text-stone-100">{formatMoney(service.revenue)}</span>
+          <span className="font-medium text-stone-900 dark:text-stone-100">{formatMoney(service.revenue, currency)}</span>
           <span className="text-stone-600 dark:text-stone-300">{service.visits}</span>
-          <span className="hidden text-stone-600 dark:text-stone-300 sm:block">{formatMoney(service.averageCheck)}</span>
+          <span className="hidden text-stone-600 dark:text-stone-300 sm:block">{formatMoney(service.averageCheck, currency)}</span>
         </div>
       ))}
     </div>
   )
 }
 
-function ReturnClients({ clients }: { clients: ReturnClient[] }) {
+function ReturnClients({ clients, currency }: { clients: ReturnClient[]; currency: string }) {
+  if (clients.length === 0) {
+    return (
+      <p className="mt-5 rounded-lg border border-dashed border-stone-300 px-4 py-6 text-sm text-stone-500 dark:border-stone-700 dark:text-stone-400">
+        Пока нет клиентов, которые подходят под условия возврата.
+      </p>
+    )
+  }
+
   return (
     <div className="mt-5 space-y-3">
       {clients.map((client) => (
-        <div key={client.name} className="rounded-lg border border-stone-200 p-3 dark:border-stone-700">
+        <Link
+          key={client.id}
+          to={`/master/clients/${client.id}`}
+          className="block rounded-lg border border-stone-200 p-3 transition hover:border-teal-300 hover:bg-teal-50/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 dark:border-stone-700 dark:hover:border-teal-700 dark:hover:bg-teal-950/20"
+        >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="font-medium text-stone-900 dark:text-stone-100">{client.name}</p>
@@ -303,22 +253,41 @@ function ReturnClients({ clients }: { clients: ReturnClient[] }) {
           </div>
           <div className="mt-3 flex flex-wrap gap-3 text-xs text-stone-500 dark:text-stone-400">
             <span>{client.visits} визитов</span>
-            <span>{formatMoney(client.revenue)}</span>
+            <span>{formatMoney(client.revenue, currency)}</span>
           </div>
-        </div>
+        </Link>
       ))}
     </div>
   )
 }
 
 export function AnalyticsPage() {
-  const [period, setPeriod] = useState<Period>('month')
-  const data = snapshots[period]
+  const [period, setPeriod] = useState<AnalyticsPeriod>('month')
+  const analytics = useQuery({
+    queryKey: ['master', 'analytics', period],
+    queryFn: () => masterAnalyticsApi(period),
+  })
+  const data = useMemo(() => (analytics.data ? toSnapshot(analytics.data) : null), [analytics.data])
 
   const totalVisits = useMemo(
-    () => data.summary.completed + data.summary.cancelled + data.summary.noShow,
+    () => (data ? data.summary.completed + data.summary.cancelled + data.summary.noShow : 0),
     [data],
   )
+
+  if (analytics.isError) {
+    return (
+      <div className={surfacePanel('p-5')}>
+        <h1 className="text-lg font-semibold text-stone-950 dark:text-stone-50">Аналитика недоступна</h1>
+        <p className="mt-2 text-sm text-stone-500 dark:text-stone-400">
+          Не удалось загрузить данные. Обновите страницу или попробуйте позже.
+        </p>
+      </div>
+    )
+  }
+
+  if (analytics.isLoading || !data) {
+    return <p className="text-stone-500 dark:text-stone-400">Загрузка аналитики…</p>
+  }
 
   return (
     <div className="space-y-6">
@@ -334,16 +303,36 @@ export function AnalyticsPage() {
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Выручка" value={formatMoney(data.summary.revenue)} detail={data.label} tone="teal" />
-        <KpiCard label="Завершенные визиты" value={String(data.summary.completed)} detail={`из ${totalVisits} записей`} tone="emerald" />
-        <KpiCard label="Средний чек" value={formatMoney(data.summary.averageCheck)} detail="по завершенным визитам" tone="violet" />
-        <KpiCard label="Заполненность" value={`${data.summary.occupancy}%`} detail="моковый расчет доступных часов" tone="amber" />
+        <KpiCard
+          label="Выручка"
+          value={formatMoney(data.summary.revenue, data.currency)}
+          detail={data.label}
+          tone="teal"
+        />
+        <KpiCard
+          label="Завершенные визиты"
+          value={String(data.summary.completed)}
+          detail={`из ${totalVisits} записей`}
+          tone="emerald"
+        />
+        <KpiCard
+          label="Средний чек"
+          value={formatMoney(data.summary.averageCheck, data.currency)}
+          detail="по завершенным визитам"
+          tone="violet"
+        />
+        <KpiCard
+          label="Потенциально потеряно"
+          value={formatMoney(data.summary.lostRevenue, data.currency)}
+          detail="отмены и неявки"
+          tone="amber"
+        />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.8fr)]">
         <div className={surfacePanel('p-5')}>
-          <PanelHeader title="Динамика выручки" aside="BYN, по дате визита" />
-          <RevenueChart points={data.revenueByDay} />
+          <PanelHeader title="Динамика выручки" aside={`${data.currency}, по дате визита`} />
+          <RevenueChart points={data.revenueByDay} currency={data.currency} />
         </div>
 
         <div className={surfacePanel('p-5')}>
@@ -369,7 +358,9 @@ export function AnalyticsPage() {
             </div>
             <div className="mt-4 border-t border-stone-200 pt-4 dark:border-stone-700">
               <p className="text-sm text-stone-500 dark:text-stone-400">Потенциально потеряно</p>
-              <p className="mt-1 text-xl font-semibold text-amber-800 dark:text-amber-200">{formatMoney(data.summary.lostRevenue)}</p>
+              <p className="mt-1 text-xl font-semibold text-amber-800 dark:text-amber-200">
+                {formatMoney(data.summary.lostRevenue, data.currency)}
+              </p>
             </div>
           </div>
         </div>
@@ -378,12 +369,12 @@ export function AnalyticsPage() {
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(340px,0.75fr)]">
         <div className={surfacePanel('p-5')}>
           <PanelHeader title="Услуги по выручке" aside="по snapshot-ценам записей" />
-          <ServicesTable services={data.services} />
+          <ServicesTable services={data.services} currency={data.currency} />
         </div>
 
         <div className={surfacePanel('p-5')}>
-          <PanelHeader title="Клиенты на возврат" aside="моковый сегмент" />
-          <ReturnClients clients={data.clientsToReturn} />
+          <PanelHeader title="Клиенты на возврат" aside="2+ визита, без будущей записи" />
+          <ReturnClients clients={data.clientsToReturn} currency={data.currency} />
         </div>
       </section>
     </div>

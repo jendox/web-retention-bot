@@ -13,6 +13,7 @@ from app.api.routes.client import (
 from app.api.routes.common import auth, invitations
 from app.api.routes.internal import messenger as internal_messenger
 from app.api.routes.master import (
+    analytics as master_analytics,
     bookings as master_bookings,
     clients as master_clients,
     notification_settings as master_notification_settings,
@@ -36,6 +37,7 @@ api_router.include_router(client_notifications.router, prefix="/client")
 api_router.include_router(client_notification_settings.router, prefix="/client")
 
 api_router.include_router(master_profile.router, prefix="/master")
+api_router.include_router(master_analytics.router, prefix="/master")
 api_router.include_router(master_clients.router, prefix="/master")
 api_router.include_router(master_services.router, prefix="/master")
 api_router.include_router(master_bookings.router, prefix="/master")

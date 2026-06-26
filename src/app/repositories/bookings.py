@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated
@@ -17,7 +18,15 @@ from app.models.service import Service
 from app.repositories.base import BaseRepository
 from app.schemas.booking import BookingListScope
 
-__all__ = ["BookingRepository", "get_booking_repo"]
+__all__ = ["AnalyticsBookingRow", "BookingRepository", "get_booking_repo"]
+
+
+@dataclass(frozen=True)
+class AnalyticsBookingRow:
+    booking: Booking
+    client_display_name: str
+    client_alias: str | None
+    service_name: str
 
 
 def _scope_clause(scope: BookingListScope, now: datetime):
@@ -229,6 +238,106 @@ class BookingRepository(BaseRepository):
         )
         rows = await self.session.execute(stmt)
         return {client_id: int(count) for client_id, count in rows.all()}
+
+    async def analytics_rows_between(
+        self,
+        *,
+        master_id: UUID,
+        range_start: datetime,
+        range_end: datetime,
+    ) -> list[AnalyticsBookingRow]:
+        stmt = (
+            select(Booking, Client.display_name, MasterClient.alias, Service.name)
+            .join(Client, Booking.client_id == Client.id)
+            .join(
+                MasterClient,
+                and_(
+                    MasterClient.master_id == Booking.master_id,
+                    MasterClient.client_id == Booking.client_id,
+                ),
+            )
+            .join(Service, Booking.service_id == Service.id)
+            .where(
+                Booking.master_id == master_id,
+                Booking.start_at >= range_start,
+                Booking.start_at < range_end,
+                Booking.status.in_(
+                    [
+                        BookingStatus.COMPLETED,
+                        BookingStatus.CANCELLED,
+                        BookingStatus.NO_SHOW,
+                    ],
+                ),
+            )
+            .order_by(Booking.start_at.asc(), Booking.id.asc())
+        )
+        rows = await self.session.execute(stmt)
+        return [
+            AnalyticsBookingRow(
+                booking=booking,
+                client_display_name=client_display_name,
+                client_alias=client_alias,
+                service_name=service_name,
+            )
+            for booking, client_display_name, client_alias, service_name in rows.all()
+        ]
+
+    async def completed_analytics_rows_until(
+        self,
+        *,
+        master_id: UUID,
+        range_end: datetime,
+    ) -> list[AnalyticsBookingRow]:
+        stmt = (
+            select(Booking, Client.display_name, MasterClient.alias, Service.name)
+            .join(Client, Booking.client_id == Client.id)
+            .join(
+                MasterClient,
+                and_(
+                    MasterClient.master_id == Booking.master_id,
+                    MasterClient.client_id == Booking.client_id,
+                ),
+            )
+            .join(Service, Booking.service_id == Service.id)
+            .where(
+                Booking.master_id == master_id,
+                Booking.start_at < range_end,
+                Booking.status == BookingStatus.COMPLETED,
+            )
+            .order_by(Booking.start_at.asc(), Booking.id.asc())
+        )
+        rows = await self.session.execute(stmt)
+        return [
+            AnalyticsBookingRow(
+                booking=booking,
+                client_display_name=client_display_name,
+                client_alias=client_alias,
+                service_name=service_name,
+            )
+            for booking, client_display_name, client_alias, service_name in rows.all()
+        ]
+
+    async def future_scheduled_client_ids(
+        self,
+        *,
+        master_id: UUID,
+        client_ids: list[UUID],
+        now: datetime,
+    ) -> set[UUID]:
+        if not client_ids:
+            return set()
+        stmt = (
+            select(Booking.client_id)
+            .where(
+                Booking.master_id == master_id,
+                Booking.client_id.in_(client_ids),
+                Booking.status == BookingStatus.SCHEDULED,
+                Booking.start_at >= now,
+            )
+            .distinct()
+        )
+        rows = await self.session.execute(stmt)
+        return set(rows.scalars())
 
     def _client_bookings_base(self, user_id: UUID):
         master_display_name = func.coalesce(MasterClient.client_alias, MasterProfile.display_name)
