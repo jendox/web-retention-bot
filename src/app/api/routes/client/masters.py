@@ -4,19 +4,17 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_user
-from app.core.database import get_db_session
 from app.models.user import User
-from app.repositories.clients import ClientRepository
 from app.schemas.client import ClientMasterLinkUpdate, ClientMyMasterItem
-from app.schemas.client_master import client_master_item
 from app.schemas.errors import ErrorDetail
 from app.schemas.service import ServiceSchema
 from app.use_cases.clients import (
+    ListClientMastersUseCase,
     ListMasterServicesForClientUseCase,
     UpdateClientMasterLinkUseCase,
+    get_list_client_masters_use_case,
     get_list_master_services_for_client_use_case,
     get_update_client_master_link_use_case,
 )
@@ -40,20 +38,10 @@ router = APIRouter(prefix="/masters", tags=["client-masters"])
     },
 )
 async def list_my_masters(
-    session: Annotated[AsyncSession, Depends(get_db_session)],
     user: Annotated[User, Depends(require_user)],
+    use_case: Annotated[ListClientMastersUseCase, Depends(get_list_client_masters_use_case)],
 ) -> list[ClientMyMasterItem]:
-    repo = ClientRepository(session)
-    rows = await repo.list_masters_for_user_clients(user.id)
-    return [
-        client_master_item(
-            master,
-            link,
-            client_id=client.id,
-            client_display_name=client.display_name,
-        )
-        for master, link, client in rows
-    ]
+    return await use_case(user.id)
 
 
 @router.patch(
