@@ -27,7 +27,8 @@ const sectionCard = surfacePanel('p-6')
 
 const sectionTitle = 'text-base font-semibold text-stone-900 dark:text-stone-50'
 const sectionHint = 'mt-1 text-sm text-stone-500 dark:text-stone-400'
-const LOOKUP_PAGE_SIZE = ALLOWED_PAGE_SIZES[ALLOWED_PAGE_SIZES.length - 1]
+const LOOKUP_PAGE_SIZE = ALLOWED_PAGE_SIZES[0]
+const BOOKING_PREVIEW_LIMIT = 5
 
 type FormValues = {
   display_name: string
@@ -77,6 +78,14 @@ function NameStatus({ locked }: { locked: boolean }) {
   )
 }
 
+function IconCalendarSmall(props: { className?: string }) {
+  return (
+    <svg className={props.className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
+  )
+}
+
 function formatBookingWhen(isoLocal: string) {
   const d = new Date(isoLocal)
   if (Number.isNaN(d.getTime())) {
@@ -93,6 +102,19 @@ function formatBookingWhen(isoLocal: string) {
 
 function bookingPrice(booking: Booking) {
   return `${booking.price_snapshot} ${booking.currency_snapshot}`
+}
+
+function bookingHref(clientId: string, scope: 'upcoming' | 'history', prefill = false) {
+  const params = new URLSearchParams({
+    scope,
+    list_client_id: clientId,
+    page: '1',
+    page_size: String(LOOKUP_PAGE_SIZE),
+  })
+  if (prefill) {
+    params.set('client_id', clientId)
+  }
+  return `/master/bookings?${params.toString()}`
 }
 
 export function ClientDetailPage() {
@@ -202,6 +224,10 @@ export function ClientDetailPage() {
   )
   const bookingsLoading = bookingsUpcoming.isLoading || bookingsHistory.isLoading
   const bookingsError = bookingsUpcoming.error ?? bookingsHistory.error
+  const upcomingPreview = clientBookings.upcoming.slice(0, BOOKING_PREVIEW_LIMIT)
+  const historyPreview = clientBookings.history.slice(0, BOOKING_PREVIEW_LIMIT)
+  const upcomingTotal = bookingsUpcoming.data?.total ?? clientBookings.upcoming.length
+  const historyTotal = bookingsHistory.data?.total ?? clientBookings.history.length
 
   if (me.isLoading || detail.isLoading) {
     return (
@@ -226,14 +252,6 @@ export function ClientDetailPage() {
     )
   }
 
-  const invitationLabel =
-    detail.data?.link.invitation_status === 'LINKED'
-      ? 'Привязан'
-      : detail.data?.link.invitation_status === 'PENDING'
-        ? 'Ожидает'
-        : detail.data?.link.invitation_status === 'REVOKED'
-          ? 'Отозван'
-          : (detail.data?.link.invitation_status ?? '—')
   const emailLocked = Boolean(detail.data?.client.user_id && !detail.data.link.invite_email_mismatch)
   const nameLocked = Boolean(detail.data?.client.user_id)
 
@@ -249,10 +267,6 @@ export function ClientDetailPage() {
         <h1 className="mt-3 text-2xl font-semibold tracking-tight text-stone-900 dark:text-stone-50">
           {detail.data?.client.display_name ?? 'Карточка клиента'}
         </h1>
-        <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">
-          Статус приглашения:{' '}
-          <span className="font-medium text-stone-800 dark:text-stone-200">{invitationLabel}</span>
-        </p>
       </div>
 
         {detail.data && shouldWarnFrequentNoShows(detail.data.booking_stats) ? (
@@ -445,8 +459,30 @@ export function ClientDetailPage() {
       </form>
 
       <div className={sectionCard}>
-        <h2 className={sectionTitle}>Текущие записи</h2>
-        <p className={sectionHint}>Будущие активные записи этого клиента.</p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className={sectionTitle}>Текущие записи</h2>
+            <p className={sectionHint}>Будущие активные записи этого клиента.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {upcomingTotal > 0 ? (
+              <Link
+                to={bookingHref(clientId, 'upcoming')}
+                className="text-sm font-medium text-teal-700 hover:text-teal-600 dark:text-teal-400 dark:hover:text-teal-300"
+              >
+                Все текущие записи
+              </Link>
+            ) : null}
+            <Link
+              to={bookingHref(clientId, 'upcoming', true)}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-stone-500 transition hover:bg-teal-50 hover:text-teal-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-600 dark:text-stone-400 dark:hover:bg-teal-950/40 dark:hover:text-teal-300"
+              aria-label="Записать клиента"
+              title="Записать клиента"
+            >
+              <IconCalendarSmall className="h-5 w-5" />
+            </Link>
+          </div>
+        </div>
         {bookingsLoading ? (
           <p className="mt-4 text-sm text-stone-500 dark:text-stone-400">Загружаем записи...</p>
         ) : bookingsError ? (
@@ -455,7 +491,7 @@ export function ClientDetailPage() {
           <p className="mt-4 text-sm text-stone-500 dark:text-stone-400">Активных будущих записей нет.</p>
         ) : (
           <ul className="mt-4 space-y-2">
-            {clientBookings.upcoming.map((booking, i) => (
+            {upcomingPreview.map((booking, i) => (
               <li
                 key={booking.id}
                 className={visitCardAccentClass(i, 'flex flex-wrap items-baseline justify-between gap-2 px-3 py-3')}
@@ -475,11 +511,28 @@ export function ClientDetailPage() {
             ))}
           </ul>
         )}
+        {upcomingTotal > BOOKING_PREVIEW_LIMIT ? (
+          <p className="mt-3 text-sm text-stone-500 dark:text-stone-400">
+            Показаны ближайшие {BOOKING_PREVIEW_LIMIT} из {upcomingTotal}.
+          </p>
+        ) : null}
       </div>
 
       <div className={sectionCard}>
-        <h2 className={sectionTitle}>История записей</h2>
-        <p className={sectionHint}>Прошедшие и отмененные записи этого клиента.</p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className={sectionTitle}>История записей</h2>
+            <p className={sectionHint}>Последние прошедшие и отмененные записи этого клиента.</p>
+          </div>
+          {historyTotal > 0 ? (
+            <Link
+              to={bookingHref(clientId, 'history')}
+              className="text-sm font-medium text-teal-700 hover:text-teal-600 dark:text-teal-400 dark:hover:text-teal-300"
+            >
+              Смотреть всю историю
+            </Link>
+          ) : null}
+        </div>
         {bookingsLoading ? (
           <p className="mt-4 text-sm text-stone-500 dark:text-stone-400">Загружаем историю...</p>
         ) : bookingsError ? (
@@ -488,7 +541,7 @@ export function ClientDetailPage() {
           <p className="mt-4 text-sm text-stone-500 dark:text-stone-400">Истории записей пока нет.</p>
         ) : (
           <ul className="mt-4 space-y-2">
-            {clientBookings.history.map((booking, i) => (
+            {historyPreview.map((booking, i) => (
               <li
                 key={booking.id}
                 className={visitCardAccentClass(i, 'flex flex-wrap items-baseline justify-between gap-2 px-3 py-3')}
@@ -514,6 +567,11 @@ export function ClientDetailPage() {
             ))}
           </ul>
         )}
+        {historyTotal > BOOKING_PREVIEW_LIMIT ? (
+          <p className="mt-3 text-sm text-stone-500 dark:text-stone-400">
+            Показаны последние {BOOKING_PREVIEW_LIMIT} из {historyTotal}.
+          </p>
+        ) : null}
       </div>
     </div>
   )
