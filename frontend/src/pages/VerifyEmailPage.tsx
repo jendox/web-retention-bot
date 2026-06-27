@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { verifyEmailApi } from '../api/auth'
+import { ApiError } from '../api/client'
+import { masterMeApi } from '../api/master/profile'
 import { AuthErrorBanner, AuthScreen } from '../components/auth/AuthScreen'
 import { AUTH_LINK_CLASS } from '../components/auth/authStyles'
 import { getUserFacingError } from '../lib/apiErrors'
@@ -14,6 +16,22 @@ function takePostVerifyReturnPath(): string | null {
   sessionStorage.removeItem(POST_VERIFY_KEY)
   localStorage.removeItem(POST_VERIFY_KEY)
   return next
+}
+
+async function postVerifyTarget(inviteReturnPath: string | null): Promise<string> {
+  if (!inviteReturnPath) {
+    return '/'
+  }
+
+  try {
+    await masterMeApi()
+    return '/'
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return inviteReturnPath
+    }
+    return '/'
+  }
 }
 
 export function VerifyEmailPage() {
@@ -33,11 +51,7 @@ export function VerifyEmailPage() {
         await verifyEmailApi({ token: decodeURIComponent(token) })
         await queryClient.invalidateQueries({ queryKey: ['me'] })
         const next = takePostVerifyReturnPath()
-        if (next) {
-          navigate(next)
-        } else {
-          navigate('/')
-        }
+        navigate(await postVerifyTarget(next))
       } catch (err) {
         setError(getUserFacingError(err))
       }
