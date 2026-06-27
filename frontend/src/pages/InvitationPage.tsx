@@ -98,6 +98,11 @@ export function InvitationPage() {
     },
   })
 
+  const returnToLogin = () => {
+    setRegisteredNotice(false)
+    setAuthMode('login')
+  }
+
   useEffect(() => {
     if (token && typeof window !== 'undefined') {
       const inviteUrl = `${window.location.origin}/invite/${token}`
@@ -166,6 +171,15 @@ export function InvitationPage() {
   const firstStepState = currentStep === 1 ? 'current' : 'done'
   const secondStepState = currentStep === 2 ? 'current' : currentStep > 2 ? 'done' : 'upcoming'
   const thirdStepState = currentStep === 3 ? 'current' : currentStep > 3 ? 'done' : 'upcoming'
+  const awaitingEmailVerification = !accepted && !loggedInVerified && Boolean(registeredNotice || loggedInUnverified)
+  const verificationEmail = loggedInUnverified ? me.data.email : registerForm.getValues('email').trim()
+  const headerSubtitle = accepted
+    ? 'Приглашение принято'
+    : loggedInVerified
+      ? 'Остался последний шаг — укажите, как вас записать'
+      : awaitingEmailVerification
+        ? 'Подтвердите email, чтобы продолжить'
+        : 'Войдите или создайте аккаунт, чтобы принять приглашение'
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-6 py-8 pr-14 sm:py-12">
@@ -184,9 +198,7 @@ export function InvitationPage() {
           </div>
         </div>
         <div className="space-y-4 px-6 py-5">
-          <p className="max-w-2xl text-base text-slate-700 dark:text-slate-300">
-            Войдите или создайте аккаунт, чтобы принять приглашение
-          </p>
+          <p className="max-w-2xl text-base text-slate-700 dark:text-slate-300">{headerSubtitle}</p>
           <div className="grid gap-3 text-sm sm:grid-cols-3">
             <div className={stepClass(firstStepState)}>
               <p className={stepTitleClass(firstStepState)}>1. Войдите</p>
@@ -197,8 +209,8 @@ export function InvitationPage() {
               <p className="mt-0.5">если аккаунт новый</p>
             </div>
             <div className={stepClass(thirdStepState)}>
-              <p className={stepTitleClass(thirdStepState)}>3. Примите приглашение</p>
-              <p className="mt-0.5">мастер появится в кабинете</p>
+              <p className={stepTitleClass(thirdStepState)}>3. Завершите</p>
+              <p className="mt-0.5">укажите имя для мастера</p>
             </div>
           </div>
         </div>
@@ -208,34 +220,39 @@ export function InvitationPage() {
         <section className="space-y-6 rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
           <div className="space-y-1">
             <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-50">
-              {loggedInUnverified ? 'Подтвердите email' : 'Войдите или создайте аккаунт'}
+              {awaitingEmailVerification ? 'Подтвердите email' : 'Войдите или создайте аккаунт'}
             </h2>
-            {loggedInUnverified ? (
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                После подтверждения email вы вернетесь сюда и сможете принять приглашение.
-              </p>
-            ) : null}
           </div>
 
-          {loggedInUnverified ? (
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-950/50">
-              <p className="font-medium text-slate-900 dark:text-slate-100">Письмо отправлено на {me.data.email}</p>
-              <p className="mt-1 text-slate-600 dark:text-slate-400">
-                Откройте ссылку из письма. После подтверждения останется один шаг: принять приглашение.
-              </p>
-            </div>
-          ) : null}
-
-          {registeredNotice ? (
-            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
-              <p className="font-medium">Проверьте почту</p>
-              <p className="mt-1">
-                Перейдите по ссылке из письма. Мы вернем вас сюда, чтобы завершить приглашение.
-              </p>
-            </div>
-          ) : null}
-
-          {!loggedInUnverified ? (
+          {awaitingEmailVerification ? (
+            <>
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
+                <p className="font-medium">
+                  Письмо отправлено{verificationEmail ? ` на ${verificationEmail}` : ''}
+                </p>
+                <p className="mt-1">
+                  Перейдите по ссылке из письма. После подтверждения мы вернем вас сюда, чтобы завершить приглашение.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  className="rounded-md bg-emerald-600 px-4 py-2 font-semibold text-white disabled:opacity-60 dark:bg-emerald-500 dark:text-slate-950"
+                  type="button"
+                  disabled={me.isFetching}
+                  onClick={() => void me.refetch()}
+                >
+                  {me.isFetching ? 'Проверяем...' : 'Проверить статус'}
+                </button>
+                <button
+                  className="rounded-md px-4 py-2 font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                  type="button"
+                  onClick={returnToLogin}
+                >
+                  Войти другим аккаунтом
+                </button>
+              </div>
+            </>
+          ) : (
             <>
               <div className="flex gap-2 border-b border-slate-200 pb-2 dark:border-slate-700">
                 <button
@@ -359,7 +376,7 @@ export function InvitationPage() {
                 </form>
               )}
             </>
-          ) : null}
+          )}
         </section>
       ) : null}
 
@@ -374,7 +391,9 @@ export function InvitationPage() {
           )}
         >
           <div className="space-y-1">
-            <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-50">Остался последний шаг</h2>
+            <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-50">
+              Как вас записать у мастера?
+            </h2>
           </div>
 
           <label className="block space-y-1">
