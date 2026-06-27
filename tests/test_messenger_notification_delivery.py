@@ -11,7 +11,11 @@ import pytest
 from app.core.config import Settings
 from app.models.notifications.enums import DeliveryChannel, DeliveryStatus, NotificationEventType
 from app.services.notifications.channel_policy import delivery_channels_for_user
-from app.services.notifications.dispatcher import BookingEmailContext, NotificationDispatcher
+from app.services.notifications.dispatcher import (
+    BookingEmailContext,
+    BookingNotificationDispatchContext,
+    NotificationDispatcher,
+)
 from app.services.notifications.messenger_delivery import (
     deliver_user_notification_telegram,
     format_notification_text,
@@ -149,11 +153,13 @@ async def test_dispatch_booking_creates_email_and_telegram_deliveries() -> None:
         patch.object(dispatcher, "_deliver_delivery", new_callable=AsyncMock),
     ):
         await dispatcher.dispatch_booking_created(
-            booking_id=uuid.uuid4(),
-            master_profile_id=uuid.uuid4(),
-            client_id=uuid.uuid4(),
-            recipient=SimpleNamespace(user_id=uuid.uuid4(), email="c@example.com"),
-            email_ctx=BookingEmailContext(title="T", body="B", link_url=None, payload={}),
+            ctx=BookingNotificationDispatchContext(
+                booking_id=uuid.uuid4(),
+                master_profile_id=uuid.uuid4(),
+                client_id=uuid.uuid4(),
+                recipient=SimpleNamespace(user_id=uuid.uuid4(), email="c@example.com"),
+                email_ctx=BookingEmailContext(title="T", body="B", link_url=None, payload={}),
+            ),
         )
 
     assert len(fake_deliveries) == 2

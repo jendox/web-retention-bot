@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -149,11 +149,14 @@ def test_filter_future_slots_keeps_all_future_day_slots():
 
 async def test_replace_schedule_rejects_changes_that_cut_existing_future_booking():
     master_id = uuid.uuid4()
+    booking_day = (datetime.now(UTC) + timedelta(days=7)).date()
+    booking_start = datetime.combine(booking_day, time(13, 0), tzinfo=UTC)
+    booking_end = datetime.combine(booking_day, time(14, 0), tzinfo=UTC)
     booking = SimpleNamespace(
         id=uuid.uuid4(),
         master_id=master_id,
-        start_at=datetime(2026, 6, 1, 13, 0, tzinfo=UTC),
-        end_at=datetime(2026, 6, 1, 14, 0, tzinfo=UTC),
+        start_at=booking_start,
+        end_at=booking_end,
         status=BookingStatus.SCHEDULED,
     )
     expected_master_id = master_id
@@ -180,7 +183,7 @@ async def test_replace_schedule_rejects_changes_that_cut_existing_future_booking
     payload = MasterScheduleUpsert(
         weekly_days=[
             {
-                "weekday": 0,
+                "weekday": booking_day.weekday(),
                 "intervals": [{"start_time": "10:00", "end_time": "12:00"}],
             },
         ],
@@ -202,8 +205,8 @@ async def test_replace_schedule_rejects_changes_that_cut_existing_future_booking
         "conflicts": [
             {
                 "id": str(booking.id),
-                "start_at": "2026-06-01T13:00:00+00:00",
-                "end_at": "2026-06-01T14:00:00+00:00",
+                "start_at": booking_start.isoformat(),
+                "end_at": booking_end.isoformat(),
             },
         ],
     }

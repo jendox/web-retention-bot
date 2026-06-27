@@ -1,188 +1,272 @@
 # Retention Studio
 
-Веб‑SaaS для мастеров услуг и их клиентов: профиль, расписание, услуги, клиентская база, инвайты, свободные слоты, записи и уведомления (in‑app + email). Изначальная постановка — в [`docs/retention_bot_prompt.md`](docs/retention_bot_prompt.md).
+Retention Studio - сервис для частных мастеров, которым нужно вести клиентов, расписание, записи, уведомления и базовую аналитику возврата клиентов. Проект состоит из FastAPI backend, React/Vite frontend, PostgreSQL, Redis и Celery worker/beat для фоновых задач.
 
-## Структура репозитория
+## Структура
 
 | Путь | Назначение |
 |------|------------|
-| `src/app/` | Backend: FastAPI, доменные модели, use cases, Alembic |
-| `tests/` | Pytest (API, use cases, уведомления) |
-| `frontend/` | SPA: React 19, TypeScript, Vite, Tailwind 4, TanStack Query |
-| `deploy/` | Dev‑инфра: PostgreSQL, Redis, [smtp4dev](https://github.com/rnwood/smtp4dev) |
-| `bots/` | Лёгкий sidecar Telegram (отдельно от `src/app`) |
-| `docs/` | Продуктовый промпт и заметки |
+| `src/app` | FastAPI-приложение, доменные модели, use cases, repositories, Celery tasks |
+| `frontend` | SPA на React, Vite, TanStack Query, React Router |
+| `tests` | Backend unit/API tests |
+| `deploy` | Dev Docker Compose для PostgreSQL, Redis, smtp4dev и optional bot sidecars |
+| `bots` | Telegram bot sidecar для привязки messenger-каналов |
+| `docs` | Текущие планы: аналитика, рефакторинг, тестовые данные, MVP readiness |
+| `scripts` | Dev-скрипты, включая seed данных для аналитики |
 
-Корень: `pyproject.toml`, `alembic.ini`, `.env.example`, `Makefile`.
+## Быстрый старт
 
-## Требования
-
-- Python **3.13+**, [uv](https://docs.astral.sh/uv/)
-- Node **20+**, npm
-- Docker Compose v2 (`docker compose`)
-
-## Быстрый старт (локально)
-
-### 1. Инфраструктура
-
-```bash
-make infra-up      # Postgres :5432, Redis :6379, smtp4dev :25 / UI :5000
-make infra-down
-make infra-clean   # с удалением volumes (чистая БД)
-```
-
-Строка подключения по умолчанию: `postgresql+asyncpg://retention:retention@localhost:5432/retention`.
-
-### 2. Backend
+1. Установить зависимости backend:
 
 ```bash
 make backend-install
-cp .env.example .env   # при необходимости поправьте URL и SMTP
-make backend-migrate
-make backend-run       # http://127.0.0.1:8000 — /health, /docs, /api/*
 ```
 
-Сессии: HttpOnly cookie `session_id`, opaque id в Redis (`src/app/services/sessions.py`). Для мутаций — CSRF (`X-CSRF-Token`).
-
-### 3. Фоновые задачи (опционально, для email и автозавершения записей)
-
-В двух терминалах (при `CELERY__TASK_ALWAYS_EAGER=false`):
+2. Скопировать `.env.example` в `.env` и при необходимости поменять значения:
 
 ```bash
-make celery-worker
-make celery-beat     # периодически завершает прошедшие SCHEDULED → COMPLETED
+cp .env.example .env
 ```
 
-Для тестов и части сценариев dev без воркера: `NOTIFICATIONS__EAGER_DELIVERIES=true` в `.env` — письма по записям отправляются синхронно в процессе API (см. `tests/conftest.py`).
+3. Поднять dev-инфраструктуру и применить миграции:
 
-Письма в dev: SMTP на `127.0.0.1:25` (smtp4dev), веб‑интерфейс — http://localhost:5000.
+```bash
+make infra-up
+make backend-migrate
+```
 
-### 4. Frontend
+4. Запустить backend:
+
+```bash
+make backend-run
+```
+
+5. Установить и запустить frontend:
 
 ```bash
 make frontend-install
-make frontend-run      # http://127.0.0.1:5173 — proxy /api → :8000
+make frontend-run
 ```
 
-Отдельный хостинг SPA: `VITE_API_BASE_URL` (`frontend/.env.example`).
+По умолчанию:
 
-## Makefile
+- API: `http://localhost:8000`
+- Frontend: `http://localhost:5173`
+- smtp4dev web UI: `http://localhost:5000`
 
-| Цель | Описание |
-|------|----------|
-| `make infra-up` / `infra-down` / `infra-clean` | Docker Compose dev stack |
-| `make bots-up` / `bots-down` | Telegram‑бот sidecar (`deploy/docker-compose.bots.yml`) |
-| `make backend-install` | `uv sync` |
-| `make backend-migrate` | Alembic `upgrade head` |
-| `make backend-run` | Uvicorn с reload |
-| `make celery-worker` / `celery-beat` | Очередь и периодика |
-| `make backend-test` / `backend-lint` | pytest, ruff |
-| `make frontend-install` / `frontend-run` / `frontend-build` / `frontend-lint` | npm |
-| `make test` | pytest + ESLint frontend |
-| `make lint` | ruff + ESLint |
+## Фоновые задачи
+
+Для обычного dev-режима Celery worker и beat запускаются отдельно:
+
+```bash
+make celery-worker
+make celery-beat
+```
+
+Beat ставит периодические задачи, worker их выполняет. Сейчас фоновые задачи используются для:
+
+- доставки email/in-app уведомлений;
+- доставки messenger-уведомлений после привязки канала;
+- автозавершения прошедших записей;
+- password reset email через общий notification pipeline.
+
+В тестах можно включать eager-режим через настройки Celery, но в dev/prod режиме лучше держать worker и beat отдельными процессами.
 
 ## Переменные окружения
 
-См. [`.env.example`](.env.example). Основные группы (префикс `SECTION__`):
+Основные группы настроек находятся в `.env.example`:
 
-- **INFRA** — Postgres, Redis
-- **SECURITY** — `SECRET_KEY`, `FRONTEND_PUBLIC_ORIGIN`, верификация email
-- **SESSION** — cookie, TTL
-- **CELERY** — broker, `TASK_ALWAYS_EAGER`
-- **SMTP** — исходящая почта
-- **BOOKING** — шаг слотов, горизонт записи, интервал автозавершения
-- **NOTIFICATIONS** — `EAGER_DELIVERIES` (синхронная доставка email без Celery)
-- **MESSENGER_BOTS** — секрет для sidecar, URL Telegram‑сервиса, имя бота `retention_studio_bot`; токен бота — `TELEGRAM_BOT_TOKEN` для контейнера (см. [`bots/README.md`](bots/README.md))
+- `INFRA__*` - PostgreSQL и Redis;
+- `SECURITY__*` - secret key, публичный origin frontend, TTL токенов;
+- `SESSION__*` - cookie-настройки;
+- `CELERY__*` - broker/result backend и eager-режим;
+- `SMTP__*` - SMTP-доставка;
+- `NOTIFICATIONS__*` - режим доставки уведомлений и параметры reminder scan;
+- `MESSENGER_BOTS__*` - internal secret и настройки bot sidecars;
+- `BOOKING__*` - шаг сетки слотов и горизонт записи.
+
+Для production обязательно заменить `SECURITY__SECRET_KEY`, включить secure cookies, выставить реальные `CORS_ORIGINS`/`SECURITY__FRONTEND_PUBLIC_ORIGIN`, настроить SMTP и секреты bot sidecars.
 
 ## Реализованный функционал
 
-### Аутентификация и роли
+### Auth
 
-- Регистрация / вход / выход, подтверждение email (ссылка на SPA `/verify-email`)
-- Пользователь может быть мастером (`MasterProfile`) и/или клиентом (`Client` + связи `MasterClient`)
-- Инвайты по токену (`/invite/:token`), привязка клиента к мастеру
+- регистрация мастера и клиента;
+- email verification;
+- login/logout через server-side session cookie;
+- CSRF token для mutating-запросов;
+- password reset/change;
+- rate limit на чувствительные auth endpoints.
 
-### Кабинет мастера (UI + API)
+### Кабинет мастера
 
-- Дашборд, **расписание** (недельные правила и исключения), **услуги**, **клиенты** (карточка, alias, заметки)
-- **Записи**: создание, список (upcoming/history), отмена и перенос с опциональным комментарием для клиента
-- Подтверждение явки (attended / no‑show) для завершённых визитов
-- **Настройки**: контакты мастера (email, телефон, Telegram), публичное имя
-- Страница **уведомлений** (in‑app лента, отметка прочитанным)
+- обзор с быстрыми переходами в клиентов, услуги и записи;
+- профиль и настройки мастера;
+- расписание по дням недели с окнами работы;
+- CRUD услуг с ценой, длительностью, валютой и активностью;
+- база клиентов, локальные клиенты и приглашения;
+- карточка клиента с текущими/историческими записями и быстрым созданием записи для выбранного клиента;
+- создание, перенос, отмена и подтверждение записей;
+- фиксация посещений, неявок и комментариев к действиям;
+- центр уведомлений;
+- настройки уведомлений по темам и каналам;
+- аналитика по выручке, визитам, клиентам, услугам, потерянной выручке, загрузке расписания и клиентам на возврат.
 
-### Кабинет клиента (UI + API)
+### Кабинет клиента
 
-- Обзор, **мои мастера** (список, alias мастера в кабинете), **визиты** (предстоящие и история)
-- Самостоятельная запись на свободный слот, отмена и перенос с опциональным комментарием для мастера
-- Отображение комментариев к отмене/переносу в списке визитов
+- обзор связанных мастеров и ближайших записей;
+- карточки мастеров с контактами и быстрыми переходами;
+- история визитов;
+- самостоятельная запись к мастеру по доступным слотам;
+- перенос и отмена записи с комментарием;
+- профиль клиента;
+- центр уведомлений и настройки уведомлений.
 
 ### Уведомления
 
-Центральный диспетчер: событие → `UserNotification` (in‑app) + `NotificationDelivery` (каналы).
+| Событие | In-app | Email | Messenger |
+|---------|--------|-------|-----------|
+| Создание записи | Да | Да | При привязанном канале и включенной теме |
+| Перенос записи | Да | Да | При привязанном канале и включенной теме |
+| Отмена записи | Да | Да | При привязанном канале и включенной теме |
+| Password reset | Да, без секретной ссылки | Да | Нет |
 
-| Событие | Кому | Каналы |
-|---------|------|--------|
-| Подтверждение email | пользователь | email (+ in‑app копия) |
-| Мастер создал запись | клиент (связан, email подтверждён) | in‑app + email |
-| Мастер отменил / перенёс | клиент | in‑app + email (с комментарием, если есть) |
-| Клиент создал / отменил / перенёс | мастер (email подтверждён) | in‑app + email (с комментарием, если есть) |
+Привязка Telegram вынесена в optional bot sidecar. Email остается обязательным системным каналом для auth-сценариев и может использоваться для booking-уведомлений.
 
-Шаблоны писем: `src/app/services/notifications/templates/email/`. Отдельные тексты для аудитории master/client.
+### Аналитика
 
-Заготовки в модели (без полной продуктовой логики): напоминания перед визитом, re‑engagement, Telegram/SMS в enum каналов.
+Реализован endpoint `GET /api/master/analytics` и frontend-страница `/master/analytics`.
 
-### Записи и слоты
+Поддерживаемые периоды:
 
-- Статусы: `SCHEDULED`, `COMPLETED`, `NO_SHOW`, `CANCELLED`
-- Availability по дню и услуге с учётом расписания, исключений и занятых слотов
-- Поля на записи: `cancel_comment`, `reschedule_comment` (до 500 символов)
+- текущий месяц;
+- последние 30 дней;
+- прошлый месяц;
+- custom `from`/`to` на уровне API.
 
-## Миграции БД
+Метрики:
+
+- выручка по завершенным записям;
+- средний чек;
+- завершенные, отмененные и пропущенные записи;
+- новые и повторные клиенты;
+- потерянная выручка по отменам и неявкам;
+- динамика выручки по дням;
+- эффективность услуг;
+- клиенты на возврат на текущий момент;
+- загрузка расписания как `booked_minutes / available_minutes`.
+
+Деньги считаются по snapshot-значениям записи и группируются по snapshot currency. UI показывает основную валюту мастера и умеет читать список money-значений из API.
+
+## API
+
+Все публичные маршруты имеют префикс `/api`.
+
+Основные группы:
+
+- `/api/auth/*`
+- `/api/invitations/*`
+- `/api/master/profile`
+- `/api/master/schedule`
+- `/api/master/clients`
+- `/api/master/services`
+- `/api/master/bookings`
+- `/api/master/notifications`
+- `/api/master/notification-settings`
+- `/api/master/analytics`
+- `/api/client/profile`
+- `/api/client/masters`
+- `/api/client/bookings`
+- `/api/client/availability`
+- `/api/client/notifications`
+- `/api/client/notification-settings`
+- `/api/internal/messenger/*`
+
+Доменные ошибки постепенно приведены к контракту:
+
+```json
+{
+  "code": "domain.error_code",
+  "detail": "English fallback",
+  "context": {}
+}
+```
+
+`context` возвращается только для ошибок, где use case передал структурированные детали.
+
+## Миграции
+
+Alembic-конфиг находится в `alembic.ini`, версии - в `src/app/migrations/versions`.
+
+Текущая цепочка:
+
+- `20260519_initial_schema.py`
+- `20260520_booking_statuses.py`
+- `20260521_booking_attendance_confirmed.py`
+- `20260523_master_contacts_client_alias.py`
+- `20260524_booking_action_comments.py`
+- `20260525_remove_viber.py`
+- `20260526_client_timezone.py`
+
+Применить миграции:
 
 ```bash
 make backend-migrate
 ```
 
-Версии в `src/app/migrations/versions/`:
+## Проверки
 
-1. `20260519_initial_schema` — пользователи, мастера, клиенты, услуги, расписание, записи, уведомления
-2. `20260520_booking_statuses`
-3. `20260521_booking_attendance_confirmed`
-4. `20260523_master_contacts_client_alias`
-5. `20260524_booking_action_comments`
-
-После смены схемы на существующей dev‑БД удобно: `make infra-clean && make backend-migrate`.
-
-## API (кратко)
-
-Префикс `/api`, OpenAPI: http://127.0.0.1:8000/docs
-
-- `/api/auth/*` — register, login, logout, me, verify-email
-- `/api/master/profile`, `/api/master/schedule` — профиль и расписание мастера
-- `/api/master/services/*`, `/api/master/clients/*`, `/api/master/bookings/*` — CRM мастера
-- `/api/client/masters/*`, `/api/client/bookings/*`, `/api/client/availability` — кабинет клиента
-- `/api/client/notifications/me`, `/api/master/notifications/me` — in‑app лента по кабинету
-- `/api/invitations/*` — приглашения (без изменений пути)
-
-## Тесты и качество
+Backend:
 
 ```bash
-make test
-make lint
+make backend-lint
+make backend-test
 ```
 
-Backend: pytest + httpx; ruff. После миграции префиксов — `tests/test_api_route_migration.py` (старые `/api/bookings` и т.п. → 404, новые `/api/client/*` и `/api/master/*` зарегистрированы). In-app `link_url` и фильтр ленты — только `/client/*` и `/master/*`.
+Frontend:
 
-Frontend: ESLint, `tsc -b` при `frontend-build`, `npm run test` (vitest: `cabinetFromPathname` и контракт URL кабинетов). Playwright/E2E пока не подключён — достаточно API smoke и unit-тестов роутов на этапе разработки.
+```bash
+make frontend-lint
+make frontend-test
+make frontend-build
+```
+
+Общие команды:
+
+```bash
+make lint
+make test
+```
+
+Для данных аналитики можно использовать seed-скрипт:
+
+```bash
+uv run python scripts/seed_test_data.py --dry-run
+uv run python scripts/seed_test_data.py
+```
+
+Подробности: [`docs/test_data.md`](docs/test_data.md).
+
+## Текущее состояние планов
+
+- [`docs/analytics_plan.md`](docs/analytics_plan.md) - что уже реализовано в аналитике и что стоит делать следующими итерациями.
+- [`docs/refactor_plan.md`](docs/refactor_plan.md) - технический журнал AppError/use-case рефакторинга и оставшийся cleanup.
+- [`docs/mvp_readiness.md`](docs/mvp_readiness.md) - готовность проекта к первичной выкатке на тестовый сервер.
 
 ## Что логично дальше
 
-- Настройки каналов уведомлений (отключение email и др., кроме in‑app) — UI частично заглушка
-- Напоминания перед визитом и retention‑цепочки (модели есть, доставка не завершена)
-- Telegram / SMS как каналы
-- Расширение прав и границ «кто может что» между мастером и клиентом
-- Оплата, буферы между записями, публичная страница записи без инвайта
+Перед первичной выкаткой:
 
-## Деплой
+- подготовить production/staging окружение: домены, HTTPS, Postgres, Redis, worker, beat, миграции;
+- настроить реальный SMTP и deliverability;
+- пройти ручной smoke checklist по мастерскому и клиентскому кабинетам;
+- добавить базовое логирование/мониторинг worker и API;
+- проверить backup/restore для PostgreSQL.
 
-Prod‑манифесты пока минимальны; dev‑стек описан в [`deploy/README.md`](deploy/README.md).
+После тестовой выкатки мастерам:
+
+- reminders и reactivation-уведомления;
+- расширение messenger/SMS каналов;
+- публичная запись без приглашения;
+- продвинутые срезы аналитики;
+- E2E-тесты для критических пользовательских сценариев.
