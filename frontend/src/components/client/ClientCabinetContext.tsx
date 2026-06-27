@@ -34,6 +34,7 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
   const [bookingModalNonce, setBookingModalNonce] = useState(0)
   const [visitManage, setVisitManage] = useState<VisitManageState | null>(null)
   const [bookingCreatedNotice, setBookingCreatedNotice] = useState<BookingClientListItem | null>(null)
+  const [masterOverrides, setMasterOverrides] = useState<Record<string, ClientMyMasterItem>>({})
 
   const showBookingCreatedNotice = useCallback((booking: BookingClientListItem) => {
     setBookingCreatedNotice(booking)
@@ -64,6 +65,20 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
     void queryClient.invalidateQueries({ queryKey: ['availability'] })
   }, [queryClient])
 
+  const updateLinkedMaster = useCallback(
+    (updatedMaster: ClientMyMasterItem) => {
+      setMasterOverrides((current) => ({
+        ...current,
+        [updatedMaster.master_id]: updatedMaster,
+      }))
+      queryClient.setQueryData<ClientMyMasterItem[]>(['clients', 'me', 'masters'], (current) =>
+        current?.map((master) => (master.master_id === updatedMaster.master_id ? updatedMaster : master)),
+      )
+      void queryClient.invalidateQueries({ queryKey: ['clients', 'me', 'masters'] })
+    },
+    [queryClient],
+  )
+
   useEffect(() => {
     if (me.isError) {
       navigate('/login')
@@ -76,11 +91,12 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
   }, [mockBookingExtras, mockBundle])
 
   const masters = useMemo((): ClientMasterView[] | ClientMyMasterItem[] => {
+    const baseMasters = useMocks ? (mockBundle?.masters ?? EMPTY_MASTERS) : (myMastersLive.data ?? EMPTY_MASTERS)
     if (useMocks) {
-      return mockBundle?.masters ?? EMPTY_MASTERS
+      return baseMasters
     }
-    return myMastersLive.data ?? EMPTY_MASTERS
-  }, [mockBundle, myMastersLive.data, useMocks])
+    return baseMasters.map((master) => masterOverrides[master.master_id] ?? master)
+  }, [masterOverrides, mockBundle, myMastersLive.data, useMocks])
 
   const bookableServices = useMemo<MockBookableService[]>(
     () => (useMocks ? (mockBundle?.bookableServices ?? []) : []),
@@ -141,6 +157,7 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
       showBookingCreatedNotice,
       clearBookingCreatedNotice,
       invalidateCabinetData,
+      updateLinkedMaster,
     }),
     [
       useMocks,
@@ -162,6 +179,7 @@ export function ClientCabinetProvider({ children }: { children: ReactNode }) {
       showBookingCreatedNotice,
       clearBookingCreatedNotice,
       invalidateCabinetData,
+      updateLinkedMaster,
     ],
   )
 

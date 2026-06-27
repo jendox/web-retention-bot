@@ -1,7 +1,7 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { clientMasterLabel, clientsMyMasterPatchApi } from '../../api/clients'
+import { clientMasterLabel, clientsMyMasterPatchApi, type ClientMyMasterItem } from '../../api/clients'
 import { useClientCabinet } from '../../components/client/clientCabinetContext'
 import { getUserFacingError } from '../../lib/apiErrors'
 import { cn } from '../../lib/forms'
@@ -114,13 +114,18 @@ function MasterCard({
 }: {
   master: ClientMasterView
   onBook: () => void
-  onAliasSaved: () => void
+  onAliasSaved: (updatedMaster: ClientMyMasterItem) => void
 }) {
-  const label = clientMasterLabel(master)
   const [editingAlias, setEditingAlias] = useState(false)
+  const [savedClientAlias, setSavedClientAlias] = useState(master.client_alias)
   const [aliasDraft, setAliasDraft] = useState(() => aliasDraftValue(master))
   const [aliasError, setAliasError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const renderedMaster = useMemo(
+    () => ({ ...master, client_alias: savedClientAlias }),
+    [master, savedClientAlias],
+  )
+  const label = clientMasterLabel(renderedMaster)
 
   useEffect(() => {
     if (editingAlias) {
@@ -136,10 +141,12 @@ function MasterCard({
         trimmed === master.display_name.trim() || !trimmed ? null : trimmed
       return clientsMyMasterPatchApi(master.master_id, { client_alias: payload })
     },
-    onSuccess: () => {
+    onSuccess: (updatedMaster) => {
+      setSavedClientAlias(updatedMaster.client_alias)
+      setAliasDraft(aliasDraftValue(updatedMaster))
       setEditingAlias(false)
       setAliasError(null)
-      onAliasSaved()
+      onAliasSaved(updatedMaster)
     },
     onError: (err) => setAliasError(getUserFacingError(err)),
   })
@@ -152,7 +159,7 @@ function MasterCard({
       setAliasError(null)
       return
     }
-    const currentStored = master.client_alias?.trim() || master.display_name
+    const currentStored = savedClientAlias?.trim() || master.display_name
     if (trimmed === currentStored) {
       setEditingAlias(false)
       setAliasError(null)
@@ -240,7 +247,7 @@ function MasterCard({
                   <button
                     type="button"
                     onClick={() => {
-                      setAliasDraft(aliasDraftValue(master))
+                      setAliasDraft(aliasDraftValue(renderedMaster))
                       setEditingAlias(true)
                     }}
                     className="shrink-0 rounded-md p-1 text-stone-400 transition hover:bg-stone-100 hover:text-teal-700 dark:hover:bg-stone-800 dark:hover:text-teal-300"
@@ -288,13 +295,8 @@ function MasterCard({
 }
 
 export function ClientMastersPage() {
-  const { masters, overviewLoading, openBookingModal } = useClientCabinet()
-  const queryClient = useQueryClient()
+  const { masters, overviewLoading, openBookingModal, updateLinkedMaster } = useClientCabinet()
   const [masterSearch, setMasterSearch] = useState('')
-
-  const refreshMasters = () => {
-    void queryClient.invalidateQueries({ queryKey: ['clients', 'me', 'masters'] })
-  }
 
   const filteredMasters = useMemo(() => {
     const q = masterSearch.trim().toLowerCase()
@@ -381,7 +383,7 @@ export function ClientMastersPage() {
               key={m.link_id}
               master={m}
               onBook={() => openBookingModal(m.master_id)}
-              onAliasSaved={refreshMasters}
+              onAliasSaved={updateLinkedMaster}
             />
           ))}
         </ul>

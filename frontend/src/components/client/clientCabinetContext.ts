@@ -33,6 +33,7 @@ export type ClientCabinetContextValue = {
   showBookingCreatedNotice: (booking: BookingClientListItem) => void
   clearBookingCreatedNotice: () => void
   invalidateCabinetData: () => void
+  updateLinkedMaster: (updatedMaster: ClientMyMasterItem) => void
 }
 
 export const ClientCabinetContext = createContext<ClientCabinetContextValue | null>(null)
