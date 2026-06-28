@@ -2,6 +2,7 @@
 .env
 .env.local
 deploy/prod.env
+deploy/backups/
 *.log
 
 # Celery Beat (schedule DB in CWD when running make celery-beat)

@@ -99,3 +99,62 @@ When Caddy is running on the VPS, include it in service checks:
 ```bash
 EXPECTED_SERVICES="postgres redis api worker beat caddy" deploy/ops/monitor.sh
 ```
+
+### PostgreSQL backup and restore
+
+Backups are local custom-format PostgreSQL dumps created from the `postgres` compose service. They are written to
+`deploy/backups/postgres` by default; this directory is ignored by Git.
+
+Create a backup manually:
+
+```bash
+deploy/ops/backup-postgres.sh
+```
+
+Override the destination or retention window when needed:
+
+```bash
+BACKUP_DIR=/var/backups/retention/postgres BACKUP_RETENTION_DAYS=30 deploy/ops/backup-postgres.sh
+```
+
+Install a daily cron job on the VPS. Use an absolute repo path:
+
+```cron
+15 3 * * * cd /srv/web_retention_bot && BACKUP_DIR=/var/backups/retention/postgres BACKUP_RETENTION_DAYS=30 deploy/ops/backup-postgres.sh
+```
+
+Check that a backup is readable:
+
+```bash
+docker compose --env-file deploy/prod.env -f deploy/docker-compose.prod.yml exec -T postgres \
+  pg_restore --list < deploy/backups/postgres/retention-YYYYMMDDTHHMMSSZ.dump >/dev/null
+```
+
+Restore is destructive for the target database objects. Stop app services first so API/worker/beat do not write during
+restore:
+
+```bash
+docker compose --env-file deploy/prod.env -f deploy/docker-compose.prod.yml stop api worker beat
+RESTORE_CONFIRM="restore retention" deploy/ops/restore-postgres.sh deploy/backups/postgres/retention-YYYYMMDDTHHMMSSZ.dump
+docker compose --env-file deploy/prod.env -f deploy/docker-compose.prod.yml up -d api worker beat
+```
+
+For a restore drill, prefer a temporary database or disposable VPS before restoring over a live database. Redis is treated
+as transient in this deployment: sessions and queued tasks can be lost without losing business records; PostgreSQL is the
+source of truth that must be backed up.
+
+Example restore drill into a temporary database:
+
+```bash
+latest="$(ls -t deploy/backups/postgres/*.dump | head -n 1)"
+drill_db="retention_restore_drill_$(date -u +%Y%m%d%H%M%S)"
+
+docker compose --env-file deploy/prod.env -f deploy/docker-compose.prod.yml exec -T postgres \
+  createdb -U retention "$drill_db"
+docker compose --env-file deploy/prod.env -f deploy/docker-compose.prod.yml exec -T postgres \
+  pg_restore -U retention -d "$drill_db" --no-owner --no-privileges < "$latest"
+docker compose --env-file deploy/prod.env -f deploy/docker-compose.prod.yml exec -T postgres \
+  psql -U retention -d "$drill_db" -c "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';"
+docker compose --env-file deploy/prod.env -f deploy/docker-compose.prod.yml exec -T postgres \
+  dropdb -U retention "$drill_db"
+```
