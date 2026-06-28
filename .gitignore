@@ -1,6 +1,7 @@
 # Local environment
 .env
 .env.local
+deploy/prod.env
 *.log
 
 # Celery Beat (schedule DB in CWD when running make celery-beat)
