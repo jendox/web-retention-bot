@@ -29,3 +29,5 @@ frontend/dist/
 
 /docs/*
 /scripts/*
+
+.*cache/

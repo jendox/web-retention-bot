@@ -153,6 +153,14 @@ RATE_LIMIT_POLICIES: list[RateLimitPolicy] = [
         key_builder=json_field("email"),
     ),
     RateLimitPolicy(
+        name="admin_login_ip",
+        method="POST",
+        path="/admin/login",
+        limit=15,
+        window_seconds=15 * 60,
+        key_builder=by_ip,
+    ),
+    RateLimitPolicy(
         name="auth_login_ip",
         method="POST",
         path="/api/auth/login",
