@@ -1,10 +1,23 @@
-"""Pytest configuration: set safe defaults before application packages load."""
+"""Pytest configuration: isolate tests from dev DB/Redis before application import."""
 
 from __future__ import annotations
 
-import os
+import errno
+import subprocess
 
-# Avoid requiring a Celery broker during API tests; dispatcher sends verification inline.
-os.environ["NOTIFICATIONS__EAGER_DELIVERIES"] = "true"
-# Avoid requiring a listening SMTP server during API tests.
-os.environ["SMTP__ENABLED"] = "false"
+import pytest
+from tests.support.infra import apply_pytest_env_defaults, prepare_test_infra
+
+apply_pytest_env_defaults()
+
+try:
+    prepare_test_infra()
+except OSError as exc:
+    if getattr(exc, "errno", None) in {errno.ECONNREFUSED, errno.ENOENT}:
+        pytest.exit(
+            "PostgreSQL/Redis unreachable for tests. Start dev infra: `make infra-up`",
+            returncode=1,
+        )
+    raise
+except subprocess.CalledProcessError as exc:
+    pytest.exit(f"Test database migration failed: {exc}", returncode=1)

@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import app.worker.celery_app as _celery_app  # noqa: F401  # side effect: configure Celery before task imports
+from app.admin import mount_admin
 from app.api.errors import app_error_handler
 from app.api.router import api_router
 from app.core.config import get_settings
@@ -51,6 +52,7 @@ def create_application() -> FastAPI:
         expose_headers=[REQUEST_ID_HEADER],
     )
     _app.include_router(api_router, prefix="/api")
+    mount_admin(_app, settings)
 
     @_app.get("/health")
     async def health() -> dict[str, str]:

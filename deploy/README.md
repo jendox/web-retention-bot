@@ -33,7 +33,7 @@ See [`../bots/README.md`](../bots/README.md). API must be running on the host (`
 - FastAPI API container;
 - Celery worker;
 - Celery beat;
-- Caddy serving the built frontend and reverse proxying `/api/*` plus `/health`;
+- Caddy serving the built frontend and reverse proxying `/api/*`, `/health`, and `/admin*` (SQLAdmin when enabled);
 - json-file log rotation for all services.
 
 Create the server env file from the example:

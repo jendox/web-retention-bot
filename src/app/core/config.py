@@ -74,6 +74,19 @@ class Booking(BaseModel):
     complete_past_interval_minutes: int = Field(default=5, ge=1, le=60)
 
 
+class AdminSettings(BaseModel):
+    #: Mount SQLAdmin at `/admin` when true and `allowed_emails` is non-empty.
+    enabled: bool = Field(default=False)
+    #: Comma-separated ops emails (must exist in `users` with a valid password).
+    allowed_emails: str = Field(default="")
+    #: Starlette session signing key for admin login; defaults to `SECURITY__SECRET_KEY`.
+    session_secret: str | None = Field(default=None)
+
+    @property
+    def allowed_email_set(self) -> frozenset[str]:
+        return frozenset(part.strip().lower() for part in self.allowed_emails.split(",") if part.strip())
+
+
 class Settings(BaseSettings):
     app_env: str = "development"
     cors_origins: str = "http://localhost:5173"
@@ -86,6 +99,7 @@ class Settings(BaseSettings):
     messenger_bots: MessengerBotsSettings = Field(default_factory=MessengerBotsSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
     booking: Booking = Field(default_factory=Booking)
+    admin: AdminSettings = Field(default_factory=AdminSettings)
 
     model_config = SettingsConfigDict(
         env_file=".env",

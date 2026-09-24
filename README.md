@@ -7,6 +7,7 @@ Retention Studio - сервис для частных мастеров, кото
 | Путь | Назначение |
 |------|------------|
 | `src/app` | FastAPI-приложение, доменные модели, use cases, repositories, Celery tasks |
+| `src/app/admin` | Опциональная SQLAdmin-панель на `/admin` (ops, allowlist email) |
 | `frontend` | SPA на React, Vite, TanStack Query, React Router |
 | `tests` | Backend unit/API tests |
 | `deploy` | Dev Docker Compose для PostgreSQL, Redis, smtp4dev и optional bot sidecars |
@@ -222,6 +223,9 @@ Backend:
 make backend-lint
 make backend-test
 ```
+
+`make backend-test` не использует dev-базу `retention`: pytest поднимает/мигрирует `retention_test` и Redis DB `15`
+(см. `tests/conftest.py`). Нужны запущенные PostgreSQL и Redis (`make infra-up`).
 
 Frontend:
 
