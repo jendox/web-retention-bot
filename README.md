@@ -1,189 +1,165 @@
 # Retention Studio
 
-Retention Studio - сервис для частных мастеров, которым нужно вести клиентов, расписание, записи, уведомления и базовую аналитику возврата клиентов. Проект состоит из FastAPI backend, React/Vite frontend, PostgreSQL, Redis и Celery worker/beat для фоновых задач.
+**Full-stack CRM, booking, notification, and retention analytics platform for independent service professionals.**
 
-## Структура
+Retention Studio is a SaaS-style application for professionals who manage recurring clients and appointments. It combines scheduling, customer management, self-service booking, notifications, attendance tracking, and retention analytics in one system.
 
-| Путь | Назначение |
-|------|------------|
-| `src/app` | FastAPI-приложение, доменные модели, use cases, repositories, Celery tasks |
-| `src/app/admin` | Опциональная SQLAdmin-панель на `/admin` (ops, allowlist email) |
-| `frontend` | SPA на React, Vite, TanStack Query, React Router |
-| `tests` | Backend unit/API tests |
-| `deploy` | Dev Docker Compose для PostgreSQL, Redis, smtp4dev и optional bot sidecars |
-| `bots` | Telegram bot sidecar для привязки messenger-каналов |
-| `docs` | Текущие планы: аналитика, рефакторинг, тестовые данные, MVP readiness |
-| `scripts` | Dev-скрипты, включая seed данных для аналитики |
+The project consists of a FastAPI backend, React frontend, PostgreSQL, Redis, and Celery workers for background processing.
 
-## Быстрый старт
+## Product overview
 
-1. Установить зависимости backend:
+Retention Studio supports two main user experiences:
 
-```bash
-make backend-install
+- **Professional workspace** — manage services, working hours, clients, appointments, notifications, and business analytics.
+- **Client workspace** — view professionals, book available slots, manage appointments, and review visit history.
+
+## Key features
+
+### Authentication and security
+
+- Professional and client registration
+- Email verification
+- Server-side session authentication
+- CSRF protection for state-changing requests
+- Password reset and password change
+- Rate limiting on sensitive authentication endpoints
+
+### Professional workspace
+
+- Profile and business settings
+- Weekly working schedule
+- Service catalog with price, duration, currency, and active status
+- Client database
+- Client invitations
+- Client detail pages with booking history
+- Create, reschedule, confirm, and cancel appointments
+- Attendance and no-show tracking
+- Action comments
+- Notification center and preferences
+- Revenue and retention analytics
+
+### Client workspace
+
+- Connected professionals
+- Professional contact cards
+- Visit history
+- Self-service booking from available time slots
+- Appointment rescheduling and cancellation
+- Client profile
+- Notification center and preferences
+
+### Notifications
+
+The notification pipeline supports:
+
+- in-app notifications
+- email
+- messenger notifications when a channel is connected
+
+Background workers are used for delivery and scheduled workflows.
+
+### Analytics
+
+The analytics module includes:
+
+- revenue from completed appointments
+- average ticket
+- completed, cancelled, and missed appointments
+- new vs returning clients
+- lost revenue from cancellations and no-shows
+- daily revenue trend
+- service performance
+- clients due for reactivation
+- schedule utilization
+
+Money values use booking snapshots and remain grouped by currency.
+
+## Architecture
+
+```text
+src/app/
+├── domain models
+├── use cases
+├── repositories
+├── API routes
+├── Celery tasks
+└── admin integration
+
+frontend/
+├── React
+├── Vite
+├── TanStack Query
+└── React Router
+
+bots/
+└── optional messenger sidecars
+
+tests/
+└── backend unit/API tests
+
+deploy/
+└── local infrastructure and service dependencies
 ```
 
-2. Скопировать `.env.example` в `.env` и при необходимости поменять значения:
+The application separates API/domain logic from background delivery and frontend concerns. Messaging integrations are handled through optional sidecars rather than being tightly coupled to the core web process.
 
-```bash
-cp .env.example .env
+## Booking flow
+
+```text
+Professional defines schedule + services
+  ↓
+Client requests availability
+  ↓
+Backend calculates valid slots
+  ↓
+Client creates booking
+  ↓
+Booking is persisted
+  ↓
+Notification pipeline runs
+  ↓
+Professional and client manage the appointment lifecycle
+  ↓
+Completed / cancelled / no-show outcome feeds analytics
 ```
 
-3. Поднять dev-инфраструктуру и применить миграции:
+## Background jobs
 
-```bash
-make infra-up
-make backend-migrate
-```
+Celery worker/beat are used for:
 
-4. Запустить backend:
-
-```bash
-make backend-run
-```
-
-5. Установить и запустить frontend:
-
-```bash
-make frontend-install
-make frontend-run
-```
-
-По умолчанию:
-
-- API: `http://localhost:8000`
-- Frontend: `http://localhost:5173`
-- smtp4dev web UI: `http://localhost:5000`
-
-## Фоновые задачи
-
-Для обычного dev-режима Celery worker и beat запускаются отдельно:
-
-```bash
-make celery-worker
-make celery-beat
-```
-
-Beat ставит периодические задачи, worker их выполняет. Сейчас фоновые задачи используются для:
-
-- доставки email/in-app уведомлений;
-- доставки messenger-уведомлений после привязки канала;
-- автозавершения прошедших записей;
-- password reset email через общий notification pipeline.
-
-В тестах можно включать eager-режим через настройки Celery, но в dev/prod режиме лучше держать worker и beat отдельными процессами.
-
-## Переменные окружения
-
-Основные группы настроек находятся в `.env.example`:
-
-- `INFRA__*` - PostgreSQL и Redis;
-- `SECURITY__*` - secret key, публичный origin frontend, TTL токенов;
-- `SESSION__*` - cookie-настройки;
-- `CELERY__*` - broker/result backend и eager-режим;
-- `SMTP__*` - SMTP-доставка;
-- `NOTIFICATIONS__*` - режим доставки уведомлений и параметры reminder scan;
-- `MESSENGER_BOTS__*` - internal secret и настройки bot sidecars;
-- `BOOKING__*` - шаг сетки слотов и горизонт записи.
-
-Для production обязательно заменить `SECURITY__SECRET_KEY`, включить secure cookies, выставить реальные `CORS_ORIGINS`/`SECURITY__FRONTEND_PUBLIC_ORIGIN`, настроить SMTP и секреты bot sidecars.
-
-## Реализованный функционал
-
-### Auth
-
-- регистрация мастера и клиента;
-- email verification;
-- login/logout через server-side session cookie;
-- CSRF token для mutating-запросов;
-- password reset/change;
-- rate limit на чувствительные auth endpoints.
-
-### Кабинет мастера
-
-- обзор с быстрыми переходами в клиентов, услуги и записи;
-- профиль и настройки мастера;
-- расписание по дням недели с окнами работы;
-- CRUD услуг с ценой, длительностью, валютой и активностью;
-- база клиентов, локальные клиенты и приглашения;
-- карточка клиента с текущими/историческими записями и быстрым созданием записи для выбранного клиента;
-- создание, перенос, отмена и подтверждение записей;
-- фиксация посещений, неявок и комментариев к действиям;
-- центр уведомлений;
-- настройки уведомлений по темам и каналам;
-- аналитика по выручке, визитам, клиентам, услугам, потерянной выручке, загрузке расписания и клиентам на возврат.
-
-### Кабинет клиента
-
-- обзор связанных мастеров и ближайших записей;
-- карточки мастеров с контактами и быстрыми переходами;
-- история визитов;
-- самостоятельная запись к мастеру по доступным слотам;
-- перенос и отмена записи с комментарием;
-- профиль клиента;
-- центр уведомлений и настройки уведомлений.
-
-### Уведомления
-
-| Событие | In-app | Email | Messenger |
-|---------|--------|-------|-----------|
-| Создание записи | Да | Да | При привязанном канале и включенной теме |
-| Перенос записи | Да | Да | При привязанном канале и включенной теме |
-| Отмена записи | Да | Да | При привязанном канале и включенной теме |
-| Password reset | Да, без секретной ссылки | Да | Нет |
-
-Привязка Telegram вынесена в optional bot sidecar. Email остается обязательным системным каналом для auth-сценариев и может использоваться для booking-уведомлений.
-
-### Аналитика
-
-Реализован endpoint `GET /api/master/analytics` и frontend-страница `/master/analytics`.
-
-Поддерживаемые периоды:
-
-- текущий месяц;
-- последние 30 дней;
-- прошлый месяц;
-- custom `from`/`to` на уровне API.
-
-Метрики:
-
-- выручка по завершенным записям;
-- средний чек;
-- завершенные, отмененные и пропущенные записи;
-- новые и повторные клиенты;
-- потерянная выручка по отменам и неявкам;
-- динамика выручки по дням;
-- эффективность услуг;
-- клиенты на возврат на текущий момент;
-- загрузка расписания как `booked_minutes / available_minutes`.
-
-Деньги считаются по snapshot-значениям записи и группируются по snapshot currency. UI показывает основную валюту мастера и умеет читать список money-значений из API.
+- email and messenger delivery
+- in-app notification workflows
+- automatic completion of past appointments
+- scheduled notification processing
+- password-reset email delivery through the shared notification pipeline
 
 ## API
 
-Все публичные маршруты имеют префикс `/api`.
+Public application routes are grouped under `/api`.
 
-Основные группы:
+Main areas include:
 
-- `/api/auth/*`
-- `/api/invitations/*`
-- `/api/master/profile`
-- `/api/master/schedule`
-- `/api/master/clients`
-- `/api/master/services`
-- `/api/master/bookings`
-- `/api/master/notifications`
-- `/api/master/notification-settings`
-- `/api/master/analytics`
-- `/api/client/profile`
-- `/api/client/masters`
-- `/api/client/bookings`
-- `/api/client/availability`
-- `/api/client/notifications`
-- `/api/client/notification-settings`
-- `/api/internal/messenger/*`
+```text
+/api/auth/*
+/api/invitations/*
+/api/master/profile
+/api/master/schedule
+/api/master/clients
+/api/master/services
+/api/master/bookings
+/api/master/notifications
+/api/master/notification-settings
+/api/master/analytics
+/api/client/profile
+/api/client/masters
+/api/client/bookings
+/api/client/availability
+/api/client/notifications
+/api/client/notification-settings
+/api/internal/messenger/*
+```
 
-Доменные ошибки постепенно приведены к контракту:
+Domain errors are returned through a structured contract:
 
 ```json
 {
@@ -193,29 +169,54 @@ Beat ставит периодические задачи, worker их выпо�
 }
 ```
 
-`context` возвращается только для ошибок, где use case передал структурированные детали.
+## Tech stack
 
-## Миграции
+| Area | Technologies |
+|---|---|
+| Backend | Python, FastAPI |
+| Frontend | React, Vite, TanStack Query, React Router |
+| Database | PostgreSQL |
+| Background jobs | Celery, Redis |
+| Migrations | Alembic |
+| Admin | SQLAdmin |
+| Email testing | smtp4dev |
+| Deployment / local infra | Docker Compose |
 
-Alembic-конфиг находится в `alembic.ini`, версии - в `src/app/migrations/versions`.
+## Local development
 
-Текущая цепочка:
-
-- `20260519_initial_schema.py`
-- `20260520_booking_statuses.py`
-- `20260521_booking_attendance_confirmed.py`
-- `20260523_master_contacts_client_alias.py`
-- `20260524_booking_action_comments.py`
-- `20260525_remove_viber.py`
-- `20260526_client_timezone.py`
-
-Применить миграции:
+### Backend
 
 ```bash
+make backend-install
+cp .env.example .env
+make infra-up
 make backend-migrate
+make backend-run
 ```
 
-## Проверки
+### Frontend
+
+```bash
+make frontend-install
+make frontend-run
+```
+
+Default development endpoints:
+
+```text
+API:       http://localhost:8000
+Frontend:  http://localhost:5173
+smtp4dev:  http://localhost:5000
+```
+
+### Background workers
+
+```bash
+make celery-worker
+make celery-beat
+```
+
+## Testing and checks
 
 Backend:
 
@@ -223,9 +224,6 @@ Backend:
 make backend-lint
 make backend-test
 ```
-
-`make backend-test` не использует dev-базу `retention`: pytest поднимает/мигрирует `retention_test` и Redis DB `15`
-(см. `tests/conftest.py`). Нужны запущенные PostgreSQL и Redis (`make infra-up`).
 
 Frontend:
 
@@ -235,42 +233,36 @@ make frontend-test
 make frontend-build
 ```
 
-Общие команды:
+Run all checks:
 
 ```bash
 make lint
 make test
 ```
 
-Для данных аналитики можно использовать seed-скрипт:
+The backend test workflow uses a dedicated PostgreSQL test database and a separate Redis database rather than reusing development data.
 
-```bash
-uv run python scripts/seed_test_data.py --dry-run
-uv run python scripts/seed_test_data.py
-```
+## Project status
 
-Подробности: [`docs/test_data.md`](docs/test_data.md).
+Retention Studio is an actively developed SaaS MVP. The core professional/client flows, booking lifecycle, notification pipeline, and analytics are implemented.
 
-## Текущее состояние планов
+Current deployment-readiness work includes:
 
-- [`docs/analytics_plan.md`](docs/analytics_plan.md) - что уже реализовано в аналитике и что стоит делать следующими итерациями.
-- [`docs/refactor_plan.md`](docs/refactor_plan.md) - технический журнал AppError/use-case рефакторинга и оставшийся cleanup.
-- [`docs/mvp_readiness.md`](docs/mvp_readiness.md) - готовность проекта к первичной выкатке на тестовый сервер.
+- production/staging environment preparation
+- SMTP deliverability setup
+- operational logging/monitoring
+- backup and restore validation
+- end-to-end smoke testing
 
-## Что логично дальше
+Potential product extensions include public booking, reactivation reminders, additional messaging channels, deeper analytics, and broader E2E coverage.
 
-Перед первичной выкаткой:
+## Documentation
 
-- подготовить production/staging окружение: домены, HTTPS, Postgres, Redis, worker, beat, миграции;
-- настроить реальный SMTP и deliverability;
-- пройти ручной smoke checklist по мастерскому и клиентскому кабинетам;
-- добавить базовое логирование/мониторинг worker и API;
-- проверить backup/restore для PostgreSQL.
+- [`docs/analytics_plan.md`](docs/analytics_plan.md) — analytics implementation and next iterations
+- [`docs/refactor_plan.md`](docs/refactor_plan.md) — domain/application cleanup notes
+- [`docs/mvp_readiness.md`](docs/mvp_readiness.md) — deployment-readiness checklist
+- [`docs/test_data.md`](docs/test_data.md) — analytics test-data workflow
 
-После тестовой выкатки мастерам:
+## Project focus
 
-- reminders и reactivation-уведомления;
-- расширение messenger/SMS каналов;
-- публичная запись без приглашения;
-- продвинутые срезы аналитики;
-- E2E-тесты для критических пользовательских сценариев.
+Retention Studio demonstrates full-stack backend-oriented product development: authentication, scheduling, domain workflows, asynchronous notifications, analytics, and a separate modern frontend around a FastAPI API.
